@@ -45,7 +45,7 @@
       iterations: p.iterations != null ? p.iterations : 1100,
       discBright: p.discBrightness != null ? p.discBrightness : 1,
       morph: p.morphSpeed != null ? p.morphSpeed : 1,
-      quality: p.quality != null ? p.quality : 0.62
+      quality: p.quality != null ? p.quality : 1.0
     };
     this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.start = 0; this.last = 0; this.scrollY = 0; this.spin = 0;

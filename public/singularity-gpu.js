@@ -84,7 +84,7 @@ const CFG = {
   rampCol3: [0, 0, 0], rampPos3: 0.598,
   rampEmission: 1.5, emissionColor: [0.2, 0.2, 0.2],
   topColor: [0, 0, 0], bottomColor: [0, 0, 0], bgIntensity: 2.8,
-  exposure: 1.2, pixelRatio: 0.75, fov: 50,
+  exposure: 1.2, pixelRatio: 1.0, fov: 50,
   camDefault: [0.16, 0.037, 0.546], targetDefault: [-0.1432, 0.2553, 0.0383],
   camFinal: [-0.3696, 0.037, 0.4326], targetFinal: [-0.1104, 0.2553, -0.0989],
   orbitSpeed: 0.007
@@ -139,7 +139,7 @@ class Singularity {
     // Force the WebGL2 backend: same TSL shader (compiles to GLSL), but WebGL2
     // compositing presents reliably in every preview/embedding context, whereas
     // the WebGPU swapchain silently fails to present in some panes.
-    const renderer = this.renderer = new THREEns.WebGPURenderer({ canvas: this.canvas, antialias: false, alpha: false, forceWebGL: true, powerPreference: 'high-performance' });
+    const renderer = this.renderer = new THREEns.WebGPURenderer({ canvas: this.canvas, antialias: true, alpha: false, forceWebGL: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(this._calcPixelRatio());
     renderer.setSize(window.innerWidth, window.innerHeight, false);
     renderer.toneMapping = THREEns.ACESFilmicToneMapping;
