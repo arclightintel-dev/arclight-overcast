@@ -27,8 +27,8 @@
     // shader-space (world Y -> shader Z): world camFinal (-0.3696,0.037,0.4326)
     camFinal: [-0.3696, -0.4326, 0.037],
     targetFinal: [-0.1104, 0.0989, 0.2553],
-    cam2: [0.44, -0.34, 0.16],
-    target2: [-0.02, 0.06, 0.14],
+    cam2: [0.44, 0.34, 0.16],
+    target2: [-0.02, -0.06, 0.14],
     fov: 50
   };
 
@@ -354,7 +354,6 @@
     if (this.zEl) this.zEl.textContent = 'Z  ' + (0.0341 + 0.0009 * Math.sin(elapsed * 0.6)).toFixed(4);
 
     var iter = this.opt.iterations | 0;
-    if (sc > 0.5) iter = Math.max(220, Math.floor(iter * 0.6)); // cheaper when scrolled away
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.noiseTex);
