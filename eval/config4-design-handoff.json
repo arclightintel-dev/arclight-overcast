@@ -1,0 +1,58 @@
+{
+  "_note": "Arclight Overcast — black hole hero config for design handoff",
+  "_captured": "2026-06-17",
+  "_source": "MisterPrada/singularity with optimizations (config3-verify, port 3004)",
+  "_server": "C:\\Projects\\arclight-overcast\\eval\\config3-verify — run: npx vite --port 3004",
+
+  "camera": {
+    "defaultPosition": { "x": 0.16, "y": 0.037, "z": 0.546 },
+    "defaultTarget": { "x": -0.1432, "y": 0.2553, "z": 0.0383 },
+    "fov": 50,
+    "near": 0.1,
+    "far": 2000,
+    "orbitSpeed": 0.007
+  },
+
+  "shader": {
+    "iterations": 1230,
+    "stepSize": 0.0005,
+    "noiseFactor": 0.0022,
+    "power": 0.36,
+    "originRadius": 0.15,
+    "width": 0.027,
+    "uvMotion": 0.87,
+    "rampCol1": { "r": 1.0, "g": 1.0, "b": 1.0 },
+    "rampPos1": 0.076,
+    "rampCol2": { "r": 0.1039, "g": 0.1088, "b": 0.125 },
+    "rampPos2": 0.359,
+    "rampCol3": { "r": 0.0, "g": 0.0, "b": 0.0 },
+    "rampPos3": 0.598,
+    "rampEmission": 1.5,
+    "emissionColor": { "r": 0.2, "g": 0.2, "b": 0.2 }
+  },
+
+  "bloom": {
+    "strength": 0,
+    "radius": -1.772,
+    "threshold": 0.804
+  },
+
+  "renderer": {
+    "toneMapping": "ACESFilmic",
+    "toneMappingExposure": 1.2,
+    "pixelRatio": 0.75
+  },
+
+  "environment": {
+    "backgroundIntensity": 2.8
+  },
+
+  "cinematic": {
+    "anamorphicThreshold": 3.0,
+    "anamorphicScale": 4.0,
+    "anamorphicColor": { "r": 0.95, "g": 0.88, "b": 0.7 },
+    "bleachOpacity": 0,
+    "filmIntensity": 0,
+    "vignetteStrength": 0
+  }
+}

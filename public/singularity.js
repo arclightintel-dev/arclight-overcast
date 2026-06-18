@@ -27,6 +27,8 @@
     // shader-space (world Y -> shader Z): world camFinal (-0.3696,0.037,0.4326)
     camFinal: [-0.3696, -0.4326, 0.037],
     targetFinal: [-0.1104, 0.0989, 0.2553],
+    cam2: [0.44, -0.34, 0.16],
+    target2: [-0.02, 0.06, 0.14],
     fov: 50
   };
 
@@ -304,26 +306,25 @@
     if (this.reduced) p = 1;
     var eio = eIO(p), eout = eOut(p);
 
-    // intro: descend from a wider, higher establishing shot into config-3 framing
+    // intro: descend from establishing shot into view 1
     var camEstablish = [0.34, -1.18, 0.66];
     var tgtEstablish = [0.0, 0.0, 0.0];
-    var cam = lerp3(camEstablish, CFG.camFinal, eio);
-    var tgt = lerp3(tgtEstablish, CFG.targetFinal, eout);
+    var cam1 = lerp3(camEstablish, CFG.camFinal, eio);
+    var tgt1 = lerp3(tgtEstablish, CFG.targetFinal, eout);
 
-    // gentle perpetual drift after settle (azimuth around disc normal z)
-    this.spin += dt * 0.02 * (this.reduced ? 0 : 1);
-    var driftA = 0.05 * Math.sin(elapsed * 0.12) * eout;
-    var cs = Math.cos(driftA), sn = Math.sin(driftA);
-    cam = [cam[0]*cs - cam[1]*sn, cam[0]*sn + cam[1]*cs, cam[2]];
+    // scroll-driven blend to view 2
+    var vh = window.innerHeight;
+    var viewT = cl((this.scrollY - vh * 0.7) / (vh * 0.45), 0, 1);
+    var viewBlend = viewT * viewT * (3 - 2 * viewT);
+    var cam = lerp3(cam1, CFG.cam2, viewBlend);
+    var tgt = lerp3(tgt1, CFG.target2, viewBlend);
 
     var fwd = norm([tgt[0]-cam[0], tgt[1]-cam[1], tgt[2]-cam[2]]);
     var up0 = [0,0,1];
     var right = norm(cross(fwd, up0));
     var camUp = cross(right, fwd);
 
-    // disc brightness ramps in; fades on scroll
-    var sc = cl(this.scrollY / (window.innerHeight * 0.9), 0, 1);
-    var discB = eOut(cl((p - 0.18) / 0.82, 0, 1)) * this.opt.discBright * (1 - sc * 0.92);
+    var discB = eOut(cl((p - 0.18) / 0.82, 0, 1)) * this.opt.discBright;
     var exposure = lerp(0.72, this.opt.exposure, eio);
 
     // logo morph (spin + scale + dissolve)

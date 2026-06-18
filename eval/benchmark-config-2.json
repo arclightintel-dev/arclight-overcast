@@ -1,0 +1,48 @@
+{
+  "_note": "MisterPrada/singularity — config 2: smoothed, 900 iterations, reduced noise/bloom",
+  "_captured": "2026-06-17",
+
+  "camera": {
+    "position": { "x": 0.1382, "y": 0.0368, "z": 0.5623 },
+    "rotation": { "x": 0.2513, "y": 0.5103, "z": -0.1247 },
+    "fov": 50,
+    "target": { "x": -0.1697, "y": 0.1736, "z": 0.0295 }
+  },
+
+  "shader": {
+    "iterations": 900,
+    "stepSize": 0.001,
+    "noiseFactor": 0.002,
+    "power": 0.35,
+    "clamp1": 0.5,
+    "clamp2": 1.0,
+    "originRadius": 0.13,
+    "width": 0.03,
+    "uvMotion": 0.0,
+    "rampCol1": { "r": 1.0, "g": 1.0, "b": 1.0 },
+    "rampPos1": 0.05,
+    "rampCol2": { "r": 0.175, "g": 0.1624, "b": 0.1597 },
+    "rampPos2": 0.425,
+    "rampCol3": { "r": 0.0, "g": 0.0, "b": 0.0 },
+    "rampPos3": 1.0,
+    "rampEmission": 2.0,
+    "emissionColor": { "r": 0.125, "g": 0.1198, "b": 0.1023 }
+  },
+
+  "bloom": {
+    "strength": 0.09,
+    "radius": -0.761,
+    "threshold": 0.033
+  },
+
+  "renderer": {
+    "toneMapping": "ACESFilmic",
+    "toneMappingExposure": 1.2
+  },
+
+  "environment": {
+    "topColor": { "r": 0.0, "g": 0.0999, "b": 0.3125 },
+    "bottomColor": { "r": 0.0052, "g": 0.0411, "b": 0.275 },
+    "backgroundIntensity": 2
+  }
+}

@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Transport Atlas Preview</title>
+<style>
+body { background: #111; color: #ccc; font-family: monospace; margin: 20px; }
+canvas { border: 1px solid #333; margin: 8px; image-rendering: pixelated; }
+h3 { margin: 16px 0 4px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+</style>
+</head>
+<body>
+<h2>Transport Atlas Preview</h2>
+<p id="status">Loading...</p>
+
+<h3>transport_bg (R=bgU, G=bgV, B=magnification, A=capture)</h3>
+<div class="row">
+  <canvas id="bg_rgb" width="128" height="128"></canvas>
+  <canvas id="bg_capture" width="128" height="128"></canvas>
+  <canvas id="bg_mag" width="128" height="128"></canvas>
+</div>
+
+<h3>transport_disk0 (R=diskU, G=diskV, B=weight, A=doppler)</h3>
+<div class="row">
+  <canvas id="d0_uv" width="128" height="128"></canvas>
+  <canvas id="d0_weight" width="128" height="128"></canvas>
+  <canvas id="d0_doppler" width="128" height="128"></canvas>
+</div>
+
+<h3>transport_disk1 (secondary disk)</h3>
+<div class="row">
+  <canvas id="d1_uv" width="128" height="128"></canvas>
+  <canvas id="d1_weight" width="128" height="128"></canvas>
+</div>
+
+<h3>transport_aux (R=caustic, G=timeDelay, B=mipBias, A=class)</h3>
+<div class="row">
+  <canvas id="aux_caustic" width="128" height="128"></canvas>
+  <canvas id="aux_class" width="128" height="128"></canvas>
+</div>
+
+<script>
+const SIZE = 128;
+
+async function loadF16(url) {
+  const resp = await fetch(url);
+  const buf = await resp.arrayBuffer();
+  const u16 = new Uint16Array(buf);
+  const f32 = new Float32Array(u16.length);
+  for (let i = 0; i < u16.length; i++) {
+    const h = u16[i];
+    const s = (h >> 15) & 1;
+    const e = (h >> 10) & 0x1f;
+    const m = h & 0x3ff;
+    if (e === 0) {
+      f32[i] = (s ? -1 : 1) * Math.pow(2, -14) * (m / 1024);
+    } else if (e === 31) {
+      f32[i] = m ? NaN : (s ? -Infinity : Infinity);
+    } else {
+      f32[i] = (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + m / 1024);
+    }
+  }
+  return f32;
+}
+
+function drawChannel(canvasId, data, size, channels, mapFn) {
+  const canvas = document.getElementById(canvasId);
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const px = (y * size + x) * channels.length;
+      const rgba = mapFn(channels.map((c, ci) => data[(y * size + x) * 4 + c]));
+      img.data[idx] = rgba[0];
+      img.data[idx + 1] = rgba[1];
+      img.data[idx + 2] = rgba[2];
+      img.data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+async function main() {
+  const status = document.getElementById('status');
+
+  try {
+    const bg = await loadF16('/assets/lens/transport_bg_s0.bin');
+    const d0 = await loadF16('/assets/lens/transport_disk0_s0.bin');
+    const d1 = await loadF16('/assets/lens/transport_disk1_s0.bin');
+    const aux = await loadF16('/assets/lens/transport_aux_s0.bin');
+
+    // bg: source UV as color
+    drawChannel('bg_rgb', bg, SIZE, [0,1,2], ([u,v,m]) => [u*255, v*255, 0, 255]);
+
+    // bg: capture mask (white = captured)
+    drawChannel('bg_capture', bg, SIZE, [3], ([c]) => {
+      const v = c * 255;
+      return [v, v, v];
+    });
+
+    // bg: magnification
+    drawChannel('bg_mag', bg, SIZE, [2], ([m]) => {
+      const v = Math.min(m / 5.0, 1.0) * 255;
+      return [v, v, v];
+    });
+
+    // disk0: UV as color
+    drawChannel('d0_uv', d0, SIZE, [0,1], ([u,v]) => [u*255, v*255, 100]);
+
+    // disk0: weight
+    drawChannel('d0_weight', d0, SIZE, [2], ([w]) => {
+      const v = Math.min(w, 1.0) * 255;
+      return [v, v, v];
+    });
+
+    // disk0: doppler (blue=dim, red=bright)
+    drawChannel('d0_doppler', d0, SIZE, [3], ([d]) => {
+      const norm = Math.min(d / 5.0, 1.0);
+      return [norm * 255, 50, (1-norm) * 255];
+    });
+
+    // disk1: UV
+    drawChannel('d1_uv', d1, SIZE, [0,1], ([u,v]) => [u*255, v*255, 100]);
+
+    // disk1: weight
+    drawChannel('d1_weight', d1, SIZE, [2], ([w]) => {
+      const v = Math.min(w, 1.0) * 255;
+      return [v, v, v];
+    });
+
+    // aux: caustic (photon ring!)
+    drawChannel('aux_caustic', aux, SIZE, [0], ([c]) => {
+      return [c * 255, c * 200, c * 150];
+    });
+
+    // aux: class mask
+    drawChannel('aux_class', aux, SIZE, [3], ([c]) => {
+      if (c >= 2) return [100, 200, 255]; // secondary disk
+      if (c >= 1) return [255, 200, 100]; // primary disk
+      return [30, 30, 30]; // background only
+    });
+
+    status.textContent = 'Loaded. Check the maps below.';
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+    console.error(e);
+  }
+}
+
+main();
+</script>
+</body>
+</html>

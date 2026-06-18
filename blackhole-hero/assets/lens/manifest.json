@@ -1,0 +1,25 @@
+{
+  "id": "arclight-blackhole-hero-v001",
+  "renderModel": "precomputed-transport-live-composite",
+  "coordinateSpace": "blackhole-local-uv",
+  "resolution": [
+    1024,
+    1024
+  ],
+  "viewSlices": 1,
+  "metric": "schwarzschild",
+  "disk": {
+    "innerRadius": 3.0,
+    "outerRadius": 12.0
+  },
+  "maps": {
+    "0": {
+      "transport_bg": "transport_bg_s0.bin",
+      "transport_disk0": "transport_disk0_s0.bin",
+      "transport_disk1": "transport_disk1_s0.bin",
+      "transport_aux": "transport_aux_s0.bin"
+    }
+  },
+  "format": "float16-rgba",
+  "attribution": "Geodesic method adapted from ebruneton/black_hole_shader (BSD-3-Clause)"
+}

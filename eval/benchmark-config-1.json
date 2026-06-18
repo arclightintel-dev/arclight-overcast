@@ -1,0 +1,48 @@
+{
+  "_note": "MisterPrada/singularity — locked cinematic composition for Arclight Overcast",
+  "_captured": "2026-06-17",
+
+  "camera": {
+    "position": { "x": 0.0844, "y": 0.0414, "z": 0.5942 },
+    "rotation": { "x": 0.2306, "y": 0.4318, "z": -0.0979 },
+    "fov": 50,
+    "target": { "x": 0, "y": 0, "z": 0 }
+  },
+
+  "shader": {
+    "iterations": 150,
+    "stepSize": 0.0074,
+    "noiseFactor": 0.0054,
+    "power": 0.37,
+    "clamp1": 0.5,
+    "clamp2": 1.0,
+    "originRadius": 0.13,
+    "width": 0.03,
+    "uvMotion": 0.0,
+    "rampCol1": { "r": 1.0, "g": 1.0, "b": 1.0 },
+    "rampPos1": 0.05,
+    "rampCol2": { "r": 0.1875, "g": 0.1567, "b": 0.15 },
+    "rampPos2": 0.425,
+    "rampCol3": { "r": 0.0, "g": 0.0, "b": 0.0 },
+    "rampPos3": 1.0,
+    "rampEmission": 2.0,
+    "emissionColor": { "r": 0.14, "g": 0.129, "b": 0.09 }
+  },
+
+  "bloom": {
+    "strength": 0.163,
+    "radius": 0.0,
+    "threshold": 0.0
+  },
+
+  "renderer": {
+    "toneMapping": "ACESFilmic",
+    "toneMappingExposure": 1.2
+  },
+
+  "environment": {
+    "topColor": { "r": 0.0, "g": 0.0999, "b": 0.3125 },
+    "bottomColor": { "r": 0.0052, "g": 0.0411, "b": 0.275 },
+    "backgroundIntensity": 2
+  }
+}
