@@ -87,6 +87,7 @@ const CFG = {
   exposure: 1.2, pixelRatio: 1.0, fov: 50,
   camDefault: [0.16, 0.037, 0.546], targetDefault: [-0.1432, 0.2553, 0.0383],
   camFinal: [-0.3696, 0.037, 0.4326], targetFinal: [-0.1104, 0.2553, -0.0989],
+  cam2: [0.44, 0.16, -0.34], target2: [-0.02, 0.14, 0.06],
   orbitSpeed: 0.007
 };
 
@@ -354,7 +355,7 @@ class Singularity {
     // for a fixed-position canvas inside a transformed/scaled container). The
     // hero canvas is full-screen fixed, so it's visible until scrolled roughly
     // one viewport past, and whenever the tab is foregrounded.
-    this._computeInView = () => { this._inView = this.getScroll() < window.innerHeight * 1.15; };
+    this._computeInView = () => { this._inView = this.getScroll() < window.innerHeight * 3.0; };
     this._vis = () => { this._tabVisible = !document.hidden; this._sync(); };
     this._gateScroll = () => { this._computeInView(); this._sync(); };
     document.addEventListener('visibilitychange', this._vis);
@@ -395,17 +396,18 @@ class Singularity {
     if (dt > 0.05) dt = 0.05;
     const elapsed = (now - this.startT) / 1000;
 
-    // Static camera locked to the exact config view — no orbit, no drift.
-    const cam = CFG.camFinal;
-    const tgt = CFG.targetFinal;
+    const vh = window.innerHeight;
+    const scroll = this.scrollY;
+    const t = cl((scroll - vh * 0.7) / (vh * 0.45), 0, 1);
+    const blend = t * t * (3 - 2 * t);
+
+    const cam = lerp3(CFG.camFinal, CFG.cam2, blend);
+    const tgt = lerp3(CFG.targetFinal, CFG.target2, blend);
     this.camera.position.set(cam[0], cam[1], cam[2]);
     this.camera.lookAt(tgt[0], tgt[1], tgt[2]);
 
-    // disc at full brightness; fades on scroll
-    const sc = cl(this.scrollY / (window.innerHeight * 0.9), 0, 1);
-    this.U.discB.value = this.opt.discBright * (1 - sc * 0.92);
+    this.U.discB.value = this.opt.discBright;
 
-    // logo intro removed — keep it hidden
     if (this.logo && this.logo.style.display !== 'none') this.logo.style.display = 'none';
 
     if (this.zEl) this.zEl.textContent = 'Z  ' + (0.0341 + 0.0009 * Math.sin(elapsed * 0.6)).toFixed(4);
