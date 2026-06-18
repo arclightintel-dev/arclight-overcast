@@ -12,11 +12,10 @@
   <style>
     *,*::before,*::after{box-sizing:border-box}
     html,body{margin:0;padding:0;background:#000;color:#e7eaef}
-    body{overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+    body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
     ::selection{background:rgba(220,228,240,0.16)}
     .btn-primary{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12px;letter-spacing:0.22em;text-transform:uppercase;text-decoration:none;color:#06080c;background:rgba(244,246,250,0.95);padding:16px 30px;border:1px solid rgba(244,246,250,0.95);border-radius:1px;display:inline-block;transition:background 0.4s ease,box-shadow 0.4s ease}
     .btn-primary:hover{background:#fff!important;box-shadow:0 0 28px rgba(220,230,245,0.3)}
-    .view-text{transition:opacity 0.5s ease,filter 0.5s ease}
   </style>
   <script type="module" src="/singularity-gpu.js"></script>
   <script>
@@ -32,93 +31,82 @@
 </head>
 <body>
 
-<div id="arclight-root" style="position:relative;width:100%;min-height:200vh;background:#000;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',system-ui,sans-serif;color:#e7eaef;">
+<!-- Scroll spacer — invisible, just creates scroll range -->
+<div id="scroll-track" style="height:260vh;position:relative;"></div>
 
-  <canvas data-bh style="position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block;background:#000;"></canvas>
-  <img data-bh-poster src="/bh-poster.jpg" alt="" aria-hidden="true" style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;display:block;pointer-events:none;transition:opacity 0.6s ease;">
+<!-- Everything below is fixed to viewport -->
+<canvas data-bh style="position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block;background:#000;"></canvas>
+<img data-bh-poster src="/bh-poster.jpg" alt="" aria-hidden="true" style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;display:block;pointer-events:none;transition:opacity 0.6s ease;">
+<div style="position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(132% 96% at 50% 46%,rgba(0,0,0,0) 40%,rgba(0,0,0,0.4) 80%,rgba(0,0,0,0.82) 100%);"></div>
 
-  <div style="position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(132% 96% at 50% 46%,rgba(0,0,0,0) 40%,rgba(0,0,0,0.4) 80%,rgba(0,0,0,0.82) 100%);"></div>
+<!-- HUD -->
+<div style="position:fixed;inset:0;z-index:6;pointer-events:none;font-family:'IBM Plex Mono',ui-monospace,monospace;">
+  <div style="position:absolute;top:22px;left:22px;width:26px;height:26px;border-top:1px solid rgba(180,190,205,0.32);border-left:1px solid rgba(180,190,205,0.32);"></div>
+  <div style="position:absolute;top:22px;right:22px;width:26px;height:26px;border-top:1px solid rgba(180,190,205,0.32);border-right:1px solid rgba(180,190,205,0.32);"></div>
+  <div style="position:absolute;bottom:22px;left:22px;width:26px;height:26px;border-bottom:1px solid rgba(180,190,205,0.32);border-left:1px solid rgba(180,190,205,0.32);"></div>
+  <div style="position:absolute;bottom:22px;right:22px;width:26px;height:26px;border-bottom:1px solid rgba(180,190,205,0.32);border-right:1px solid rgba(180,190,205,0.32);"></div>
 
-  <!-- HUD -->
-  <div style="position:fixed;inset:0;z-index:6;pointer-events:none;font-family:'IBM Plex Mono',ui-monospace,monospace;">
-    <div style="position:absolute;top:22px;left:22px;width:26px;height:26px;border-top:1px solid rgba(180,190,205,0.32);border-left:1px solid rgba(180,190,205,0.32);"></div>
-    <div style="position:absolute;top:22px;right:22px;width:26px;height:26px;border-top:1px solid rgba(180,190,205,0.32);border-right:1px solid rgba(180,190,205,0.32);"></div>
-    <div style="position:absolute;bottom:22px;left:22px;width:26px;height:26px;border-bottom:1px solid rgba(180,190,205,0.32);border-left:1px solid rgba(180,190,205,0.32);"></div>
-    <div style="position:absolute;bottom:22px;right:22px;width:26px;height:26px;border-bottom:1px solid rgba(180,190,205,0.32);border-right:1px solid rgba(180,190,205,0.32);"></div>
+  <div style="position:absolute;top:40px;left:48px;display:flex;align-items:center;gap:12px;">
+    <img src="/assets/logomark.png" alt="" aria-hidden="true" style="height:30px;width:auto;display:block;opacity:0.92;">
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',system-ui,sans-serif;font-size:24px;line-height:1;letter-spacing:0.005em;color:rgba(238,241,244,0.92);"><span style="font-weight:500;">Arclight</span> <span style="font-weight:300;opacity:0.78;">Labs</span></div>
+  </div>
 
-    <div style="position:absolute;top:40px;left:48px;display:flex;align-items:center;gap:12px;">
-      <img src="/assets/logomark.png" alt="" aria-hidden="true" style="height:30px;width:auto;display:block;opacity:0.92;">
-      <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',system-ui,sans-serif;font-size:24px;line-height:1;letter-spacing:0.005em;color:rgba(238,241,244,0.92);"><span style="font-weight:500;">Arclight</span> <span style="font-weight:300;opacity:0.78;">Labs</span></div>
+  <div style="position:absolute;top:40px;right:48px;text-align:right;font-size:10px;letter-spacing:0.2em;color:rgba(176,185,199,0.62);line-height:1.9;">
+    <div>R.A&nbsp;&nbsp;17:45:40.0</div>
+    <div>DEC&nbsp;&minus;29&deg;00&prime;28&Prime;</div>
+    <div data-zval style="color:rgba(150,160,176,0.5);">Z&nbsp;&nbsp;0.0000</div>
+  </div>
+
+  <div style="position:absolute;top:50%;left:48px;transform:translateY(-50%);display:flex;flex-direction:column;gap:11px;align-items:flex-start;">
+    <div style="width:18px;height:1px;background:rgba(150,160,176,0.4);"></div>
+    <div style="width:10px;height:1px;background:rgba(150,160,176,0.26);"></div>
+    <div style="width:10px;height:1px;background:rgba(150,160,176,0.26);"></div>
+    <div style="width:26px;height:1px;background:rgba(180,190,205,0.5);"></div>
+    <div style="width:10px;height:1px;background:rgba(150,160,176,0.26);"></div>
+    <div style="width:10px;height:1px;background:rgba(150,160,176,0.26);"></div>
+    <div style="width:18px;height:1px;background:rgba(150,160,176,0.4);"></div>
+  </div>
+</div>
+
+<!-- VIEW 1 TEXT — fixed, center-right (same as v1 hero positioning) -->
+<div data-view1-text style="position:fixed;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 6vw 0 22vw;pointer-events:none;opacity:0;">
+  <div style="display:flex;flex-direction:column;align-items:center;transform:translate(7vw,4vh);">
+    <div style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10.2px;letter-spacing:0.4em;color:rgba(178,187,201,0.72);text-transform:uppercase;margin-bottom:34px;">Collection&nbsp;&middot;&nbsp;Modeling&nbsp;&middot;&nbsp;Inference</div>
+    <h1 style="margin:0;font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:clamp(40px,6.2vw,92px);line-height:1.04;letter-spacing:-0.012em;color:#f3f5f9;max-width:13ch;text-wrap:balance;text-shadow:0 2px 50px rgba(0,0,0,0.6);">The unknown is not unknowable</h1>
+    <p style="margin:36px 0 0;font-weight:300;font-size:clamp(15px,1.5vw,18px);line-height:1.65;letter-spacing:0.01em;color:rgba(196,203,214,0.78);max-width:52ch;text-shadow:0 1px 30px rgba(0,0,0,0.6);">Arclight Labs builds the intelligence infrastructure to capture what cannot be seen &mdash; collecting across open-source domains and modeling the complex systems that reveal hidden structure, activity, capability, and intent.</p>
+  </div>
+</div>
+
+<!-- VIEW 2 TEXT — fixed, left-aligned, different layout -->
+<div data-view2-text style="position:fixed;inset:0;z-index:4;display:flex;flex-direction:column;justify-content:center;padding:0 8vw;pointer-events:none;opacity:0;">
+  <div style="max-width:560px;">
+    <p style="margin:0 0 56px;font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:clamp(24px,3.2vw,44px);line-height:1.26;letter-spacing:-0.005em;color:#eef1f6;text-shadow:0 2px 40px rgba(0,0,0,0.7);">Hard targets hide in the noise. Arclight measures and models their activity until hidden structure comes into focus.</p>
+
+    <div style="display:flex;flex-direction:column;gap:1px;background:rgba(255,255,255,0.06);margin-bottom:48px;">
+      <div style="background:rgba(2,3,5,0.72);backdrop-filter:blur(2px);padding:28px 26px 32px;">
+        <div style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.28em;color:rgba(150,160,176,0.55);margin-bottom:14px;">01&nbsp;/&nbsp;COLLECTION</div>
+        <p style="margin:0;font-weight:300;font-size:14px;line-height:1.55;color:rgba(186,194,206,0.65);">Map the records, sources, rules, and signals hard targets leave behind.</p>
+      </div>
+      <div style="background:rgba(2,3,5,0.72);backdrop-filter:blur(2px);padding:28px 26px 32px;">
+        <div style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.28em;color:rgba(150,160,176,0.55);margin-bottom:14px;">02&nbsp;/&nbsp;MODELING</div>
+        <p style="margin:0;font-weight:300;font-size:14px;line-height:1.55;color:rgba(186,194,206,0.65);">Build a structured model of actors, assets, relationships, and technical systems.</p>
+      </div>
+      <div style="background:rgba(2,3,5,0.72);backdrop-filter:blur(2px);padding:28px 26px 32px;">
+        <div style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.28em;color:rgba(150,160,176,0.55);margin-bottom:14px;">03&nbsp;/&nbsp;INFERENCE</div>
+        <p style="margin:0;font-weight:300;font-size:14px;line-height:1.55;color:rgba(186,194,206,0.65);">Resolve hidden structure, capability, and intent from the model.</p>
+      </div>
     </div>
 
-    <div style="position:absolute;top:40px;right:48px;text-align:right;font-size:10px;letter-spacing:0.2em;color:rgba(176,185,199,0.62);line-height:1.9;">
-      <div>R.A&nbsp;&nbsp;17:45:40.0</div>
-      <div>DEC&nbsp;&minus;29&deg;00&prime;28&Prime;</div>
-      <div data-zval style="color:rgba(150,160,176,0.5);">Z&nbsp;&nbsp;0.0000</div>
-    </div>
-
-    <div style="position:absolute;top:50%;left:48px;transform:translateY(-50%);display:flex;flex-direction:column;gap:11px;align-items:flex-start;">
-      <div style="width:18px;height:1px;background:rgba(150,160,176,0.4);"></div>
-      <div style="width:10px;height:1px;background:rgba(150,160,176,0.26);"></div>
-      <div style="width:10px;height:1px;background:rgba(150,160,176,0.26);"></div>
-      <div style="width:26px;height:1px;background:rgba(180,190,205,0.5);"></div>
-      <div style="width:10px;height:1px;background:rgba(150,160,176,0.26);"></div>
-      <div style="width:10px;height:1px;background:rgba(150,160,176,0.26);"></div>
-      <div style="width:18px;height:1px;background:rgba(150,160,176,0.4);"></div>
+    <div style="pointer-events:auto;">
+      <h2 style="margin:0 0 20px;font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:clamp(24px,3vw,40px);line-height:1.1;letter-spacing:-0.01em;color:#f1f4f8;">Bring the system into focus.</h2>
+      <a href="mailto:access@arclight.io" class="btn-primary">Request&nbsp;Access</a>
     </div>
   </div>
 
-  <!-- VIEW 1: HERO -->
-  <section data-view="1" style="position:relative;z-index:4;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:120px 6vw 120px 22vw;">
-    <div class="view-text" data-view1-text style="display:flex;flex-direction:column;align-items:center;transform:translate(7vw,6vh);">
-      <div style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10.2px;letter-spacing:0.4em;color:rgba(178,187,201,0.72);text-transform:uppercase;margin-bottom:34px;">Collection&nbsp;&middot;&nbsp;Modeling&nbsp;&middot;&nbsp;Inference</div>
-      <h1 style="margin:0;font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:clamp(40px,6.2vw,92px);line-height:1.04;letter-spacing:-0.012em;color:#f3f5f9;max-width:13ch;text-wrap:balance;text-shadow:0 2px 50px rgba(0,0,0,0.6);">The unknown is not unknowable</h1>
-      <p style="margin:36px 0 0;font-weight:300;font-size:clamp(15px,1.5vw,18px);line-height:1.65;letter-spacing:0.01em;color:rgba(196,203,214,0.78);max-width:52ch;text-shadow:0 1px 30px rgba(0,0,0,0.6);">Arclight Labs builds the intelligence infrastructure to capture what cannot be seen &mdash; collecting across open-source domains and modeling the complex systems that reveal hidden structure, activity, capability, and intent.</p>
-    </div>
-  </section>
-
-  <!-- VIEW 2: CONTENT + CTA -->
-  <section data-view="2" style="position:relative;z-index:4;min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:14vh 8vw 7vh;">
-    <div class="view-text" data-view2-text style="opacity:0;">
-
-      <p style="margin:0 0 12vh;font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:clamp(26px,3.6vw,52px);line-height:1.22;letter-spacing:-0.005em;color:#eef1f6;max-width:22ch;text-shadow:0 2px 40px rgba(0,0,0,0.7);">Hard targets hide in the noise. Arclight measures and models their activity until hidden structure comes into focus.</p>
-
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:rgba(255,255,255,0.06);margin-bottom:12vh;">
-        <div style="background:rgba(2,3,5,0.72);backdrop-filter:blur(2px);padding:36px 30px 42px;">
-          <div style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.28em;color:rgba(150,160,176,0.55);margin-bottom:22px;">01&nbsp;/&nbsp;COLLECTION</div>
-          <h3 style="margin:0 0 12px;font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:26px;letter-spacing:-0.005em;color:#eef1f6;">Find the traces</h3>
-          <p style="margin:0;font-weight:300;font-size:14px;line-height:1.62;color:rgba(186,194,206,0.62);">Arclight maps the records, sources, rules, and signals hard targets leave behind in public systems.</p>
-        </div>
-        <div style="background:rgba(2,3,5,0.72);backdrop-filter:blur(2px);padding:36px 30px 42px;">
-          <div style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.28em;color:rgba(150,160,176,0.55);margin-bottom:22px;">02&nbsp;/&nbsp;MODELING</div>
-          <h3 style="margin:0 0 12px;font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:26px;letter-spacing:-0.005em;color:#eef1f6;">Build the picture</h3>
-          <p style="margin:0;font-weight:300;font-size:14px;line-height:1.62;color:rgba(186,194,206,0.62);">Source-scale evidence becomes a structured model of actors, assets, relationships, timelines, and technical systems.</p>
-        </div>
-        <div style="background:rgba(2,3,5,0.72);backdrop-filter:blur(2px);padding:36px 30px 42px;">
-          <div style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.28em;color:rgba(150,160,176,0.55);margin-bottom:22px;">03&nbsp;/&nbsp;INFERENCE</div>
-          <h3 style="margin:0 0 12px;font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:26px;letter-spacing:-0.005em;color:#eef1f6;">Resolve the unknown</h3>
-          <p style="margin:0;font-weight:300;font-size:14px;line-height:1.62;color:rgba(186,194,206,0.62);">Infer hidden structure, activity, capability, and intent &mdash; what cannot be observed directly, but can be known.</p>
-        </div>
-      </div>
-
-      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:48px;padding-top:4vh;border-top:1px solid rgba(255,255,255,0.08);">
-        <div style="max-width:30ch;">
-          <h2 style="margin:0 0 22px;font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:clamp(28px,3.6vw,48px);line-height:1.1;letter-spacing:-0.01em;color:#f1f4f8;">Bring the system into focus.</h2>
-          <a href="mailto:access@arclight.io" class="btn-primary">Request&nbsp;Access</a>
-        </div>
-        <div style="text-align:right;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:0.22em;color:rgba(168,177,191,0.55);line-height:2;">
-          <div>access@arclight.io</div>
-          <div style="color:rgba(150,160,176,0.45);">R.A&nbsp;17:45:40&nbsp;&middot;&nbsp;DEC&nbsp;&minus;29&deg;</div>
-        </div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:48px;padding-top:22px;border-top:1px solid rgba(255,255,255,0.06);font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.26em;color:rgba(150,160,176,0.45);text-transform:uppercase;">
-        <span>Arclight&nbsp;Labs</span>
-        <span>&copy;&nbsp;2026&nbsp;&middot;&nbsp;All&nbsp;rights&nbsp;reserved</span>
-      </div>
-
-    </div>
-  </section>
-
+  <div style="position:fixed;bottom:40px;left:48px;right:48px;display:flex;justify-content:space-between;align-items:center;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.26em;color:rgba(150,160,176,0.4);text-transform:uppercase;">
+    <span>Arclight&nbsp;Labs</span>
+    <span>&copy;&nbsp;2026</span>
+  </div>
 </div>
 
 <script type="module" src="/src/main.js"></script>

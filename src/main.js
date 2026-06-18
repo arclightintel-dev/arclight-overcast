@@ -1,31 +1,34 @@
+function cl(v, a, b) { return Math.max(a, Math.min(b, v)) }
+
 function boot() {
   if (!window.ArclightBH) {
     setTimeout(boot, 60)
     return
   }
 
-  const root = document.getElementById('arclight-root')
-  const v1 = root.querySelector('[data-view1-text]')
-  const v2 = root.querySelector('[data-view2-text]')
+  const v1 = document.querySelector('[data-view1-text]')
+  const v2 = document.querySelector('[data-view2-text]')
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   window.ArclightBH.start({
-    canvas: root.querySelector('[data-bh]'),
+    canvas: document.querySelector('[data-bh]'),
     logo: null,
     revealEls: [],
-    zEl: root.querySelector('[data-zval]'),
-    getScroll: () => window.scrollY || window.pageYOffset || 0,
+    zEl: document.querySelector('[data-zval]'),
+    getScroll: () => window.scrollY || 0,
     onReady: () => {
-      const poster = root.querySelector('[data-bh-poster]')
+      const poster = document.querySelector('[data-bh-poster]')
       if (poster) {
         poster.style.opacity = '0'
         setTimeout(() => { poster.style.display = 'none' }, 700)
       }
-      v1.style.opacity = '1'
+      if (!reduced) {
+        v1.style.transition = 'opacity 1s ease'
+        v1.style.opacity = '1'
+      }
     },
     props: {}
   })
-
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   if (reduced) {
     v1.style.opacity = '1'
@@ -33,32 +36,23 @@ function boot() {
     return
   }
 
-  v1.style.opacity = '0'
-  v1.style.transition = 'none'
-  requestAnimationFrame(() => {
-    v1.style.transition = 'opacity 1.2s ease, filter 0.8s ease'
-    v1.style.opacity = '1'
-  })
-
   function onScroll() {
-    const vh = window.innerHeight
-    const s = window.scrollY
+    const maxScroll = document.documentElement.scrollHeight - window.innerHeight
+    const t = maxScroll > 0 ? window.scrollY / maxScroll : 0
 
-    const fadeOut = Math.max(0, Math.min(1, (s - vh * 0.15) / (vh * 0.35)))
-    v1.style.opacity = (1 - fadeOut).toFixed(3)
-    if (fadeOut > 0 && fadeOut < 1) {
-      v1.style.filter = 'blur(' + (fadeOut * 6).toFixed(1) + 'px)'
-    } else {
-      v1.style.filter = 'none'
-    }
+    // View 1: visible 0–0.2, fades out 0.2–0.4
+    const v1fade = cl((t - 0.2) / 0.2, 0, 1)
+    const v1op = 1 - v1fade
+    v1.style.opacity = v1op.toFixed(3)
+    v1.style.filter = v1fade > 0.01 && v1fade < 0.99
+      ? 'blur(' + (v1fade * 8).toFixed(1) + 'px)' : 'none'
 
-    const fadeIn = Math.max(0, Math.min(1, (s - vh * 0.85) / (vh * 0.4)))
-    v2.style.opacity = fadeIn.toFixed(3)
-    if (fadeIn > 0 && fadeIn < 1) {
-      v2.style.filter = 'blur(' + ((1 - fadeIn) * 5).toFixed(1) + 'px)'
-    } else {
-      v2.style.filter = fadeIn >= 1 ? 'none' : 'blur(5px)'
-    }
+    // View 2: fades in 0.6–0.85
+    const v2fade = cl((t - 0.6) / 0.25, 0, 1)
+    v2.style.opacity = v2fade.toFixed(3)
+    v2.style.filter = v2fade > 0.01 && v2fade < 0.99
+      ? 'blur(' + ((1 - v2fade) * 8).toFixed(1) + 'px)' : 'none'
+    v2.style.pointerEvents = v2fade > 0.5 ? 'auto' : 'none'
   }
 
   window.addEventListener('scroll', onScroll, { passive: true })

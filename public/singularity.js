@@ -312,9 +312,9 @@
     var cam1 = lerp3(camEstablish, CFG.camFinal, eio);
     var tgt1 = lerp3(tgtEstablish, CFG.targetFinal, eout);
 
-    // scroll-driven blend to view 2
-    var vh = window.innerHeight;
-    var viewT = cl((this.scrollY - vh * 0.7) / (vh * 0.45), 0, 1);
+    var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+    var normT = maxScroll > 0 ? cl(this.scrollY / maxScroll, 0, 1) : 0;
+    var viewT = cl((normT - 0.25) / 0.4, 0, 1);
     var viewBlend = viewT * viewT * (3 - 2 * viewT);
     var cam = lerp3(cam1, CFG.cam2, viewBlend);
     var tgt = lerp3(tgt1, CFG.target2, viewBlend);
