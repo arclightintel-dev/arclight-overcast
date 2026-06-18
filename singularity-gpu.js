@@ -396,10 +396,10 @@ class Singularity {
     if (dt > 0.05) dt = 0.05;
     const elapsed = (now - this.startT) / 1000;
 
-    const vh = window.innerHeight;
-    const scroll = this.scrollY;
-    const t = cl((scroll - vh * 0.7) / (vh * 0.45), 0, 1);
-    const blend = t * t * (3 - 2 * t);
+    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+    const t = maxScroll > 0 ? cl(this.scrollY / maxScroll, 0, 1) : 0;
+    const camT = cl((t - 0.25) / 0.4, 0, 1);
+    const blend = camT * camT * (3 - 2 * camT);
 
     const cam = lerp3(CFG.camFinal, CFG.cam2, blend);
     const tgt = lerp3(CFG.targetFinal, CFG.target2, blend);
