@@ -1,0 +1,31 @@
+# Copy this file to terraform.tfvars and fill in actual values.
+
+aws_region    = "us-east-1"
+domain_name   = "example.com"
+environment   = "prod"
+
+# RDS — larger for production
+rds_instance_class    = "db.t3.small"
+rds_allocated_storage = 50
+rds_multi_az          = false  # Enable when budget allows
+
+# ECS service counts
+core_desired_count         = 2   # 2 across AZs for production
+shuttleforge_desired_count = 1
+podbay_desired_count       = 1
+
+# Podbay EC2 capacity
+podbay_ec2_instance_type      = "m5.large"
+podbay_ec2_desired_capacity   = 1
+
+# Alerts
+alarm_email = "ops@example.com"
+
+# GitHub OIDC
+github_org   = "your-org"
+github_repos = [
+  "arclight-core",
+  "arclight-shuttleforge",
+  "arclight-podbay",
+  "arclight-overcast",
+]

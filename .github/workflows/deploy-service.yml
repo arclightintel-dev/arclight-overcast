@@ -1,0 +1,47 @@
+# Deploy Service — deploys a module to ECS
+#
+# Triggers: Manual or called after build-and-push-image
+# Auth: GitHub OIDC → AWS IAM role with ECS deploy permissions
+#
+# D-056 §9: Boot order is Core → ShuttleForge → Podbay
+# Rolling deployment (no blue/green for v1)
+
+name: Deploy Service
+
+on:
+  workflow_dispatch:
+    inputs:
+      module:
+        description: 'Module to deploy'
+        required: true
+        type: choice
+        options:
+          - core
+          - shuttleforge
+          - podbay
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - prod
+      image_tag:
+        description: 'ECR image tag to deploy'
+        required: true
+        type: string
+      run_migration:
+        description: 'Run database migration before deploy'
+        required: false
+        type: boolean
+        default: true
+
+# TODO: Implement after ECS cluster and services are configured
+# Steps:
+#   1. Configure AWS credentials via OIDC
+#   2. If run_migration: run migration as one-off ECS task, wait for completion
+#   3. Register new task definition with updated image tag
+#   4. Update ECS service with new task definition
+#   5. Wait for service stable
+#   6. Verify /ready endpoint returns healthy
+#   7. Post deployment status

@@ -1,16 +1,40 @@
-# React + Vite
+# arclight-overcast
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+AWS deployment substrate for the Arclight platform.
 
-Currently, two official plugins are available:
+**Modules own what runs. Overcast owns where it runs.**
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## What this repo is
 
-## React Compiler
+Overcast is the AWS infrastructure provisioning, environment wiring, deployment automation, and operations repo for Arclight. It is NOT a product module — it has no domain nouns, no seam contracts, no API.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## What this repo is NOT
 
-## Expanding the ESLint configuration
+- Not application code (owned by module repos)
+- Not platform governance or specs (owned by `arclight-complex`)
+- Not a secrets store (creates shells; values populated out-of-band)
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Structure
+
+```
+terraform/
+  modules/       # Reusable Terraform modules (VPC, ECS, RDS, etc.)
+  envs/          # Per-environment configurations (staging, prod)
+services/        # ECS task definition templates per module
+docs/            # Charter, architecture decisions, runbooks
+.github/         # CI/CD workflows
+demo/            # Archived blackhole-hero visual demo
+```
+
+## Governing documents
+
+- Charter: `docs/CHARTER.md`
+- Infrastructure spec (D-056): `arclight-complex/docs/proposals/production-infrastructure-spec.md`
+- Platform testing protocols: `arclight-complex/platform/specs/TESTING_PROTOCOLS.md`
+
+## Prerequisites
+
+- AWS account with IAM admin access
+- Terraform >= 1.5
+- AWS CLI v2
+- GitHub CLI (for OIDC deploy setup)

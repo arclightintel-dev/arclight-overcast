@@ -1,0 +1,20 @@
+# Terraform Plan — runs on PRs to show what would change
+#
+# Triggers: PR to main affecting terraform/**
+# Auth: GitHub OIDC → AWS IAM role (no long-lived keys)
+# Output: Plan summary as PR comment
+
+name: Terraform Plan
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/**'
+
+# TODO: Implement after AWS account and GitHub OIDC are configured
+# Steps:
+#   1. Configure AWS credentials via OIDC
+#   2. terraform init (with S3 backend)
+#   3. terraform validate
+#   4. terraform plan -out=plan.tfplan
+#   5. Post plan summary as PR comment

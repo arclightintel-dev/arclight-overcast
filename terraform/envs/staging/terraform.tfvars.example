@@ -1,0 +1,31 @@
+# Copy this file to terraform.tfvars and fill in actual values.
+# terraform.tfvars is gitignored — never commit real values.
+
+aws_region    = "us-east-1"
+domain_name   = "staging.example.com"
+environment   = "staging"
+
+# RDS
+rds_instance_class    = "db.t3.micro"
+rds_allocated_storage = 20
+
+# ECS service counts (fixed capacity for v1)
+core_desired_count         = 1
+shuttleforge_desired_count = 1
+podbay_desired_count       = 1
+
+# Podbay EC2 capacity
+podbay_ec2_instance_type      = "t3.medium"
+podbay_ec2_desired_capacity   = 1
+
+# Alerts
+alarm_email = "ops@example.com"
+
+# GitHub OIDC
+github_org   = "your-org"
+github_repos = [
+  "arclight-core",
+  "arclight-shuttleforge",
+  "arclight-podbay",
+  "arclight-overcast",
+]

@@ -1,0 +1,35 @@
+# Build and Push Image — builds module Docker images and pushes to ECR
+#
+# Triggers: Called by module repos via workflow_dispatch or repository_dispatch
+# Auth: GitHub OIDC → AWS IAM role with ECR push permissions
+#
+# D-056 §11: Module repos own Dockerfiles. This workflow consumes them.
+
+name: Build and Push Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      module:
+        description: 'Module name (core, shuttleforge, podbay)'
+        required: true
+        type: choice
+        options:
+          - core
+          - shuttleforge
+          - podbay
+          - podbay-workspace-browser
+      ref:
+        description: 'Git ref to build from (tag or SHA)'
+        required: true
+        type: string
+
+# TODO: Implement after ECR repositories and GitHub OIDC are configured
+# Steps:
+#   1. Checkout module repo at specified ref
+#   2. Configure AWS credentials via OIDC
+#   3. Login to ECR
+#   4. Build Docker image
+#   5. Tag with git SHA (immutable)
+#   6. Push to ECR
+#   7. Output image URI for deploy-service workflow

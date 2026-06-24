@@ -1,0 +1,17 @@
+# Core service configuration
+# Core is Tier 0 — boots before everything (D-056 §9)
+
+service_name    = "core"
+container_port  = 8000
+desired_count   = 1
+cpu             = 256
+memory          = 512
+
+health_check_path     = "/ready"
+health_check_interval = 30
+
+# ALB routing
+public_hostname = "core"  # → core.{domain}
+
+# Migration command (run as one-off ECS task before deploy)
+migration_command = "alembic upgrade head"

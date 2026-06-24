@@ -1,0 +1,14 @@
+# Podbay EC2 capacity provider configuration
+# Dedicated EC2 hosts for browser workspace tasks
+# D-056 §6: Fargate can't do SYS_ADMIN or custom /dev/shm
+
+instance_type     = "t3.medium"   # Staging — adjust for workload
+desired_capacity  = 1
+min_size          = 1
+max_size          = 2             # Fixed capacity for v1, no auto-scaling
+
+# Workspace task requirements (D-056 §16):
+#   - SYS_ADMIN capability (Chromium namespace sandbox)
+#   - sharedMemorySize: 256 MB
+#   - EBS gp3 volume per workspace (2 GB)
+#   - No --no-sandbox in production (PODBAY_DISABLE_SANDBOX must NOT be set)

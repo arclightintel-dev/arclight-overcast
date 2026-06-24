@@ -1,0 +1,20 @@
+# Podbay controller service configuration
+# Runs on EC2 capacity provider (SYS_ADMIN needed for workspace tasks)
+# D-056 §6: controller + workspace tasks on ECS-on-EC2
+
+service_name    = "podbay"
+container_port  = 8099
+desired_count   = 1
+cpu             = 512
+memory          = 1024
+
+health_check_path     = "/ready"
+health_check_interval = 30
+
+# ALB routing
+# idle_timeout = 3600s for WebSocket browser streams (D-056 §6)
+public_hostname     = "podbay"
+alb_idle_timeout    = 3600
+
+# Migration
+migration_command = "alembic upgrade head"

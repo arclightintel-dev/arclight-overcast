@@ -1,0 +1,23 @@
+# ShuttleForge service configuration
+# Single task, 3 ports: control (9000), proxy (9050), MITM (9100)
+# D-056 §6: control+data in one process, shared event loop
+
+service_name    = "shuttleforge"
+container_port  = 9000   # Control plane (ALB target)
+desired_count   = 1
+cpu             = 512
+memory          = 1024
+
+health_check_path     = "/ready"
+health_check_interval = 30
+
+# ALB routing — control plane only
+# Dataplane (9050/9100) reachable via Cloud Map, NOT ALB
+public_hostname = "shuttleforge"
+
+# Cloud Map service discovery (D-056 §4)
+# Ports 9050 and 9100 registered in Cloud Map for VPC-internal access
+
+# Migration
+migration_command = "alembic upgrade head"
+migration_env     = "SHUTTLEFORGE_SKIP_MIGRATIONS=true"  # Set on app task; migration runs separately
