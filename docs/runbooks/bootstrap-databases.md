@@ -74,7 +74,20 @@ aws ecs describe-tasks --cluster arclight-staging --tasks "$TASK_ARN" \
   --query 'tasks[0].containers[0].exitCode'
 ```
 
-Expected exit code: 0. Check `/arclight/staging/dbbootstrap` logs if non-zero.
+Expected exit code: 0. If non-zero, diagnose:
+
+```bash
+aws ecs describe-tasks \
+  --cluster arclight-staging \
+  --tasks "$TASK_ARN" \
+  --query 'tasks[0].{lastStatus:lastStatus,stopCode:stopCode,stoppedReason:stoppedReason,containers:containers[*].{name:name,exitCode:exitCode,reason:reason}}'
+
+aws logs tail /arclight/staging/dbbootstrap --since 30m
+```
+
+Common failures: secret has no value (task fails before entrypoint runs), SG blocks
+egress to RDS or HTTPS endpoints, ECR image tag mismatch, execution role missing
+permissions.
 
 ## Step 4: Verify (master credentials)
 

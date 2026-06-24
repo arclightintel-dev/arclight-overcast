@@ -84,14 +84,11 @@ resource "aws_iam_role_policy" "overcast_terraform_deploy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "ECSDeploy"
+        Sid    = "ECSClusterScoped"
         Effect = "Allow"
         Action = [
           "ecs:UpdateService",
           "ecs:DescribeServices",
-          "ecs:DescribeTaskDefinition",
-          "ecs:RegisterTaskDefinition",
-          "ecs:DeregisterTaskDefinition",
           "ecs:ListTasks",
           "ecs:DescribeTasks",
           "ecs:RunTask",
@@ -102,6 +99,16 @@ resource "aws_iam_role_policy" "overcast_terraform_deploy" {
             "ecs:cluster" = var.ecs_cluster_arn
           }
         }
+      },
+      {
+        Sid    = "ECSTaskDefinitions"
+        Effect = "Allow"
+        Action = [
+          "ecs:RegisterTaskDefinition",
+          "ecs:DeregisterTaskDefinition",
+          "ecs:DescribeTaskDefinition",
+        ]
+        Resource = ["*"]
       },
       {
         Sid      = "PassRole"
