@@ -60,7 +60,7 @@ variable "podbay_ec2_instance_type" {
 variable "podbay_ec2_desired_capacity" {
   description = "Desired number of EC2 instances for Podbay"
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "alarm_email" {

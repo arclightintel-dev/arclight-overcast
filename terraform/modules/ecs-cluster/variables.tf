@@ -1,7 +1,19 @@
-# ECS cluster module variables
-#
-# Expected inputs:
-#   - environment
-#   - cluster_name
-#   - private_dns_namespace (e.g., prod.arclight.local)
-#   - vpc_id
+variable "environment" {
+  description = "Environment name (staging, prod)"
+  type        = string
+}
+
+variable "cluster_name" {
+  description = "ECS cluster name"
+  type        = string
+}
+
+variable "private_dns_namespace" {
+  description = "Private DNS namespace for Cloud Map (e.g., staging.internal.arclight-complex.net)"
+  type        = string
+}
+
+variable "vpc_id" {
+  description = "VPC ID for Cloud Map namespace"
+  type        = string
+}

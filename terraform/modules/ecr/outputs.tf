@@ -1,5 +1,9 @@
-# ECR module outputs
-#
-# Expected outputs:
-#   - repository_urls (map of name → URL)
-#   - repository_arns (map of name → ARN)
+output "repository_urls" {
+  description = "Map of repository name to URL"
+  value       = { for k, v in aws_ecr_repository.this : k => v.repository_url }
+}
+
+output "repository_arns" {
+  description = "Map of repository name to ARN"
+  value       = { for k, v in aws_ecr_repository.this : k => v.arn }
+}
