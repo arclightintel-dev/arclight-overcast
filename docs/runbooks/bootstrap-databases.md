@@ -31,6 +31,16 @@ SF_PW=$(openssl rand -hex 24)
 PODBAY_PW=$(openssl rand -hex 24)
 NF_PW=$(openssl rand -hex 24)
 
+# Write to a protected local file — needed for DATABASE_URL construction in Step 5
+umask 077
+cat > /tmp/arclight-phase0-db.env <<EOF
+CORE_PW=$CORE_PW
+SF_PW=$SF_PW
+PODBAY_PW=$PODBAY_PW
+NF_PW=$NF_PW
+EOF
+echo "Passwords saved to /tmp/arclight-phase0-db.env (mode 600)"
+
 aws secretsmanager put-secret-value \
   --secret-id arclight/staging/dbbootstrap/core-db-password \
   --secret-string "$CORE_PW"
@@ -43,16 +53,29 @@ aws secretsmanager put-secret-value \
 aws secretsmanager put-secret-value \
   --secret-id arclight/staging/dbbootstrap/nerfherder-db-password \
   --secret-string "$NF_PW"
-
-# SAVE THESE VALUES — needed for DATABASE_URL construction in Step 5
-echo "core=$CORE_PW sf=$SF_PW podbay=$PODBAY_PW nf=$NF_PW"
 ```
 
-## Step 3: Run bootstrap task
+## Step 3: Preflight checks
+
+Verify image and secrets exist before running the task:
+
+```bash
+aws ecr describe-images --repository-name arclight/dbbootstrap --image-ids imageTag=v1
+
+for secret in core-db-password shuttleforge-db-password podbay-db-password nerfherder-db-password; do
+  aws secretsmanager get-secret-value \
+    --secret-id "arclight/staging/dbbootstrap/$secret" \
+    --query 'Name' --output text || { echo "FAIL: $secret has no value"; exit 1; }
+done
+echo "Preflight passed."
+```
+
+## Step 4: Run bootstrap task
 
 ```bash
 cd terraform/envs/staging/
 BOOTSTRAP_SG=$(terraform output -raw sg_dbbootstrap_id)
+SUBNETS=$(terraform output -json private_app_subnet_ids)
 
 TASK_ARN=$(aws ecs run-task \
   --cluster arclight-staging \
@@ -61,7 +84,7 @@ TASK_ARN=$(aws ecs run-task \
   --platform-version "1.4.0" \
   --network-configuration "{
     \"awsvpcConfiguration\": {
-      \"subnets\": $(terraform output -json private_app_subnet_ids),
+      \"subnets\": $SUBNETS,
       \"securityGroups\": [\"$BOOTSTRAP_SG\"],
       \"assignPublicIp\": \"DISABLED\"
     }
@@ -70,36 +93,37 @@ TASK_ARN=$(aws ecs run-task \
 
 echo "Task: $TASK_ARN"
 aws ecs wait tasks-stopped --cluster arclight-staging --tasks "$TASK_ARN"
-aws ecs describe-tasks --cluster arclight-staging --tasks "$TASK_ARN" \
-  --query 'tasks[0].containers[0].exitCode'
-```
 
-Expected exit code: 0. If non-zero, diagnose:
+EXIT_CODE=$(aws ecs describe-tasks --cluster arclight-staging --tasks "$TASK_ARN" \
+  --query 'tasks[0].containers[0].exitCode' --output text)
+echo "Exit code: $EXIT_CODE"
 
-```bash
-aws ecs describe-tasks \
-  --cluster arclight-staging \
-  --tasks "$TASK_ARN" \
-  --query 'tasks[0].{lastStatus:lastStatus,stopCode:stopCode,stoppedReason:stoppedReason,containers:containers[*].{name:name,exitCode:exitCode,reason:reason}}'
-
-aws logs tail /arclight/staging/dbbootstrap --since 30m
+if [ "$EXIT_CODE" != "0" ]; then
+  echo "BOOTSTRAP FAILED — diagnosing:"
+  aws ecs describe-tasks \
+    --cluster arclight-staging \
+    --tasks "$TASK_ARN" \
+    --query 'tasks[0].{lastStatus:lastStatus,stopCode:stopCode,stoppedReason:stoppedReason,containers:containers[*].{name:name,exitCode:exitCode,reason:reason}}'
+  aws logs tail /arclight/staging/dbbootstrap --since 30m
+  exit 1
+fi
 ```
 
 Common failures: secret has no value (task fails before entrypoint runs), SG blocks
 egress to RDS or HTTPS endpoints, ECR image tag mismatch, execution role missing
 permissions.
 
-## Step 4: Verify (master credentials)
+## Step 5: Verify master bootstrap (GATE)
 
 ```bash
-aws ecs run-task \
+VERIFY_ARN=$(aws ecs run-task \
   --cluster arclight-staging \
   --task-definition arclight-dbbootstrap-staging \
   --launch-type FARGATE \
   --platform-version "1.4.0" \
   --network-configuration "{
     \"awsvpcConfiguration\": {
-      \"subnets\": $(terraform output -json private_app_subnet_ids),
+      \"subnets\": $SUBNETS,
       \"securityGroups\": [\"$BOOTSTRAP_SG\"],
       \"assignPublicIp\": \"DISABLED\"
     }
@@ -110,16 +134,30 @@ aws ecs run-task \
       "command": ["verify"]
     }]
   }' \
-  --query 'tasks[0].taskArn' --output text
+  --query 'tasks[0].taskArn' --output text)
+
+echo "Verify task: $VERIFY_ARN"
+aws ecs wait tasks-stopped --cluster arclight-staging --tasks "$VERIFY_ARN"
+
+EXIT_CODE=$(aws ecs describe-tasks --cluster arclight-staging --tasks "$VERIFY_ARN" \
+  --query 'tasks[0].containers[0].exitCode' --output text)
+echo "Verify exit code: $EXIT_CODE"
+
+if [ "$EXIT_CODE" != "0" ]; then
+  echo "MASTER VERIFY FAILED:"
+  aws logs tail /arclight/staging/dbbootstrap --since 15m
+  exit 1
+fi
 ```
 
-Check logs: databases and roles should exist, CREATE/DROP TABLE succeeds in each database.
+Expected: databases and roles exist, CREATE/DROP TABLE succeeds in each database.
 
-## Step 5: Populate DATABASE_URL secrets
+## Step 6: Populate DATABASE_URL secrets
 
-Using the passwords saved from Step 2 and the RDS endpoint:
+Reload passwords from the protected file, then construct connection strings:
 
 ```bash
+source /tmp/arclight-phase0-db.env
 RDS_HOST=$(terraform output -raw rds_endpoint | cut -d: -f1)
 
 aws secretsmanager put-secret-value \
@@ -139,17 +177,17 @@ aws secretsmanager put-secret-value \
   --secret-string "postgresql://nerfherder_staging:${NF_PW}@${RDS_HOST}:5432/nerfherder_staging"
 ```
 
-## Step 6: Verify service-role access
+## Step 7: Verify service-role access (GATE)
 
 ```bash
-aws ecs run-task \
+SVC_VERIFY_ARN=$(aws ecs run-task \
   --cluster arclight-staging \
   --task-definition arclight-dbverify-svc-staging \
   --launch-type FARGATE \
   --platform-version "1.4.0" \
   --network-configuration "{
     \"awsvpcConfiguration\": {
-      \"subnets\": $(terraform output -json private_app_subnet_ids),
+      \"subnets\": $SUBNETS,
       \"securityGroups\": [\"$BOOTSTRAP_SG\"],
       \"assignPublicIp\": \"DISABLED\"
     }
@@ -160,12 +198,27 @@ aws ecs run-task \
       "command": ["verify-service"]
     }]
   }' \
-  --query 'tasks[0].taskArn' --output text
+  --query 'tasks[0].taskArn' --output text)
+
+echo "Service verify task: $SVC_VERIFY_ARN"
+aws ecs wait tasks-stopped --cluster arclight-staging --tasks "$SVC_VERIFY_ARN"
+
+EXIT_CODE=$(aws ecs describe-tasks --cluster arclight-staging --tasks "$SVC_VERIFY_ARN" \
+  --query 'tasks[0].containers[0].exitCode' --output text)
+echo "Service verify exit code: $EXIT_CODE"
+
+if [ "$EXIT_CODE" != "0" ]; then
+  echo "SERVICE VERIFY FAILED:"
+  aws logs tail /arclight/staging/dbbootstrap --since 15m
+  exit 1
+fi
 ```
 
-Check logs: each service role connects and can CREATE/DROP TABLE.
+Expected: each service role connects and can CREATE/DROP TABLE.
 
-## Step 7: Mark bootstrap secrets spent
+## Step 8: Cleanup
+
+Mark bootstrap secrets spent and delete the local password file:
 
 ```bash
 for secret in core-db-password shuttleforge-db-password podbay-db-password nerfherder-db-password; do
@@ -173,4 +226,7 @@ for secret in core-db-password shuttleforge-db-password podbay-db-password nerfh
     --secret-id "arclight/staging/dbbootstrap/$secret" \
     --secret-string "BOOTSTRAP_COMPLETE"
 done
+
+rm -f /tmp/arclight-phase0-db.env
+echo "Phase 0C complete."
 ```
