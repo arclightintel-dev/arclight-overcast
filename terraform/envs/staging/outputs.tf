@@ -59,3 +59,18 @@ output "rds_master_user_secret_arn" {
   value       = module.rds.master_user_secret_arn
   sensitive   = true
 }
+
+output "sg_core_id" {
+  description = "Core security group ID"
+  value       = module.vpc.sg_core_id
+}
+
+output "core_service_name" {
+  description = "Core ECS service name"
+  value       = module.core_service.service_name
+}
+
+output "core_task_definition_family" {
+  description = "Core task definition family"
+  value       = module.core_service.task_definition_family
+}

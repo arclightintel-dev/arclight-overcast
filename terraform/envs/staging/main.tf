@@ -143,6 +143,45 @@ module "iam_github_oidc" {
 }
 
 ################################################################################
+# Core Service (Phase 1)
+################################################################################
+
+module "core_service" {
+  source = "../../modules/ecs-service-fargate"
+
+  service_name           = "core"
+  environment            = var.environment
+  cluster_id             = module.ecs_cluster.cluster_id
+  cluster_name           = module.ecs_cluster.cluster_name
+  subnet_ids             = module.vpc.private_app_subnet_ids
+  security_group_id      = module.vpc.sg_core_id
+  alb_security_group_id  = module.alb.alb_security_group_id
+  rds_security_group_id  = module.rds.rds_security_group_id
+  cloud_map_namespace_id = module.ecs_cluster.cloud_map_namespace_id
+  target_group_arn       = module.alb.target_group_arns["core"]
+  container_port         = 8000
+  desired_count          = var.core_desired_count
+  cpu                    = 256
+  memory                 = 512
+  execution_role_arn     = module.secrets.execution_role_arns["core"]
+
+  task_definition_template = "${path.module}/../../services/core/task-definition.json.tpl"
+  template_variables = {
+    environment                = var.environment
+    image                      = "${module.ecr.repository_urls["arclight/core"]}:${var.core_image_tag}"
+    domain                     = "staging.${var.domain_name}"
+    region                     = var.aws_region
+    log_group                  = "/arclight/${var.environment}/core"
+    secret_arn_database_url    = module.secrets.core_database_url_secret_arn
+    secret_arn_signing_key     = module.secrets.secret_arns["arclight/${var.environment}/core/signing-key-encryption-key"]
+    secret_arn_admin_bootstrap = module.secrets.secret_arns["arclight/${var.environment}/core/admin-bootstrap-secret"]
+    secret_arn_oidc_google     = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-google-client-secret"]
+    secret_arn_oidc_microsoft  = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-microsoft-client-secret"]
+    secret_arn_oidc_github     = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-github-client-secret"]
+  }
+}
+
+################################################################################
 # Capacity Provider Association (sole owner)
 ################################################################################
 

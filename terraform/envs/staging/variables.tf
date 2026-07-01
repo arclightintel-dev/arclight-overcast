@@ -78,3 +78,8 @@ variable "github_repos" {
   type        = list(string)
   default     = []
 }
+
+variable "core_image_tag" {
+  description = "Core container image tag (e.g., v1-abc1234)"
+  type        = string
+}
