@@ -326,8 +326,6 @@ resource "aws_ecs_task_definition" "dbbootstrap" {
       essential = true
 
       secrets = [
-        { name = "PGHOST", valueFrom = "${module.rds.master_user_secret_arn}:host::" },
-        { name = "PGPORT", valueFrom = "${module.rds.master_user_secret_arn}:port::" },
         { name = "PGUSER", valueFrom = "${module.rds.master_user_secret_arn}:username::" },
         { name = "PGPASSWORD", valueFrom = "${module.rds.master_user_secret_arn}:password::" },
         { name = "CORE_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_core_pw.arn },
@@ -337,6 +335,8 @@ resource "aws_ecs_task_definition" "dbbootstrap" {
       ]
 
       environment = [
+        { name = "PGHOST", value = module.rds.instance_address },
+        { name = "PGPORT", value = "5432" },
         { name = "PGDATABASE", value = "postgres" },
       ]
 
