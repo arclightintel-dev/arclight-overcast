@@ -49,8 +49,9 @@ jobs:
         id: plan
         working-directory: terraform/envs/${{ matrix.environment }}
         run: |
+          set -o pipefail
           terraform plan -input=false -no-color -out=plan.tfplan 2>&1 | tee plan-output.txt
-          echo "plan_exit_code=$?" >> $GITHUB_OUTPUT
+          echo "plan_exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
         continue-on-error: true
 
       - name: Post plan to PR

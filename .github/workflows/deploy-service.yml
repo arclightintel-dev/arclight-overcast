@@ -22,6 +22,10 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: deploy-${{ github.event.inputs.module }}-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 permissions:
   id-token: write
   contents: read
