@@ -165,8 +165,7 @@ module "core_service" {
   memory                 = 512
   execution_role_arn     = module.secrets.execution_role_arns["core"]
 
-  task_definition_template = "${path.module}/../../services/core/task-definition.json.tpl"
-  template_variables = {
+  container_definitions = templatefile("${path.module}/../../../services/core/task-definition.json.tpl", {
     environment                = var.environment
     image                      = "${module.ecr.repository_urls["arclight/core"]}:${var.core_image_tag}"
     domain                     = "staging.${var.domain_name}"
@@ -178,7 +177,7 @@ module "core_service" {
     secret_arn_oidc_google     = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-google-client-secret"]
     secret_arn_oidc_microsoft  = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-microsoft-client-secret"]
     secret_arn_oidc_github     = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-github-client-secret"]
-  }
+  })
 }
 
 ################################################################################

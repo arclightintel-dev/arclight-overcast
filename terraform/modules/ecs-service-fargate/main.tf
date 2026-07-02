@@ -11,7 +11,7 @@ resource "aws_ecs_task_definition" "this" {
   execution_role_arn       = var.execution_role_arn
   task_role_arn            = var.task_role_arn
 
-  container_definitions = templatefile(var.task_definition_template, var.template_variables)
+  container_definitions = var.container_definitions
 }
 
 ################################################################################

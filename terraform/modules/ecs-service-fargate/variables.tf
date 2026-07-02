@@ -84,14 +84,9 @@ variable "target_group_arn" {
   default     = null
 }
 
-variable "task_definition_template" {
-  description = "Path to containerDefinitions .json.tpl file"
+variable "container_definitions" {
+  description = "Rendered containerDefinitions JSON string"
   type        = string
-}
-
-variable "template_variables" {
-  description = "Variables for templatefile() rendering"
-  type        = map(string)
 }
 
 variable "health_check_grace_period_seconds" {
