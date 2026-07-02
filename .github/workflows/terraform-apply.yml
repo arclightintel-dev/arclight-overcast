@@ -1,9 +1,3 @@
-# Terraform Apply — applies approved infrastructure changes
-#
-# Triggers: Push to main affecting terraform/**
-# Auth: GitHub OIDC → AWS IAM role
-# Safety: Requires manual approval for production
-
 name: Terraform Apply
 
 on:
@@ -11,11 +5,45 @@ on:
     branches: [main]
     paths:
       - 'terraform/**'
+      - 'services/**/*.tpl'
 
-# TODO: Implement after AWS account and GitHub OIDC are configured
-# Steps:
-#   1. Configure AWS credentials via OIDC
-#   2. terraform init
-#   3. terraform apply -auto-approve (staging)
-#   4. Manual approval gate for production
-#   5. terraform apply -auto-approve (prod)
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  apply-staging:
+    name: Apply (staging)
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '~> 1.5'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::650880817826:role/arclight-overcast-terraform-staging
+          aws-region: us-east-1
+
+      - name: Terraform Init
+        working-directory: terraform/envs/staging
+        run: terraform init -input=false
+
+      - name: Terraform Apply
+        working-directory: terraform/envs/staging
+        run: terraform apply -input=false -auto-approve
+
+      - name: Post summary
+        if: always()
+        run: |
+          echo "## Terraform Apply — staging" >> $GITHUB_STEP_SUMMARY
+          echo "Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY

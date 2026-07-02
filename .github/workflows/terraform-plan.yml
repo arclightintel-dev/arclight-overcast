@@ -1,20 +1,83 @@
-# Terraform Plan — runs on PRs to show what would change
-#
-# Triggers: PR to main affecting terraform/**
-# Auth: GitHub OIDC → AWS IAM role (no long-lived keys)
-# Output: Plan summary as PR comment
-
 name: Terraform Plan
 
 on:
   pull_request:
     paths:
       - 'terraform/**'
+      - 'services/**/*.tpl'
 
-# TODO: Implement after AWS account and GitHub OIDC are configured
-# Steps:
-#   1. Configure AWS credentials via OIDC
-#   2. terraform init (with S3 backend)
-#   3. terraform validate
-#   4. terraform plan -out=plan.tfplan
-#   5. Post plan summary as PR comment
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  AWS_REGION: us-east-1
+  TF_DIR: terraform/envs/staging
+
+jobs:
+  plan:
+    name: Plan (${{ matrix.environment }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [staging]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '~> 1.5'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::650880817826:role/arclight-overcast-terraform-${{ matrix.environment }}
+          aws-region: us-east-1
+
+      - name: Terraform Init
+        working-directory: terraform/envs/${{ matrix.environment }}
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        working-directory: terraform/envs/${{ matrix.environment }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: terraform/envs/${{ matrix.environment }}
+        run: |
+          terraform plan -input=false -no-color -out=plan.tfplan 2>&1 | tee plan-output.txt
+          echo "plan_exit_code=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Post plan to PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('terraform/envs/${{ matrix.environment }}/plan-output.txt', 'utf8');
+            const planSummary = plan.split('\n').filter(l => l.match(/Plan:|No changes/)).join('\n') || 'See details below.';
+
+            const body = `### Terraform Plan — ${{ matrix.environment }}
+
+            \`\`\`
+            ${planSummary}
+            \`\`\`
+
+            <details><summary>Full plan output</summary>
+
+            \`\`\`
+            ${plan.substring(0, 60000)}
+            \`\`\`
+
+            </details>`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });

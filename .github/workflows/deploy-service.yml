@@ -1,11 +1,3 @@
-# Deploy Service — deploys a module to ECS
-#
-# Triggers: Manual or called after build-and-push-image
-# Auth: GitHub OIDC → AWS IAM role with ECS deploy permissions
-#
-# D-056 §9: Boot order is Core → ShuttleForge → Podbay
-# Rolling deployment (no blue/green for v1)
-
 name: Deploy Service
 
 on:
@@ -25,23 +17,157 @@ on:
         type: choice
         options:
           - staging
-          - prod
       image_tag:
-        description: 'ECR image tag to deploy'
+        description: 'ECR image tag to deploy (e.g., v1-abc1234)'
         required: true
         type: string
-      run_migration:
-        description: 'Run database migration before deploy'
-        required: false
-        type: boolean
-        default: true
 
-# TODO: Implement after ECS cluster and services are configured
-# Steps:
-#   1. Configure AWS credentials via OIDC
-#   2. If run_migration: run migration as one-off ECS task, wait for completion
-#   3. Register new task definition with updated image tag
-#   4. Update ECS service with new task definition
-#   5. Wait for service stable
-#   6. Verify /ready endpoint returns healthy
-#   7. Post deployment status
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: '650880817826'
+
+jobs:
+  verify-image:
+    name: Verify image exists in ECR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::650880817826:role/arclight-overcast-terraform-${{ inputs.environment }}
+          aws-region: us-east-1
+
+      - name: Check ECR image
+        run: |
+          aws ecr describe-images \
+            --repository-name arclight/${{ inputs.module }} \
+            --image-ids imageTag=${{ inputs.image_tag }} \
+            --query 'imageDetails[0].imageSizeInBytes' \
+            --output text
+          echo "Image arclight/${{ inputs.module }}:${{ inputs.image_tag }} verified."
+
+  deploy:
+    name: Deploy ${{ inputs.module }} to ${{ inputs.environment }}
+    needs: verify-image
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::650880817826:role/arclight-overcast-terraform-${{ inputs.environment }}
+          aws-region: us-east-1
+
+      - name: Get current task definition
+        id: current-task-def
+        run: |
+          FAMILY="arclight-${{ inputs.module }}-${{ inputs.environment }}"
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition "$FAMILY" --query 'taskDefinition' --output json)
+          echo "$TASK_DEF" > current-task-def.json
+          echo "family=$FAMILY" >> $GITHUB_OUTPUT
+
+      - name: Update image in task definition
+        id: new-task-def
+        run: |
+          NEW_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/arclight/${{ inputs.module }}:${{ inputs.image_tag }}"
+
+          # Replace the image in the container definition
+          jq --arg img "$NEW_IMAGE" \
+            '.containerDefinitions[0].image = $img' \
+            current-task-def.json > updated-task-def.json
+
+          # Extract fields needed for register-task-definition
+          CONTAINER_DEFS=$(jq -c '.containerDefinitions' updated-task-def.json)
+          CPU=$(jq -r '.cpu' updated-task-def.json)
+          MEMORY=$(jq -r '.memory' updated-task-def.json)
+          EXEC_ROLE=$(jq -r '.executionRoleArn' updated-task-def.json)
+          TASK_ROLE=$(jq -r '.taskRoleArn // empty' updated-task-def.json)
+          NET_MODE=$(jq -r '.networkMode' updated-task-def.json)
+
+          REGISTER_ARGS=(
+            --family "${{ steps.current-task-def.outputs.family }}"
+            --container-definitions "$CONTAINER_DEFS"
+            --cpu "$CPU"
+            --memory "$MEMORY"
+            --execution-role-arn "$EXEC_ROLE"
+            --network-mode "$NET_MODE"
+            --requires-compatibilities FARGATE
+          )
+
+          if [ -n "$TASK_ROLE" ]; then
+            REGISTER_ARGS+=(--task-role-arn "$TASK_ROLE")
+          fi
+
+          NEW_ARN=$(aws ecs register-task-definition "${REGISTER_ARGS[@]}" \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+
+          echo "new_arn=$NEW_ARN" >> $GITHUB_OUTPUT
+          echo "Registered task definition: $NEW_ARN"
+
+      - name: Update ECS service
+        run: |
+          SERVICE_NAME="arclight-${{ inputs.module }}-${{ inputs.environment }}"
+          CLUSTER="arclight-${{ inputs.environment }}"
+
+          aws ecs update-service \
+            --cluster "$CLUSTER" \
+            --service "$SERVICE_NAME" \
+            --task-definition "${{ steps.new-task-def.outputs.new_arn }}" \
+            --force-new-deployment \
+            --query 'service.serviceName' \
+            --output text
+
+          echo "Service $SERVICE_NAME updated. Waiting for stability..."
+
+      - name: Wait for service stable
+        run: |
+          SERVICE_NAME="arclight-${{ inputs.module }}-${{ inputs.environment }}"
+          CLUSTER="arclight-${{ inputs.environment }}"
+
+          aws ecs wait services-stable \
+            --cluster "$CLUSTER" \
+            --services "$SERVICE_NAME"
+
+          echo "Service is stable."
+
+      - name: Verify health
+        run: |
+          DOMAIN="${{ inputs.environment }}.arclight-complex.net"
+          URL="https://${{ inputs.module }}.${DOMAIN}/ready"
+
+          echo "Checking $URL..."
+
+          # Retry up to 5 times with 10s intervals
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "$URL" || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed: $URL returned 200"
+              curl -sf "$URL" | jq .
+              exit 0
+            fi
+            echo "Attempt $i: status=$STATUS, retrying in 10s..."
+            sleep 10
+          done
+
+          echo "Health check failed after 5 attempts"
+          exit 1
+
+      - name: Post deployment summary
+        if: always()
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Module | ${{ inputs.module }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Tag | ${{ inputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Task Definition | ${{ steps.new-task-def.outputs.new_arn }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
