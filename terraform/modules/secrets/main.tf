@@ -43,13 +43,13 @@ resource "aws_secretsmanager_secret" "service" {
 
 locals {
   ssm_parameters = {
-    "/arclight/${var.environment}/core/base-url"             = "https://core.${var.environment}.${var.domain_name}"
+    "/arclight/${var.environment}/core/base-url"             = "https://core.${var.public_domain}"
     "/arclight/${var.environment}/core/internal-url"         = "http://core.${var.private_dns_namespace}:8000"
     "/arclight/${var.environment}/core/jwks-url"             = "http://core.${var.private_dns_namespace}:8000/.well-known/jwks.json"
     "/arclight/${var.environment}/core/token-url"            = "http://core.${var.private_dns_namespace}:8000/oauth/token"
-    "/arclight/${var.environment}/podbay/public-url"         = "https://podbay.${var.environment}.${var.domain_name}"
+    "/arclight/${var.environment}/podbay/public-url"         = "https://podbay.${var.public_domain}"
     "/arclight/${var.environment}/podbay/internal-url"       = "http://podbay.${var.private_dns_namespace}:8099"
-    "/arclight/${var.environment}/shuttleforge/public-url"   = "https://shuttleforge.${var.environment}.${var.domain_name}"
+    "/arclight/${var.environment}/shuttleforge/public-url"   = "https://shuttleforge.${var.public_domain}"
     "/arclight/${var.environment}/shuttleforge/internal-url" = "http://shuttleforge.${var.private_dns_namespace}:9000"
   }
 }

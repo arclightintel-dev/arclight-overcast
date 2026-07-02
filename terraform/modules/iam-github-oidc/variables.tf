@@ -38,3 +38,20 @@ variable "aws_account_id" {
   description = "AWS account ID"
   type        = string
 }
+
+variable "create_oidc_provider" {
+  description = "Create the GitHub OIDC provider. Set false for prod (provider already exists from staging)."
+  type        = bool
+  default     = true
+}
+
+variable "oidc_provider_arn" {
+  description = "Existing OIDC provider ARN. Required when create_oidc_provider = false."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.create_oidc_provider || var.oidc_provider_arn != null
+    error_message = "oidc_provider_arn is required when create_oidc_provider is false."
+  }
+}

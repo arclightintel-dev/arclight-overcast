@@ -51,3 +51,21 @@ variable "ecs_cluster_name" {
   description = "ECS cluster name for CloudWatch metrics"
   type        = string
 }
+
+variable "create_cloudtrail" {
+  description = "Create CloudTrail trail and S3 bucket. False for prod (staging owns the account trail)."
+  type        = bool
+  default     = true
+}
+
+variable "create_budget" {
+  description = "Create budget alarm. False for prod (staging owns the account budget)."
+  type        = bool
+  default     = true
+}
+
+variable "create_service_alarms" {
+  description = "Create ECS service-level alarms. False for empty substrate (no services running)."
+  type        = bool
+  default     = true
+}

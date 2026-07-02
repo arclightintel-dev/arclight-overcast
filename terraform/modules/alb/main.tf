@@ -16,7 +16,7 @@ resource "aws_security_group_rule" "alb_http_ingress" {
   to_port           = 80
   protocol          = "tcp"
   security_group_id = aws_security_group.alb.id
-  cidr_blocks       = ["0.0.0.0/0"]
+  cidr_blocks       = var.allowed_ingress_cidrs
   description       = "HTTP"
 }
 
@@ -26,8 +26,32 @@ resource "aws_security_group_rule" "alb_https_ingress" {
   to_port           = 443
   protocol          = "tcp"
   security_group_id = aws_security_group.alb.id
-  cidr_blocks       = ["0.0.0.0/0"]
+  cidr_blocks       = var.allowed_ingress_cidrs
   description       = "HTTPS"
+}
+
+resource "aws_security_group_rule" "alb_http_ingress_ipv6" {
+  count = length(var.allowed_ingress_ipv6_cidrs) > 0 ? 1 : 0
+
+  type              = "ingress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  security_group_id = aws_security_group.alb.id
+  ipv6_cidr_blocks  = var.allowed_ingress_ipv6_cidrs
+  description       = "HTTP IPv6"
+}
+
+resource "aws_security_group_rule" "alb_https_ingress_ipv6" {
+  count = length(var.allowed_ingress_ipv6_cidrs) > 0 ? 1 : 0
+
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.alb.id
+  ipv6_cidr_blocks  = var.allowed_ingress_ipv6_cidrs
+  description       = "HTTPS IPv6"
 }
 
 resource "aws_security_group_rule" "alb_to_service" {

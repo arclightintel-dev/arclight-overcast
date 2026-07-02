@@ -10,5 +10,5 @@ output "alarm_topic_arn" {
 
 output "cloudtrail_bucket_name" {
   description = "CloudTrail S3 bucket name"
-  value       = aws_s3_bucket.cloudtrail.id
+  value       = var.create_cloudtrail ? aws_s3_bucket.cloudtrail[0].id : ""
 }

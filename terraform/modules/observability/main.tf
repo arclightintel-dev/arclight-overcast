@@ -43,6 +43,7 @@ resource "aws_sns_topic_subscription" "email" {
 ################################################################################
 
 resource "aws_budgets_budget" "monthly" {
+  count        = var.create_budget ? 1 : 0
   name         = "arclight-${var.environment}-monthly"
   budget_type  = "COST"
   limit_amount = var.budget_limit_monthly
@@ -71,6 +72,7 @@ resource "aws_budgets_budget" "monthly" {
 ################################################################################
 
 resource "aws_s3_bucket" "cloudtrail" {
+  count         = var.create_cloudtrail ? 1 : 0
   bucket_prefix = "arclight-${var.environment}-trail-"
   force_destroy = false
 
@@ -78,14 +80,16 @@ resource "aws_s3_bucket" "cloudtrail" {
 }
 
 resource "aws_s3_bucket_versioning" "cloudtrail" {
-  bucket = aws_s3_bucket.cloudtrail.id
+  count  = var.create_cloudtrail ? 1 : 0
+  bucket = aws_s3_bucket.cloudtrail[0].id
   versioning_configuration {
     status = "Enabled"
   }
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail" {
-  bucket = aws_s3_bucket.cloudtrail.id
+  count  = var.create_cloudtrail ? 1 : 0
+  bucket = aws_s3_bucket.cloudtrail[0].id
 
   rule {
     id     = "expire-old-logs"
@@ -103,7 +107,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
-  bucket = aws_s3_bucket.cloudtrail.id
+  count  = var.create_cloudtrail ? 1 : 0
+  bucket = aws_s3_bucket.cloudtrail[0].id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -113,7 +118,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
 }
 
 resource "aws_s3_bucket_public_access_block" "cloudtrail" {
-  bucket = aws_s3_bucket.cloudtrail.id
+  count  = var.create_cloudtrail ? 1 : 0
+  bucket = aws_s3_bucket.cloudtrail[0].id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -122,7 +128,8 @@ resource "aws_s3_bucket_public_access_block" "cloudtrail" {
 }
 
 resource "aws_s3_bucket_ownership_controls" "cloudtrail" {
-  bucket = aws_s3_bucket.cloudtrail.id
+  count  = var.create_cloudtrail ? 1 : 0
+  bucket = aws_s3_bucket.cloudtrail[0].id
 
   rule {
     object_ownership = "BucketOwnerEnforced"
@@ -130,7 +137,8 @@ resource "aws_s3_bucket_ownership_controls" "cloudtrail" {
 }
 
 resource "aws_s3_bucket_policy" "cloudtrail" {
-  bucket = aws_s3_bucket.cloudtrail.id
+  count  = var.create_cloudtrail ? 1 : 0
+  bucket = aws_s3_bucket.cloudtrail[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -142,7 +150,7 @@ resource "aws_s3_bucket_policy" "cloudtrail" {
           Service = "cloudtrail.amazonaws.com"
         }
         Action   = "s3:GetBucketAcl"
-        Resource = aws_s3_bucket.cloudtrail.arn
+        Resource = aws_s3_bucket.cloudtrail[0].arn
       },
       {
         Sid    = "AWSCloudTrailWrite"
@@ -151,7 +159,7 @@ resource "aws_s3_bucket_policy" "cloudtrail" {
           Service = "cloudtrail.amazonaws.com"
         }
         Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.cloudtrail.arn}/AWSLogs/${var.aws_account_id}/*"
+        Resource = "${aws_s3_bucket.cloudtrail[0].arn}/AWSLogs/${var.aws_account_id}/*"
         Condition = {
           StringEquals = {
             "s3:x-amz-acl" = "bucket-owner-full-control"
@@ -163,8 +171,9 @@ resource "aws_s3_bucket_policy" "cloudtrail" {
 }
 
 resource "aws_cloudtrail" "this" {
+  count                         = var.create_cloudtrail ? 1 : 0
   name                          = "arclight-${var.environment}"
-  s3_bucket_name                = aws_s3_bucket.cloudtrail.id
+  s3_bucket_name                = aws_s3_bucket.cloudtrail[0].id
   include_global_service_events = true
   is_multi_region_trail         = false
   enable_logging                = true
@@ -249,6 +258,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_storage" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_running_tasks" {
+  count               = var.create_service_alarms ? 1 : 0
   alarm_name          = "arclight-${var.environment}-ecs-running-tasks"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 2

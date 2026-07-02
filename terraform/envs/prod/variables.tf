@@ -34,9 +34,9 @@ variable "rds_allocated_storage" {
 }
 
 variable "rds_multi_az" {
-  description = "Enable Multi-AZ for RDS (recommended for production)"
+  description = "Enable Multi-AZ for RDS"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "core_desired_count" {
@@ -66,7 +66,7 @@ variable "podbay_ec2_instance_type" {
 variable "podbay_ec2_desired_capacity" {
   description = "Desired number of EC2 instances for Podbay"
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "alarm_email" {
@@ -83,4 +83,20 @@ variable "github_repos" {
   description = "GitHub repos allowed to deploy via OIDC"
   type        = list(string)
   default     = []
+}
+
+variable "core_image_tag" {
+  description = "Core container image tag (optional for substrate-only)"
+  type        = string
+  default     = ""
+}
+
+variable "cloudflare_ipv4_cidrs" {
+  description = "Cloudflare IPv4 CIDR ranges for ALB ingress restriction"
+  type        = list(string)
+}
+
+variable "cloudflare_ipv6_cidrs" {
+  description = "Cloudflare IPv6 CIDR ranges for ALB ingress restriction"
+  type        = list(string)
 }

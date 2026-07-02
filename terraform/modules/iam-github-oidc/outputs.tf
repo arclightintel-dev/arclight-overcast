@@ -1,6 +1,6 @@
 output "oidc_provider_arn" {
   description = "GitHub OIDC provider ARN"
-  value       = aws_iam_openid_connect_provider.github.arn
+  value       = local.oidc_provider_arn
 }
 
 output "overcast_terraform_role_arn" {

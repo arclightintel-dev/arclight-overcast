@@ -19,6 +19,11 @@ variable "domain_name" {
   type        = string
 }
 
+variable "public_domain" {
+  description = "Full public domain for service URLs (e.g., staging.arclight-complex.net or arclight-complex.net)"
+  type        = string
+}
+
 variable "private_dns_namespace" {
   description = "Private DNS namespace (e.g., staging.internal.arclight-complex.net)"
   type        = string

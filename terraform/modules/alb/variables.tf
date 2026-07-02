@@ -23,6 +23,18 @@ variable "domain_name" {
   type        = string
 }
 
+variable "allowed_ingress_cidrs" {
+  description = "IPv4 CIDR blocks allowed to reach ALB (default: open)"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "allowed_ingress_ipv6_cidrs" {
+  description = "IPv6 CIDR blocks allowed to reach ALB (default: none)"
+  type        = list(string)
+  default     = []
+}
+
 variable "service_security_group_ids" {
   description = "Map of service name to security group ID for ALB egress rules"
   type        = map(string)

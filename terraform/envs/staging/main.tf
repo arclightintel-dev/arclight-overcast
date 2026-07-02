@@ -102,6 +102,7 @@ module "secrets" {
   aws_region            = var.aws_region
   aws_account_id        = data.aws_caller_identity.current.account_id
   domain_name           = var.domain_name
+  public_domain         = "${var.environment}.${var.domain_name}"
   private_dns_namespace = "${var.environment}.internal.${var.domain_name}"
   ecr_repository_arns   = module.ecr.repository_arns
 }
