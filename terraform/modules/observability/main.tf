@@ -166,6 +166,16 @@ resource "aws_s3_bucket_policy" "cloudtrail" {
           }
         }
       },
+      {
+        Sid       = "DenyLogDeletion"
+        Effect    = "Deny"
+        Principal = "*"
+        Action = [
+          "s3:DeleteObject",
+          "s3:DeleteObjectVersion",
+        ]
+        Resource = "${aws_s3_bucket.cloudtrail[0].arn}/AWSLogs/*"
+      },
     ]
   })
 }
