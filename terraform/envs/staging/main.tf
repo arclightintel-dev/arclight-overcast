@@ -398,7 +398,7 @@ resource "aws_ecs_task_definition" "dbbootstrap" {
   container_definitions = jsonencode([
     {
       name      = "dbbootstrap"
-      image     = "${module.ecr.repository_urls["arclight/dbbootstrap"]}:v1"
+      image     = "${module.ecr.repository_urls["arclight/dbbootstrap"]}:v5"
       essential = true
 
       secrets = [
@@ -414,6 +414,7 @@ resource "aws_ecs_task_definition" "dbbootstrap" {
         { name = "PGHOST", value = module.rds.instance_address },
         { name = "PGPORT", value = "5432" },
         { name = "PGDATABASE", value = "postgres" },
+        { name = "ENVIRONMENT", value = var.environment },
       ]
 
       logConfiguration = {
@@ -532,7 +533,7 @@ resource "aws_ecs_task_definition" "dbverify_svc" {
   container_definitions = jsonencode([
     {
       name      = "dbbootstrap"
-      image     = "${module.ecr.repository_urls["arclight/dbbootstrap"]}:v1"
+      image     = "${module.ecr.repository_urls["arclight/dbbootstrap"]}:v5"
       essential = true
 
       secrets = [
