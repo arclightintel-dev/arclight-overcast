@@ -77,6 +77,10 @@ resource "aws_s3_bucket" "cloudtrail" {
   force_destroy = false
 
   tags = { Name = "arclight-${var.environment}-cloudtrail" }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_versioning" "cloudtrail" {

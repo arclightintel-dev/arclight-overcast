@@ -78,6 +78,10 @@ resource "aws_lb" "this" {
   idle_timeout       = 3600
 
   tags = { Name = "arclight-${var.environment}" }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 ################################################################################

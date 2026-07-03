@@ -80,16 +80,17 @@ stricter security, larger instances, and operational safeguards.
 
 | Deliverable | Status | Blocked on |
 |-------------|--------|------------|
-| terraform/envs/prod/ (full environment) | Pending | — |
+| terraform/envs/prod/ (full environment) | Done | — |
 | Prod ACM certificate (*.arclight-complex.net — existing) | Done | — |
-| Prod ALB restricted to Cloudflare IP ranges | Pending | — |
-| Prod RDS (multi-AZ, enhanced backups) | Pending | — |
-| Prod deletion protection (all stateful resources) | Pending | — |
-| CloudTrail log protection (S3 Object Lock or similar) | Pending | — |
-| AWS Backup (cross-region, automated) | Pending | — |
-| Prod Cloudflare CNAMEs (core., podbay., shuttleforge.) | Pending | Prod apply |
-| terraform-apply.yml prod gate (manual approval) | Pending | Prod env exists |
+| Prod ALB restricted to Cloudflare IP ranges | Done | — |
+| Prod RDS (multi-AZ, enhanced backups) | Done | — |
+| Prod deletion protection (RDS + ALB + CloudTrail S3) | Done | — |
+| CloudTrail log protection (bucket policy DenyLogDeletion) | Done (Object Lock deferred to Phase 6 — cross-state ownership) | — |
+| AWS Backup (cross-region, automated) | Deferred to Phase 6 | — |
+| Prod Cloudflare CNAMEs (core., podbay., shuttleforge.) | Pending | First prod service deploy |
+| terraform-apply.yml prod gate (manual approval) | Deferred to Phase 6 (OIDC role lacks infra permissions) | — |
 | Prod deployment runbook | Pending | — |
+| Prod database bootstrap (4 databases verified) | Done | — |
 
 **Governing decision**: D-059 positions 5 (same account, separate TF state),
 6 (non-negotiable prod hardening)
