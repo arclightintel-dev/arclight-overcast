@@ -40,8 +40,8 @@ Implementation may NOT begin until:
 - [x] O-002 acknowledged — module is not wired and needs spec (`docs/DECISIONS.md:23`)
 - [x] BC-01 closed — disposable EC2 probe passed 11/11 on `ami-0a02a779008fa3b99` (2026-07-08)
 - [x] BC-02 through BC-06 closed — see §12 open questions register
-- [ ] BC-07 closed — acceptance tests defined in §10 (this spec)
-- [ ] codex-1 verification pass — pending
+- [x] BC-07 closed — acceptance tests defined in §10
+- [ ] codex-1 verification pass — CONDITIONAL-GO on 23712bc, residuals being fixed
 
 ---
 
@@ -666,9 +666,9 @@ Egress restriction is not applied because TURN relay to arbitrary peer IPs is a 
 | RQ-POD-06 | §5 Rotation state machine | Podbay answers | Resolved |
 | RQ-POD-07 | §5 Clock-skew handling | Podbay answers | Resolved |
 | RQ-POD-08 | §7 Podbay logging | Podbay answers | Resolved |
-| BC-01 | §3 (all) | Research spike | Resolved |
+| BC-01 | §3 (all) | Disposable EC2 probe (ami-0a02a779008fa3b99, 11/11 PASS) | Resolved |
 | BC-02 | §7 (all) | Podbay answers | Resolved |
-| BC-03 | §8 Value format | Podbay integration sequence | Resolved |
+| BC-03 | §8 Value format, §10 Verification | Podbay integration sequence + pre-start verification: `aws secretsmanager get-secret-value --secret-id <ARN> --query SecretString --output text` must return non-empty hex string before `terraform apply` | Resolved |
 | BC-04 | §2 Module interface, §7 Endpoint handoff | Design decision (EIP, DNS deferred) | Resolved |
 | BC-05 | §9 (all) | Design decision + research | Resolved |
 | BC-06 | §4 Render contract | Design decision (fail hard) | Resolved |
@@ -684,7 +684,7 @@ Egress restriction is not applied because TURN relay to arbitrary peer IPs is a 
 | FM-08 | §6 Peer policy, §9 Denied peer, §10 Negative tests | denied-peer-ip + denied peer tests | Covered |
 | FM-09 | §6 Logging/redaction, §8 No-leak, §10 Smoke tests | Redaction controls + journald grep | Covered |
 | FM-10 | §5 Rotation state machine, §10 Smoke tests | Single-secret with documented window + rotation runbook test: update secret, restart coturn, verify new config via `grep static-auth-secret /etc/turnserver.conf`, verify new allocation succeeds | Covered |
-| FM-11 | §10 Negative tests | 5 negative tests defined | Covered |
+| FM-11 | §10 Negative tests | 7 negative tests defined (wrong secret, expired credential, denied peer IMDS, denied peer VPC, no secret on boot, realm mismatch, unauthenticated allocation) | Covered |
 | FM-12 | §9 Abuse controls, §10 Negative tests | `use-auth-secret` + short TTL + denied-peer-ip + unauthenticated allocation attempt must fail (no valid credentials → 401) | Covered |
 
 ---
