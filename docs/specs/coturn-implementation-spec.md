@@ -447,7 +447,7 @@ From `docs/specs/coturn-podbay-answers.md:RQ-POD-01`:
   "ice_servers": [
     {"urls": ["stun:<TURN_ENDPOINT>:3478"]},
     {
-      "urls": ["turn:<TURN_ENDPOINT>:3478"],
+      "urls": ["turn:<TURN_ENDPOINT>:3478", "turn:<TURN_ENDPOINT>:3478?transport=tcp"],
       "username": "<expiry_epoch>:<grant_id>",
       "credential": "<base64_hmac>",
       "credential_type": "password",
@@ -626,6 +626,7 @@ Egress restriction is not applied because TURN relay to arbitrary peer IPs is a 
 | Denied peer (VPC) | Allocation requesting relay to VPC internal IP | Allocation denied | FM-08 | Command output |
 | No secret on boot | Boot with empty/missing SM secret | coturn fails to start, `systemctl status` shows error | FM-00 | SSM session + status |
 | Realm mismatch | HMAC credential minted with correct secret but wrong realm | 401 Unauthorized / allocation fails | FM-02 | `turnutils_uclient -r wrong.realm` exit code |
+| Unauthenticated allocation | No credentials provided | 401 Unauthorized / allocation fails | FM-12 | `turnutils_uclient <EIP>` (no `-u`/`-w` flags) exit code |
 
 ### Podbay E2E smoke
 
