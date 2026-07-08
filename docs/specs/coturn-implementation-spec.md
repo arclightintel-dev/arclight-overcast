@@ -19,7 +19,7 @@
 | INV-005 | `docs/CONSTITUTION.md:27-37` | Spec before implement. Requires OS, packages, systemd, config, bootstrap, failure modes before code. | Active invariant |
 | INV-004 | `docs/CONSTITUTION.md:23-25` | Terraform creates secret shells only. No `aws_secretsmanager_secret_version` — values out-of-band. | Active invariant |
 | INV-006 | `docs/CONSTITUTION.md:39-41` | `aws_instance.user_data` expects plain text. `aws_launch_template.user_data` requires `base64encode()`. | Active invariant |
-| D-062 | arclight-complex (not locally available) | Self-hosted coturn EC2, per-environment, use-auth-secret. Cited via O-002 summary only — actual arclight-complex source not verified in this session. | UNRESOLVED-SOURCE |
+| D-062 | `arclight-complex/platform/DECISIONS.md:1205-1221` | Self-hosted coturn EC2 with EIP, per-environment, `use-auth-secret` HMAC-SHA1 credentials, shared secret in SM, no ALB/NLB, Twilio rejected (attribution surface), HA deferred. | Ratified |
 
 ### Non-goals
 
@@ -38,7 +38,7 @@ Implementation may NOT begin until:
 
 - [x] INV-005 satisfied — this spec covers OS, packages, systemd, config, bootstrap, failure modes
 - [x] O-002 acknowledged — module is not wired and needs spec (`docs/DECISIONS.md:23`)
-- [ ] BC-01 closed — disposable EC2 package probe must run before implementation (see §10)
+- [x] BC-01 closed — disposable EC2 probe passed 11/11 on `ami-0a02a779008fa3b99` (2026-07-08)
 - [x] BC-02 through BC-06 closed — see §12 open questions register
 - [ ] BC-07 closed — acceptance tests defined in §10 (this spec)
 - [ ] codex-1 verification pass — pending
@@ -580,17 +580,21 @@ Egress restriction is not applied because TURN relay to arbitrary peer IPs is a 
 
 ### Pre-implementation package probe
 
-The research spike (docs/specs/coturn-research-findings.md) resolved all RQ-OS questions at VERIFIED/LIKELY confidence from packaging source code, AWS documentation, and upstream coturn source. **A disposable EC2 package probe is REQUIRED before implementation begins** — this is a HARD-BLOCK gate per `docs/specs/coturn-scoping.md:77` and `docs/specs/coturn-spec-skeleton.md:223`. The research evidence provides high confidence in expected values; the probe provides mechanical confirmation on the exact deployed AMI.
+**Disposable EC2 package probe completed 2026-07-08.** AMI `ami-0a02a779008fa3b99` (ubuntu-noble-24.04-amd64-server-20260626), instance `i-0f18fe9125898dca7` (terminated). 11/11 PASS. All research findings confirmed empirically on the exact deployed AMI. BC-01 CLOSED.
 
 | Probe | Command | Expected evidence | Blocks | Status |
 |-------|---------|------------------|--------|--------|
-| Package available | `apt-cache policy coturn` | `4.6.1-1build4` from `universe` | BC-01 | Resolved (RQ-OS-01) |
-| Unit content | `systemctl cat coturn` | Matches §3 unit content | BC-01 | Resolved (RQ-OS-02) |
-| Runtime user | `id turnserver` | System user, shell `/bin/false` | BC-01 | Resolved (RQ-OS-04, RQ-OS-05) |
-| Config permissions | `stat /etc/turnserver.conf` | `root:turnserver 640` | BC-01 | Resolved (RQ-OS-06) |
-| Auto-start | `systemctl is-enabled coturn` | `enabled` | BC-01 | Resolved (RQ-OS-07) |
-| TURNSERVER_ENABLED | `grep -r TURNSERVER /usr/lib/systemd/` | No results (SysV only) | BC-01 | Resolved (RQ-OS-03) |
-| Prometheus | `turnserver --prometheus 2>&1` | Parse error | BC-01 | Resolved (RQ-OS-10) |
+| Package available | `apt-cache policy coturn` | `4.6.1-1build4` from `universe` | BC-01 | **PASS** — `4.6.1-1build4` from `noble/universe` |
+| Unit content | `systemctl cat coturn` | Matches §3 unit content | BC-01 | **PASS** — exact match (User=turnserver, Type=notify, no EnvironmentFile) |
+| Runtime user | `id turnserver` | System user, shell `/bin/false` | BC-01 | **PASS** — `uid=111(turnserver) gid=113(turnserver)` |
+| Config permissions | `stat /etc/turnserver.conf` | `root:turnserver 640` | BC-01 | **PASS** — `root:turnserver 640` |
+| Default file permissions | `stat /etc/default/coturn` | `root:root 644` (inert) | BC-01 | **PASS** — `root:root 644` |
+| Auto-enabled | `systemctl is-enabled coturn` | `enabled` | BC-01 | **PASS** — `enabled` |
+| Auto-active | `systemctl is-active coturn` | `active` | BC-01 | **PASS** — `active` (auto-starts on install) |
+| TURNSERVER_ENABLED | `grep -r TURNSERVER /usr/lib/systemd/` | No results (SysV only) | BC-01 | **PASS** — `NO_RESULTS` |
+| Prometheus | `turnserver --prometheus 2>&1` | Error/unknown | BC-01 | **PASS** — `unrecognized option '--prometheus'` |
+| turndb created | `ls -la /var/lib/turn/` | SQLite DB exists | BC-01 | **PASS** — `turndb` 69632 bytes (auto-created from schema.sql) |
+| Package files | `dpkg -L coturn \| grep -E '(service\|default\|conf)'` | Lists expected paths | BC-01 | **PASS** — `/etc/default/coturn`, `/etc/turnserver.conf`, `/usr/lib/systemd/system/coturn.service` |
 
 ### Terraform validation/plan expectations
 
@@ -762,14 +766,14 @@ Before re-wiring the coturn module after a rollback:
 | RQ-POD-06 | 5, 8 | HARD-BLOCK | Podbay team | Resolved |
 | RQ-POD-07 | 5 | HARD-BLOCK | Podbay team | Resolved |
 | RQ-POD-08 | 7 | HARD-BLOCK | Podbay team | Resolved |
-| BC-01 | 3, 4, 10 | HARD-BLOCK | Disposable EC2 package probe | Open — research evidence at VERIFIED confidence; mechanical probe required before implementation per scoping §3 and skeleton §3 conformance criteria |
+| BC-01 | 3, 4, 10 | HARD-BLOCK | Disposable EC2 package probe | Resolved — probe ran 2026-07-08 on `ami-0a02a779008fa3b99` (Noble 20260626), instance `i-0f18fe9125898dca7` (terminated). 11/11 PASS. All research findings confirmed empirically. |
 | BC-02 | 7, 8 | HARD-BLOCK | Podbay team | Resolved |
 | BC-03 | 4, 5, 8 | HARD-BLOCK | Design decision / Podbay team | Resolved |
 | BC-04 | 2, 7, 9 | HARD-BLOCK | Design decision | Resolved |
 | BC-05 | 9 | HARD-BLOCK | Design decision | Resolved |
 | BC-06 | 4, 5, 8 | HARD-BLOCK | Design decision | Resolved |
 | BC-07 | 10 | HARD-BLOCK | Spec completion (§10) | Resolved |
-| D-062-source | 1 | SOFT-BLOCK | Read arclight-complex D-062 | Deferred — O-002 summary is sufficient for implementation; full D-062 verification deferred to codex-1 review or next cross-repo session. No HARD-BLOCK gate bypassed. |
+| D-062-source | 1 | SOFT-BLOCK | Read arclight-complex D-062 | Resolved — verified at `arclight-complex/platform/DECISIONS.md:1205-1221`. O-002 is an accurate summary. No contradictions with spec. |
 
 ### Severity definitions
 
@@ -801,8 +805,8 @@ Acceptable evidence classes:
 - [x] All 12 required sections in order per `docs/specs/coturn-scoping.md:158-169`
 - [x] Count discrepancy acknowledged: 26 RQs, 7 BCs, FM-00 + FM-01–FM-12
 - [x] Every RQ has Resolved or Deferred row in §12
-- [ ] Zero HARD-BLOCK rows remain Open/Researching/Proposed — **BC-01 requires disposable EC2 probe before implementation**
-- [ ] BC-01 through BC-07 closed — **BC-01 open pending probe**
+- [x] Zero HARD-BLOCK rows remain Open/Researching/Proposed
+- [x] BC-01 through BC-07 closed
 - [x] Verifiable claims cite sources
 - [x] Existing Terraform names cite `variables.tf:1-36` / `outputs.tf:1-14`; new names labeled PROPOSED
 - [x] Existing module treated as reference, not authority
@@ -810,7 +814,7 @@ Acceptable evidence classes:
 - [x] INV-004 satisfied (no secret values in Terraform state)
 - [x] INV-006 addressed (`aws_instance.user_data` plain text)
 - [x] O-002 cited
-- [ ] D-062 cited via O-002 summary; actual arclight-complex source NOT verified (SOFT-BLOCK, does not gate implementation per skeleton §3 section 1 conformance — O-002 provides sufficient local authority)
+- [x] D-062 verified at `arclight-complex/platform/DECISIONS.md:1205-1221`; O-002 is accurate summary
 - [x] Podbay/Overcast boundary locked
 - [x] Secret custody contract complete — format locked (raw hex), KMS: remove `kms:Decrypt` if using default key or scope to key ARN if CMK (decision made, not conditional)
 - [x] Endpoint model locked (EIP, DNS deferred)
