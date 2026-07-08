@@ -829,13 +829,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "podbay_exports" {
   }
 }
 
-module "coturn" {
-  source = "../../modules/coturn"
-
-  environment     = var.environment
-  vpc_id          = module.vpc.vpc_id
-  subnet_id       = module.vpc.public_subnet_ids[0]
-  turn_secret_arn = module.secrets.secret_arns["arclight/${var.environment}/podbay/turn-shared-secret"]
-  realm           = "${var.environment}.${var.domain_name}"
-  aws_region      = var.aws_region
-}
+# coturn module removed — needs proper spec before reimplementation.
+# See docs/platform-interface/module-feedback/podbay-batch5-infra-requirements-v1.md
+# D-062 ratified: self-hosted coturn EC2, per-environment.
+# Module code exists at terraform/modules/coturn/ but is not wired until spec'd.

@@ -105,12 +105,4 @@ output "podbay_task_role_arn" {
   value       = aws_iam_role.podbay_task_role.arn
 }
 
-output "turn_endpoint" {
-  description = "TURN server public IP (EIP)"
-  value       = module.coturn.turn_endpoint
-}
-
-output "turn_instance_id" {
-  description = "TURN server EC2 instance ID (for SSM restart)"
-  value       = module.coturn.instance_id
-}
+# turn_endpoint and turn_instance_id removed — coturn module unwired pending spec
