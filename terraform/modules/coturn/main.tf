@@ -141,12 +141,19 @@ resource "aws_instance" "coturn" {
     #!/bin/bash
     set -e
 
-    # Install coturn + AWS CLI + SSM agent
+    # Install coturn
     apt-get update -y
-    apt-get install -y coturn awscli
-    snap install amazon-ssm-agent --classic || true
-    systemctl enable snap.amazon-ssm-agent.amazon-ssm-agent.service || true
-    systemctl start snap.amazon-ssm-agent.amazon-ssm-agent.service || true
+    apt-get install -y coturn unzip curl
+
+    # Install AWS CLI v2
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+    unzip -q /tmp/awscliv2.zip -d /tmp
+    /tmp/aws/install
+    rm -rf /tmp/awscliv2.zip /tmp/aws
+
+    # SSM agent (pre-installed on Ubuntu AWS AMIs, just ensure running)
+    systemctl enable amazon-ssm-agent || true
+    systemctl start amazon-ssm-agent || true
 
     # Install render script (re-run on every coturn restart via ExecStartPre)
     cat > /usr/local/bin/render-coturn-config << 'RENDERSCRIPT'
