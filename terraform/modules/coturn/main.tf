@@ -145,6 +145,9 @@ resource "aws_instance" "coturn" {
     apt-get update -y
     apt-get install -y coturn unzip curl
 
+    # Enable coturn (Ubuntu ships it disabled by default)
+    echo 'TURNSERVER_ENABLED=1' > /etc/default/coturn
+
     # Install AWS CLI v2
     curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
     unzip -q /tmp/awscliv2.zip -d /tmp
@@ -167,7 +170,7 @@ resource "aws_instance" "coturn" {
     # Fetch TURN shared secret (retry up to 5 times)
     SECRET=""
     for i in 1 2 3 4 5; do
-      SECRET=$(aws secretsmanager get-secret-value --secret-id "$SECRET_ARN" --region "$REGION" --query 'SecretString' --output text 2>/dev/null || true)
+      SECRET=$(/usr/local/bin/aws secretsmanager get-secret-value --secret-id "$SECRET_ARN" --region "$REGION" --query 'SecretString' --output text 2>/dev/null || true)
       if [ -n "$SECRET" ]; then break; fi
       echo "render-coturn-config: secret not available (attempt $i), retrying in 5s..."
       sleep 5
