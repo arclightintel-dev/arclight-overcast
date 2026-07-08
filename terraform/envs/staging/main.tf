@@ -554,3 +554,288 @@ resource "aws_ecs_task_definition" "dbverify_svc" {
     }
   ])
 }
+
+################################################################################
+# Podbay Batch 5 — Workspace Substrate
+################################################################################
+
+resource "aws_security_group_rule" "workspace_cdp_ingress" {
+  type                     = "ingress"
+  from_port                = 9222
+  to_port                  = 9222
+  protocol                 = "tcp"
+  security_group_id        = module.vpc.sg_podbay_workspace_id
+  source_security_group_id = module.vpc.sg_podbay_controller_id
+  description              = "CDP from controller"
+}
+
+resource "aws_security_group_rule" "workspace_capture_ingress" {
+  type                     = "ingress"
+  from_port                = 9280
+  to_port                  = 9280
+  protocol                 = "tcp"
+  security_group_id        = module.vpc.sg_podbay_workspace_id
+  source_security_group_id = module.vpc.sg_podbay_controller_id
+  description              = "Capture service from controller"
+}
+
+resource "aws_security_group_rule" "workspace_neko_ingress" {
+  type                     = "ingress"
+  from_port                = 8080
+  to_port                  = 8080
+  protocol                 = "tcp"
+  security_group_id        = module.vpc.sg_podbay_workspace_id
+  source_security_group_id = module.vpc.sg_podbay_controller_id
+  description              = "Neko stream from controller"
+}
+
+resource "aws_security_group_rule" "workspace_all_egress" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  security_group_id = module.vpc.sg_podbay_workspace_id
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "S-016 direct egress (tighten to ShuttleForge in Phase 4)"
+}
+
+resource "aws_security_group_rule" "controller_to_workspace_cdp" {
+  type                     = "egress"
+  from_port                = 9222
+  to_port                  = 9222
+  protocol                 = "tcp"
+  security_group_id        = module.vpc.sg_podbay_controller_id
+  source_security_group_id = module.vpc.sg_podbay_workspace_id
+  description              = "CDP to workspace"
+}
+
+resource "aws_security_group_rule" "controller_to_workspace_capture" {
+  type                     = "egress"
+  from_port                = 9280
+  to_port                  = 9280
+  protocol                 = "tcp"
+  security_group_id        = module.vpc.sg_podbay_controller_id
+  source_security_group_id = module.vpc.sg_podbay_workspace_id
+  description              = "Capture service to workspace"
+}
+
+resource "aws_security_group_rule" "controller_to_workspace_neko" {
+  type                     = "egress"
+  from_port                = 8080
+  to_port                  = 8080
+  protocol                 = "tcp"
+  security_group_id        = module.vpc.sg_podbay_controller_id
+  source_security_group_id = module.vpc.sg_podbay_workspace_id
+  description              = "Neko stream to workspace"
+}
+
+resource "aws_iam_role" "ecs_exec_podbay_workspace" {
+  name               = "arclight-ecs-exec-podbay-workspace-${var.environment}"
+  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
+}
+
+resource "aws_iam_role_policy" "podbay_workspace_ecr" {
+  name = "ecr-pull"
+  role = aws_iam_role.ecs_exec_podbay_workspace.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ECRAuth"
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = ["*"]
+      },
+      {
+        Sid    = "ECRPull"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+        ]
+        Resource = [module.ecr.repository_arns["arclight/podbay-workspace-browser"]]
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "podbay_workspace_logs" {
+  name = "cloudwatch-logs"
+  role = aws_iam_role.ecs_exec_podbay_workspace.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Logs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ]
+        Resource = ["arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/arclight/${var.environment}/podbay-workspace:*"]
+      },
+    ]
+  })
+}
+
+resource "aws_ecs_task_definition" "podbay_workspace" {
+  family                   = "arclight-podbay-workspace-${var.environment}"
+  requires_compatibilities = ["EC2"]
+  network_mode             = "awsvpc"
+  cpu                      = "1024"
+  memory                   = "2048"
+  execution_role_arn       = aws_iam_role.ecs_exec_podbay_workspace.arn
+
+  container_definitions = templatefile("${path.module}/../../../services/podbay/workspace-task-definition.json.tpl", {
+    image     = "${module.ecr.repository_urls["arclight/podbay-workspace-browser"]}:latest"
+    region    = var.aws_region
+    log_group = "/arclight/${var.environment}/podbay-workspace"
+  })
+}
+
+resource "aws_iam_role" "podbay_task_role" {
+  name               = "arclight-podbay-task-role-${var.environment}"
+  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
+}
+
+resource "aws_iam_role_policy" "podbay_task_ecs" {
+  name = "ecs-workspace-management"
+  role = aws_iam_role.podbay_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RunWorkspaceTask"
+        Effect = "Allow"
+        Action = ["ecs:RunTask"]
+        Resource = [
+          "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/arclight-podbay-workspace-${var.environment}:*"
+        ]
+        Condition = {
+          ArnEquals = {
+            "ecs:cluster" = module.ecs_cluster.cluster_arn
+          }
+        }
+      },
+      {
+        Sid    = "ManageWorkspaceTasks"
+        Effect = "Allow"
+        Action = [
+          "ecs:DescribeTasks",
+          "ecs:StopTask",
+        ]
+        Resource = ["arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task/*"]
+        Condition = {
+          ArnEquals = {
+            "ecs:cluster" = module.ecs_cluster.cluster_arn
+          }
+        }
+      },
+      {
+        Sid      = "PassWorkspaceRole"
+        Effect   = "Allow"
+        Action   = ["iam:PassRole"]
+        Resource = [aws_iam_role.ecs_exec_podbay_workspace.arn]
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "ecs-tasks.amazonaws.com"
+          }
+        }
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "podbay_task_s3" {
+  name = "s3-exports"
+  role = aws_iam_role.podbay_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ExportBucketAccess"
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+        ]
+        Resource = ["${aws_s3_bucket.podbay_exports.arn}/*"]
+      },
+      {
+        Sid      = "ExportBucketList"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [aws_s3_bucket.podbay_exports.arn]
+      },
+    ]
+  })
+}
+
+resource "aws_s3_bucket" "podbay_exports" {
+  bucket_prefix = "arclight-podbay-exports-${var.environment}-"
+  force_destroy = false
+
+  tags = { Name = "arclight-podbay-exports-${var.environment}" }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_s3_bucket_versioning" "podbay_exports" {
+  bucket = aws_s3_bucket.podbay_exports.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "podbay_exports" {
+  bucket = aws_s3_bucket.podbay_exports.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "podbay_exports" {
+  bucket = aws_s3_bucket.podbay_exports.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "podbay_exports" {
+  bucket = aws_s3_bucket.podbay_exports.id
+
+  rule {
+    id     = "expire-staging-exports"
+    status = "Enabled"
+    filter {
+      prefix = "podbay-exports/"
+    }
+
+    expiration {
+      days = 30
+    }
+  }
+}
+
+module "coturn" {
+  source = "../../modules/coturn"
+
+  environment     = var.environment
+  vpc_id          = module.vpc.vpc_id
+  subnet_id       = module.vpc.public_subnet_ids[0]
+  turn_secret_arn = module.secrets.secret_arns["arclight/${var.environment}/podbay/turn-shared-secret"]
+  realm           = "${var.environment}.${var.domain_name}"
+  aws_region      = var.aws_region
+}

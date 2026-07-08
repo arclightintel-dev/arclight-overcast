@@ -131,7 +131,7 @@ resource "aws_autoscaling_group" "this" {
     version = "$Latest"
   }
 
-  protect_from_scale_in = false
+  protect_from_scale_in = true
 
   tag {
     key                 = "AmazonECSManaged"
@@ -153,10 +153,13 @@ resource "aws_ecs_capacity_provider" "this" {
 
   auto_scaling_group_provider {
     auto_scaling_group_arn         = aws_autoscaling_group.this.arn
-    managed_termination_protection = "DISABLED"
+    managed_termination_protection = "ENABLED"
 
     managed_scaling {
-      status = "DISABLED"
+      status                    = "ENABLED"
+      target_capacity           = 100
+      minimum_scaling_step_size = 1
+      maximum_scaling_step_size = 1
     }
   }
 

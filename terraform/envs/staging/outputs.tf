@@ -74,3 +74,38 @@ output "core_task_definition_family" {
   description = "Core task definition family"
   value       = module.core_service.task_definition_family
 }
+
+output "sg_podbay_controller_id" {
+  description = "Podbay controller security group ID"
+  value       = module.vpc.sg_podbay_controller_id
+}
+
+output "sg_podbay_workspace_id" {
+  description = "Podbay workspace security group ID"
+  value       = module.vpc.sg_podbay_workspace_id
+}
+
+output "podbay_workspace_task_family" {
+  description = "Podbay workspace task definition family"
+  value       = aws_ecs_task_definition.podbay_workspace.family
+}
+
+output "podbay_ec2_capacity_provider_name" {
+  description = "Podbay EC2 capacity provider name (use in RunTask capacityProviderStrategy)"
+  value       = module.ec2_capacity.capacity_provider_name
+}
+
+output "podbay_export_bucket_name" {
+  description = "Podbay S3 export bucket name"
+  value       = aws_s3_bucket.podbay_exports.id
+}
+
+output "podbay_task_role_arn" {
+  description = "Podbay controller task role ARN"
+  value       = aws_iam_role.podbay_task_role.arn
+}
+
+output "turn_endpoint" {
+  description = "TURN server public IP (EIP)"
+  value       = module.coturn.turn_endpoint
+}

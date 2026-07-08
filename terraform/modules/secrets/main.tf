@@ -16,6 +16,7 @@ locals {
     "arclight/${var.environment}/shuttleforge/lease-hmac-key"         = "ShuttleForge lease HMAC key"
     "arclight/${var.environment}/shuttleforge/operator-token"         = "ShuttleForge operator token"
     "arclight/${var.environment}/podbay/database-url"                 = "Podbay PostgreSQL connection string"
+    "arclight/${var.environment}/podbay/turn-shared-secret"           = "Podbay TURN server shared secret (coturn use-auth-secret)"
     "arclight/${var.environment}/nerfherder/database-url"             = "Nerfherder PostgreSQL connection string"
   }
 
