@@ -83,3 +83,9 @@ variable "core_image_tag" {
   description = "Core container image tag (e.g., v1-abc1234)"
   type        = string
 }
+
+variable "podbay_workspace_image_tag" {
+  description = "Podbay workspace browser image tag (optional until image is pushed)"
+  type        = string
+  default     = "v1-initial"
+}

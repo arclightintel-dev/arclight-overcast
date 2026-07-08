@@ -109,3 +109,8 @@ output "turn_endpoint" {
   description = "TURN server public IP (EIP)"
   value       = module.coturn.turn_endpoint
 }
+
+output "turn_instance_id" {
+  description = "TURN server EC2 instance ID (for SSM restart)"
+  value       = module.coturn.instance_id
+}

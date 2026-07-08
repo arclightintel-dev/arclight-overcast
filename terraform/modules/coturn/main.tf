@@ -126,11 +126,12 @@ resource "aws_instance" "coturn" {
     http_put_response_hop_limit = 2
   }
 
-  user_data = base64encode(<<-USERDATA
+  user_data = <<-USERDATA
     #!/bin/bash
     set -e
 
-    # Install coturn
+    # Install coturn from EPEL
+    dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm || true
     dnf install -y coturn
 
     # Install render script (re-run on every coturn restart via ExecStartPre)
@@ -203,7 +204,6 @@ resource "aws_instance" "coturn" {
     systemctl enable coturn
     systemctl start coturn
   USERDATA
-  )
 
   tags = { Name = "arclight-${var.environment}-coturn" }
 }

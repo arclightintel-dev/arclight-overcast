@@ -690,7 +690,7 @@ resource "aws_ecs_task_definition" "podbay_workspace" {
   execution_role_arn       = aws_iam_role.ecs_exec_podbay_workspace.arn
 
   container_definitions = templatefile("${path.module}/../../../services/podbay/workspace-task-definition.json.tpl", {
-    image     = "${module.ecr.repository_urls["arclight/podbay-workspace-browser"]}:latest"
+    image     = "${module.ecr.repository_urls["arclight/podbay-workspace-browser"]}:${var.podbay_workspace_image_tag}"
     region    = var.aws_region
     log_group = "/arclight/${var.environment}/podbay-workspace"
   })
