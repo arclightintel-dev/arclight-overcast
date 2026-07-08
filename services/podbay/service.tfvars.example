@@ -1,6 +1,6 @@
 # Podbay controller service configuration
-# Runs on EC2 capacity provider (SYS_ADMIN needed for workspace tasks)
-# D-056 §6: controller + workspace tasks on ECS-on-EC2
+# Runs on Fargate (stateless API, same as Core/ShuttleForge)
+# Workspace containers run on EC2 capacity provider via RunTask
 
 service_name    = "podbay"
 container_port  = 8099

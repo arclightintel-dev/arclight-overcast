@@ -2,7 +2,7 @@
 # terraform.tfvars is gitignored — never commit real values.
 
 aws_region    = "us-east-1"
-domain_name   = "staging.example.com"
+domain_name   = "arclight-complex.net"
 environment   = "staging"
 
 # RDS
@@ -14,15 +14,19 @@ core_desired_count         = 1
 shuttleforge_desired_count = 1
 podbay_desired_count       = 1
 
-# Podbay EC2 capacity
+# Podbay EC2 capacity (0 until workspace tasks are needed)
 podbay_ec2_instance_type      = "t3.medium"
-podbay_ec2_desired_capacity   = 1
+podbay_ec2_desired_capacity   = 0
+
+# Image tags
+core_image_tag              = "v1-abc1234"
+podbay_workspace_image_tag  = "v1-initial"
 
 # Alerts
 alarm_email = "ops@example.com"
 
 # GitHub OIDC
-github_org   = "your-org"
+github_org   = "arclight-intel"
 github_repos = [
   "arclight-core",
   "arclight-shuttleforge",

@@ -105,8 +105,19 @@ resource "aws_iam_instance_profile" "coturn" {
 # AMI lookup
 ################################################################################
 
-data "aws_ssm_parameter" "al2023_ami" {
-  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"]
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
 }
 
 ################################################################################
@@ -114,7 +125,7 @@ data "aws_ssm_parameter" "al2023_ami" {
 ################################################################################
 
 resource "aws_instance" "coturn" {
-  ami                    = data.aws_ssm_parameter.al2023_ami.value
+  ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.coturn.id]
@@ -130,9 +141,12 @@ resource "aws_instance" "coturn" {
     #!/bin/bash
     set -e
 
-    # Install coturn from EPEL
-    dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm || true
-    dnf install -y coturn
+    # Install coturn + AWS CLI + SSM agent
+    apt-get update -y
+    apt-get install -y coturn awscli
+    snap install amazon-ssm-agent --classic || true
+    systemctl enable snap.amazon-ssm-agent.amazon-ssm-agent.service || true
+    systemctl start snap.amazon-ssm-agent.amazon-ssm-agent.service || true
 
     # Install render script (re-run on every coturn restart via ExecStartPre)
     cat > /usr/local/bin/render-coturn-config << 'RENDERSCRIPT'

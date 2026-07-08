@@ -157,9 +157,9 @@ Split into three concerns:
 
 | Concern | Deployment |
 |---------|-----------|
-| Podbay controller/API | ECS service on EC2 capacity provider |
-| Workspace runtime tasks | ECS RunTask on dedicated EC2 capacity provider |
-| Workspace state volumes | Encrypted gp3 EBS volumes, created per task (see EBS model below) |
+| Podbay controller/API | ECS Fargate service (stateless, same as Core/ShuttleForge) |
+| Workspace runtime tasks | ECS RunTask on dedicated EC2 capacity provider (capacityProviderStrategy required) |
+| Workspace state volumes | Task-ephemeral for v1. Encrypted gp3 EBS volumes deferred to Phase 3 (profile persistence) |
 
 **Production direction**: Podbay controller should launch workspace tasks via ECS APIs (RunTask), not Docker socket mount. Docker socket mount is a security liability in production — socket access is effectively host-level power, meaning a controller compromise becomes a host compromise and then a cross-session workspace compromise. The controller calls ECS to run a workspace task definition; ECS handles placement, health, and cleanup.
 

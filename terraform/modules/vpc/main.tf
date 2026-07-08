@@ -218,7 +218,7 @@ resource "aws_security_group" "shuttleforge" {
 
 resource "aws_security_group" "podbay_controller" {
   name_prefix = "arclight-${var.environment}-podbay-ctrl-"
-  description = "Podbay controller EC2 tasks"
+  description = "Podbay controller Fargate tasks"
   vpc_id      = aws_vpc.this.id
 
   tags = { Name = "sg-podbay-controller-${var.environment}" }
