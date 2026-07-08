@@ -211,8 +211,10 @@ module "core_service" {
     log_group                  = "/arclight/${var.environment}/core"
     secret_arn_database_url    = module.secrets.core_database_url_secret_arn
     secret_arn_signing_key     = module.secrets.secret_arns["arclight/${var.environment}/core/signing-key-encryption-key"]
-    secret_arn_admin_bootstrap = module.secrets.secret_arns["arclight/${var.environment}/core/admin-bootstrap-secret"]
-    secret_arn_oidc_google     = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-google-client-secret"]
+    secret_arn_admin_bootstrap     = module.secrets.secret_arns["arclight/${var.environment}/core/admin-bootstrap-secret"]
+    secret_arn_asset_encryption_key = module.secrets.secret_arns["arclight/${var.environment}/core/asset-encryption-key"]
+    asset_backend                  = "local_encrypted"
+    secret_arn_oidc_google         = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-google-client-secret"]
     secret_arn_oidc_microsoft  = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-microsoft-client-secret"]
     secret_arn_oidc_github     = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-github-client-secret"]
   })

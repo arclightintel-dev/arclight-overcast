@@ -10,6 +10,7 @@ locals {
     "arclight/${var.environment}/core/oidc-google-client-secret"      = "Core Google OAuth client secret"
     "arclight/${var.environment}/core/oidc-microsoft-client-secret"   = "Core Microsoft OAuth client secret"
     "arclight/${var.environment}/core/oidc-github-client-secret"      = "Core GitHub OAuth client secret"
+    "arclight/${var.environment}/core/asset-encryption-key"           = "Core admin asset encryption key (Phase 6A)"
     "arclight/${var.environment}/shuttleforge/db-url"                 = "ShuttleForge PostgreSQL connection string"
     "arclight/${var.environment}/shuttleforge/kek-ring-b64"           = "ShuttleForge AES-256-GCM key ring"
     "arclight/${var.environment}/shuttleforge/listener-auth-hmac-key" = "ShuttleForge listener HMAC key"

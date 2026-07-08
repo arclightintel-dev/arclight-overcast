@@ -19,12 +19,15 @@
     "environment": [
       { "name": "ENVIRONMENT", "value": "${environment}" },
       { "name": "CORE_ISSUER", "value": "https://core.internal" },
-      { "name": "CORE_BASE_URL", "value": "https://core.${domain}" }
+      { "name": "CORE_BASE_URL", "value": "https://core.${domain}" },
+      { "name": "CORE_ENVIRONMENT", "value": "${environment}" },
+      { "name": "CORE_ASSET_BACKEND", "value": "${asset_backend}" }
     ],
     "secrets": [
       { "name": "CORE_DATABASE_URL", "valueFrom": "${secret_arn_database_url}" },
       { "name": "CORE_SIGNING_KEY_ENCRYPTION_KEY", "valueFrom": "${secret_arn_signing_key}" },
       { "name": "CORE_ADMIN_BOOTSTRAP_SECRET", "valueFrom": "${secret_arn_admin_bootstrap}" },
+      { "name": "CORE_ASSET_ENCRYPTION_KEY", "valueFrom": "${secret_arn_asset_encryption_key}" },
       { "name": "OIDC_GOOGLE_CLIENT_SECRET", "valueFrom": "${secret_arn_oidc_google}" },
       { "name": "OIDC_MICROSOFT_CLIENT_SECRET", "valueFrom": "${secret_arn_oidc_microsoft}" },
       { "name": "OIDC_GITHUB_CLIENT_SECRET", "valueFrom": "${secret_arn_oidc_github}" }
