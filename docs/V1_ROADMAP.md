@@ -123,18 +123,22 @@ Third service. Controller on Fargate, workspace containers on EC2 capacity provi
 
 | Deliverable | Status | Blocked on |
 |-------------|--------|------------|
-| ecs-service-ec2 module (generic, for EC2-backed tasks) | Pending | — |
+| Workspace task definition (EC2, 1024/2048, SYS_ADMIN) | Done | — |
+| Workspace execution role (ECR pull + logs) | Done | — |
+| Workspace SG rules (controller→workspace 9222/9280/8080) | Done | — |
+| Controller SG egress to workspace | Done | — |
+| Controller task role (RunTask + S3 + PassRole) | Done | — |
+| S3 export bucket (versioned, encrypted, 30-day lifecycle) | Done | — |
+| EC2 managed scaling (auto-scale from 0 on RunTask) | Done | — |
+| coturn TURN server (D-062) | **Rolled back** — needs spec before reimplementation |
+| Podbay controller wired in staging (Fargate) | Pending | Podbay Batch 5 code |
 | Podbay controller task definition template | Pending | — |
-| Podbay controller wired in staging (Fargate) | Pending | — |
-| Podbay workspace task definition template | Pending | Podbay Phase 2 spec |
-| Workspace SG rules (ingress from controller, egress to ShuttleForge only) | Pending | — |
-| EC2 ASG scale to desired=1 | Pending | Podbay ready to deploy |
 | Template DNS fix (.arclight.local → .internal.arclight-complex.net) | Pending | — |
 | Staging verification | Pending | — |
 | Prod deployment | Pending | Phase 3 |
 
-**Blocked on**: Podbay Phase 2 spec locked, ecs-service-ec2 module
-**Deployment model**: ECS on EC2 via RunTask (not EKS) — scoped in Podbay deployment response
+**Deployment model**: Controller on Fargate (INFRASTRUCTURE_SPEC amended), workspaces on EC2 via RunTask with capacityProviderStrategy (not EKS)
+**Podbay Batch 5 substrate**: workspace infrastructure live, TURN server pending spec
 
 ---
 
