@@ -130,15 +130,16 @@ Third service. Controller on Fargate, workspace containers on EC2 capacity provi
 | Controller task role (RunTask + S3 + PassRole) | Done | — |
 | S3 export bucket (versioned, encrypted, 30-day lifecycle) | Done | — |
 | EC2 managed scaling (auto-scale from 0 on RunTask) | Done | — |
-| coturn TURN server (D-062) | **Rolled back** — needs spec before reimplementation |
-| Podbay controller wired in staging (Fargate) | Pending | Podbay Batch 5 code |
-| Podbay controller task definition template | Pending | — |
+| Dedicated workspace subnets (10.0.30.0/24, 10.0.31.0/24) | Done | — |
+| coturn TURN server (D-062) | Done |
+| Podbay controller wired in staging (Fargate) | Done | — |
+| Podbay controller task definition template | Done | — |
 | Template DNS fix (.arclight.local → .internal.arclight-complex.net) | Pending | — |
 | Staging verification | Pending | — |
 | Prod deployment | Pending | Phase 3 |
 
 **Deployment model**: Controller on Fargate (INFRASTRUCTURE_SPEC amended), workspaces on EC2 via RunTask with capacityProviderStrategy (not EKS)
-**Podbay Batch 5 substrate**: workspace infrastructure live, TURN server pending spec
+**Podbay Batch 5 substrate**: workspace infrastructure live, TURN server live, Podbay controller live
 
 ---
 
