@@ -81,17 +81,6 @@ resource "aws_iam_role_policy" "coturn_secrets" {
         Action   = ["secretsmanager:GetSecretValue"]
         Resource = [var.turn_secret_arn]
       },
-      {
-        Sid      = "KMSDecrypt"
-        Effect   = "Allow"
-        Action   = ["kms:Decrypt"]
-        Resource = ["*"]
-        Condition = {
-          StringEquals = {
-            "kms:ViaService" = "secretsmanager.${var.aws_region}.amazonaws.com"
-          }
-        }
-      },
     ]
   })
 }
@@ -137,97 +126,20 @@ resource "aws_instance" "coturn" {
     http_put_response_hop_limit = 2
   }
 
-  user_data = <<-USERDATA
-    #!/bin/bash
-    set -e
+  depends_on = [
+    aws_iam_role_policy.coturn_secrets,
+    aws_iam_role_policy_attachment.coturn_ssm,
+  ]
 
-    # Install coturn
-    apt-get update -y
-    apt-get install -y coturn unzip curl
-
-    # Enable coturn (Ubuntu ships it disabled by default)
-    echo 'TURNSERVER_ENABLED=1' > /etc/default/coturn
-
-    # Install AWS CLI v2
-    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
-    unzip -q /tmp/awscliv2.zip -d /tmp
-    /tmp/aws/install
-    rm -rf /tmp/awscliv2.zip /tmp/aws
-
-    # SSM agent (pre-installed on Ubuntu AWS AMIs, just ensure running)
-    systemctl enable amazon-ssm-agent || true
-    systemctl start amazon-ssm-agent || true
-
-    # Install render script (re-run on every coturn restart via ExecStartPre)
-    cat > /usr/local/bin/render-coturn-config << 'RENDERSCRIPT'
-    #!/bin/bash
-    set -e
-
-    REGION="${var.aws_region}"
-    SECRET_ARN="${var.turn_secret_arn}"
-    REALM="${var.realm}"
-
-    # Fetch TURN shared secret (retry up to 5 times)
-    SECRET=""
-    for i in 1 2 3 4 5; do
-      SECRET=$(/usr/local/bin/aws secretsmanager get-secret-value --secret-id "$SECRET_ARN" --region "$REGION" --query 'SecretString' --output text 2>/dev/null || true)
-      if [ -n "$SECRET" ]; then break; fi
-      echo "render-coturn-config: secret not available (attempt $i), retrying in 5s..."
-      sleep 5
-    done
-
-    # Fail-closed: if secret is empty, use a throwaway secret nobody knows
-    if [ -z "$SECRET" ]; then
-      SECRET=$(openssl rand -hex 32)
-      echo "render-coturn-config: WARNING — using throwaway secret. Populate the real secret and restart coturn."
-    fi
-
-    # Fetch public IPv4 from IMDS (retry — EIP may associate after boot)
-    PUBLIC_IP=""
-    for i in 1 2 3 4 5 6 7 8 9 10; do
-      TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
-      PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || true)
-      if [ -n "$PUBLIC_IP" ]; then break; fi
-      echo "render-coturn-config: public IP not available (attempt $i), retrying in 5s..."
-      sleep 5
-    done
-
-    if [ -z "$PUBLIC_IP" ]; then
-      echo "render-coturn-config: ERROR — could not determine public IP"
-      exit 1
-    fi
-
-    # Render config
-    cat > /etc/turnserver.conf << EOF
-    listening-port=3478
-    realm=$REALM
-    use-auth-secret
-    static-auth-secret=$SECRET
-    external-ip=$PUBLIC_IP
-    min-port=49152
-    max-port=65535
-    no-cli
-    no-tlsv1
-    no-tlsv1_1
-    fingerprint
-    EOF
-
-    echo "render-coturn-config: rendered with realm=$REALM external-ip=$PUBLIC_IP"
-    RENDERSCRIPT
-
-    chmod +x /usr/local/bin/render-coturn-config
-
-    # Configure systemd to re-render config on every restart
-    mkdir -p /etc/systemd/system/coturn.service.d
-    cat > /etc/systemd/system/coturn.service.d/render-config.conf << 'OVERRIDE'
-    [Service]
-    ExecStartPre=/usr/local/bin/render-coturn-config
-    OVERRIDE
-
-    systemctl daemon-reload
-    systemctl enable coturn
-    systemctl start coturn
-  USERDATA
+  user_data                   = templatefile("${path.module}/templates/user-data.sh.tftpl", {
+    eip_public_ip          = aws_eip.coturn.public_ip
+    realm                  = var.realm
+    aws_region             = var.aws_region
+    turn_secret_arn        = var.turn_secret_arn
+    vpc_cidr               = var.vpc_cidr
+    workspace_subnet_cidrs = join(",", var.workspace_subnet_cidrs)
+  })
+  user_data_replace_on_change = true
 
   tags = { Name = "arclight-${var.environment}-coturn" }
 }

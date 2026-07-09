@@ -34,3 +34,13 @@ variable "aws_region" {
   type        = string
   default     = "us-east-1"
 }
+
+variable "vpc_cidr" {
+  description = "VPC CIDR block (converted to IP range for denied-peer-ip)"
+  type        = string
+}
+
+variable "workspace_subnet_cidrs" {
+  description = "Dedicated workspace subnet CIDRs for allowed-peer-ip (relay exceptions to denied-peer-ip)"
+  type        = list(string)
+}

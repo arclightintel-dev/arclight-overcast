@@ -1,0 +1,179 @@
+#!/bin/bash
+set -euo pipefail
+
+###############################################################################
+# Phase 1: Prevent auto-start, then install
+###############################################################################
+# Mask coturn BEFORE install so apt's postinst cannot start it.
+# This prevents a window where coturn listens on public 3478 with no auth.
+systemctl mask coturn.service
+
+apt-get update -y
+apt-get install -y coturn unzip curl
+
+# coturn is now installed but masked — it cannot start.
+
+###############################################################################
+# Phase 2: AWS CLI v2
+###############################################################################
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install
+rm -rf /tmp/awscliv2.zip /tmp/aws
+
+###############################################################################
+# Phase 3: SSM agent verification
+###############################################################################
+if systemctl is-active --quiet snap.amazon-ssm-agent.amazon-ssm-agent.service; then
+  echo "user-data: SSM agent is active"
+else
+  echo "user-data: WARNING — SSM agent not active, attempting start..."
+  systemctl start snap.amazon-ssm-agent.amazon-ssm-agent.service || \
+    echo "user-data: WARNING — SSM agent start failed"
+fi
+
+###############################################################################
+# Phase 4: Render script
+###############################################################################
+cat > /usr/local/bin/render-coturn-config << 'RENDERSCRIPT'
+#!/bin/bash
+set -euo pipefail
+
+# Terraform-injected constants (baked at apply time):
+REGION="${aws_region}"
+SECRET_ARN="${turn_secret_arn}"
+REALM="${realm}"
+PUBLIC_IP="${eip_public_ip}"
+VPC_CIDR="${vpc_cidr}"
+WORKSPACE_SUBNETS="${workspace_subnet_cidrs}"
+
+die() {
+  echo "render-coturn-config: FATAL — $1" >&2
+  exit 1
+}
+
+# --- Fetch shared secret from Secrets Manager ---
+SECRET=""
+attempt=1
+while [ "$attempt" -le 5 ]; do
+  SECRET=$(/usr/local/bin/aws secretsmanager get-secret-value \
+    --secret-id "$SECRET_ARN" \
+    --region "$REGION" \
+    --query 'SecretString' \
+    --output text 2>/dev/null) && [ -n "$SECRET" ] && break
+  SECRET=""
+  echo "render-coturn-config: secret fetch failed (attempt $attempt/5), retrying in 5s..."
+  sleep 5
+  attempt=$((attempt + 1))
+done
+
+[ -n "$SECRET" ] || die "could not fetch secret from Secrets Manager after 5 attempts"
+
+# --- Fetch private IP from IMDS v2 ---
+PRIVATE_IP=""
+attempt=1
+while [ "$attempt" -le 5 ]; do
+  TOKEN=$(curl -sf -X PUT "http://169.254.169.254/latest/api/token" \
+    -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null) || true
+  if [ -n "$TOKEN" ]; then
+    PRIVATE_IP=$(curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" \
+      "http://169.254.169.254/latest/meta-data/local-ipv4" 2>/dev/null) || true
+  fi
+  [ -n "$PRIVATE_IP" ] && break
+  PRIVATE_IP=""
+  echo "render-coturn-config: private IP not available (attempt $attempt/5), retrying in 5s..."
+  sleep 5
+  attempt=$((attempt + 1))
+done
+
+[ -n "$PRIVATE_IP" ] || die "could not fetch private IP from IMDS after 5 attempts"
+
+# --- Convert VPC CIDR to IP range (coturn requires range, not CIDR) ---
+cidr_to_range() {
+  local cidr="$1"
+  local network="$${cidr%/*}"
+  local prefix="$${cidr#*/}"
+
+  local IFS='.'
+  read -r o1 o2 o3 o4 <<< "$network"
+
+  local net_int=$(( (o1 << 24) + (o2 << 16) + (o3 << 8) + o4 ))
+
+  local host_mask
+  if [ "$prefix" -eq 32 ]; then
+    host_mask=0
+  else
+    host_mask=$(( (1 << (32 - prefix)) - 1 ))
+  fi
+
+  local bcast_int=$(( net_int | host_mask ))
+
+  local b1=$(( (bcast_int >> 24) & 255 ))
+  local b2=$(( (bcast_int >> 16) & 255 ))
+  local b3=$(( (bcast_int >> 8) & 255 ))
+  local b4=$(( bcast_int & 255 ))
+
+  echo "$${o1}.$${o2}.$${o3}.$${o4}-$${b1}.$${b2}.$${b3}.$${b4}"
+}
+
+VPC_RANGE=$(cidr_to_range "$VPC_CIDR")
+
+# --- Atomic config file write ---
+TMPFILE=$(mktemp /etc/turnserver.conf.XXXXXX)
+
+cat > "$TMPFILE" << CONF
+listening-port=3478
+realm=$REALM
+use-auth-secret
+static-auth-secret=$SECRET
+external-ip=$PUBLIC_IP/$PRIVATE_IP
+min-port=49152
+max-port=65535
+no-cli
+no-tlsv1
+no-tlsv1_1
+fingerprint
+no-multicast-peers
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=100.64.0.0-100.127.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=240.0.0.0-255.255.255.255
+denied-peer-ip=$VPC_RANGE
+CONF
+
+# Append allowed-peer-ip lines for workspace subnets
+IFS=',' read -ra WS_CIDRS <<< "$WORKSPACE_SUBNETS"
+for ws_cidr in "$${WS_CIDRS[@]}"; do
+  ws_range=$(cidr_to_range "$ws_cidr")
+  echo "allowed-peer-ip=$ws_range" >> "$TMPFILE"
+done
+
+chown root:turnserver "$TMPFILE"
+chmod 640 "$TMPFILE"
+mv "$TMPFILE" /etc/turnserver.conf
+
+echo "render-coturn-config: rendered realm=$REALM external-ip=$PUBLIC_IP/$PRIVATE_IP vpc-range=$VPC_RANGE"
+RENDERSCRIPT
+
+chmod +x /usr/local/bin/render-coturn-config
+
+###############################################################################
+# Phase 5: systemd drop-in
+###############################################################################
+mkdir -p /etc/systemd/system/coturn.service.d
+cat > /etc/systemd/system/coturn.service.d/render-config.conf << 'DROPIN'
+[Service]
+ExecStartPre=+/usr/local/bin/render-coturn-config
+DROPIN
+
+###############################################################################
+# Phase 6: Unmask and start coturn
+###############################################################################
+systemctl unmask coturn.service
+systemctl daemon-reload
+systemctl enable coturn
+systemctl start coturn
