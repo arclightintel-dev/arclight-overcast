@@ -831,7 +831,29 @@ resource "aws_s3_bucket_lifecycle_configuration" "podbay_exports" {
   }
 }
 
-# coturn module removed — needs proper spec before reimplementation.
-# See docs/platform-interface/module-feedback/podbay-batch5-infra-requirements-v1.md
-# D-062 ratified: self-hosted coturn EC2, per-environment.
-# Module code exists at terraform/modules/coturn/ but is not wired until spec'd.
+################################################################################
+# coturn TURN server (D-062)
+################################################################################
+
+module "coturn" {
+  source = "../../modules/coturn"
+
+  environment            = var.environment
+  vpc_id                 = module.vpc.vpc_id
+  subnet_id              = module.vpc.public_subnet_ids[0]
+  turn_secret_arn        = module.secrets.secret_arns["arclight/${var.environment}/podbay/turn-shared-secret"]
+  realm                  = "staging.${var.domain_name}"
+  aws_region             = var.aws_region
+  vpc_cidr               = var.vpc_cidr
+  workspace_subnet_cidrs = module.vpc.private_workspace_subnet_cidrs
+}
+
+resource "aws_security_group_rule" "workspace_turn_relay_ingress" {
+  type                     = "ingress"
+  from_port                = 52000
+  to_port                  = 52100
+  protocol                 = "udp"
+  security_group_id        = module.vpc.sg_podbay_workspace_id
+  source_security_group_id = module.coturn.turn_security_group_id
+  description              = "TURN relay UDP from coturn to Neko WebRTC (52000-52100)"
+}

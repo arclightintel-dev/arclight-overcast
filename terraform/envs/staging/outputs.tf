@@ -110,4 +110,12 @@ output "private_workspace_subnet_ids" {
   value       = module.vpc.private_workspace_subnet_ids
 }
 
-# turn_endpoint and turn_instance_id removed — coturn module unwired pending spec
+output "turn_endpoint" {
+  description = "TURN server public IP (EIP)"
+  value       = module.coturn.turn_endpoint
+}
+
+output "turn_instance_id" {
+  description = "coturn EC2 instance ID"
+  value       = module.coturn.instance_id
+}
