@@ -778,6 +778,26 @@ resource "aws_iam_role_policy" "podbay_task_s3" {
   })
 }
 
+resource "aws_security_group_rule" "podbay_to_core_egress" {
+  type                     = "egress"
+  from_port                = 8000
+  to_port                  = 8000
+  protocol                 = "tcp"
+  security_group_id        = module.vpc.sg_podbay_controller_id
+  source_security_group_id = module.vpc.sg_core_id
+  description              = "Podbay controller to Core internal API (JWKS, token validation)"
+}
+
+resource "aws_security_group_rule" "core_from_podbay_ingress" {
+  type                     = "ingress"
+  from_port                = 8000
+  to_port                  = 8000
+  protocol                 = "tcp"
+  security_group_id        = module.vpc.sg_core_id
+  source_security_group_id = module.vpc.sg_podbay_controller_id
+  description              = "Core internal API from Podbay controller"
+}
+
 resource "aws_iam_role_policy" "podbay_task_turn_secret" {
   name = "turn-secret-read"
   role = aws_iam_role.podbay_task_role.id
