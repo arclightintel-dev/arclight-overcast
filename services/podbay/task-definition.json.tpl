@@ -30,7 +30,8 @@
       { "name": "PODBAY_CORE_JWKS_URL", "value": "${core_jwks_url}" },
       { "name": "PODBAY_CORE_ISSUER", "value": "${core_issuer}" },
       { "name": "PODBAY_EXTERNAL_BASE_URL", "value": "https://podbay.${domain}" },
-      { "name": "PODBAY_INSTANCE_MARKER", "value": "podbay-${environment}" }
+      { "name": "PODBAY_INSTANCE_MARKER", "value": "podbay-${environment}" },
+      { "name": "PODBAY_SNAPSHOT_REGISTRY", "value": "${snapshot_registry}" }
     ],
     "secrets": [
       { "name": "PODBAY_DATABASE_URL", "valueFrom": "${secret_arn_database_url}" }

@@ -909,6 +909,12 @@ module "podbay_service" {
     turn_secret_name      = "arclight/${var.environment}/podbay/turn-shared-secret"
     core_jwks_url         = "http://core.${var.environment}.internal.${var.domain_name}:8000/.well-known/jwks.json"
     core_issuer           = "https://core.internal"
+    snapshot_registry     = replace(jsonencode({
+      snap_browser_chromium_v1 = {
+        image_ref    = "${module.ecr.repository_urls["arclight/podbay-workspace-browser"]}"
+        image_digest = "sha256:3d96b9f8a189f6bdfa52c97d1d5d5ee31af0066bdfff171bff1931ee448fd095"
+      }
+    }), "\"", "\\\"")
   })
 }
 
