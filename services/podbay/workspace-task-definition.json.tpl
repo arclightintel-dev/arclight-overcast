@@ -9,7 +9,8 @@
     "portMappings": [
       { "containerPort": 9222, "protocol": "tcp" },
       { "containerPort": 9280, "protocol": "tcp" },
-      { "containerPort": 8080, "protocol": "tcp" }
+      { "containerPort": 8080, "protocol": "tcp" },
+      { "containerPortRange": "52000-52100", "protocol": "udp" }
     ],
     "linuxParameters": {
       "initProcessEnabled": true,

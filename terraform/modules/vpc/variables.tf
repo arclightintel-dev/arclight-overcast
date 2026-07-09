@@ -32,3 +32,9 @@ variable "private_db_subnet_cidrs" {
   type        = list(string)
   default     = ["10.0.20.0/24", "10.0.21.0/24"]
 }
+
+variable "private_workspace_subnet_cidrs" {
+  description = "CIDR blocks for private workspace subnets (Podbay EC2 capacity provider)"
+  type        = list(string)
+  default     = ["10.0.30.0/24", "10.0.31.0/24"]
+}

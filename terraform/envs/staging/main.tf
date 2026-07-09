@@ -162,7 +162,7 @@ module "ec2_capacity" {
   environment        = var.environment
   cluster_name       = module.ecs_cluster.cluster_name
   vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_app_subnet_ids
+  private_subnet_ids = module.vpc.private_workspace_subnet_ids
   instance_type      = var.podbay_ec2_instance_type
   desired_capacity   = var.podbay_ec2_desired_capacity
 }

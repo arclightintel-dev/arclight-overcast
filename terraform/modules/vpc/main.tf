@@ -45,6 +45,21 @@ resource "aws_subnet" "private_db" {
   tags = { Name = "arclight-${var.environment}-private-db-${var.azs[count.index]}" }
 }
 
+resource "aws_subnet" "private_workspace" {
+  count             = length(var.private_workspace_subnet_cidrs)
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = var.private_workspace_subnet_cidrs[count.index]
+  availability_zone = var.azs[count.index]
+
+  tags = { Name = "arclight-${var.environment}-private-workspace-${var.azs[count.index]}" }
+}
+
+resource "aws_route_table_association" "private_workspace" {
+  count          = length(var.private_workspace_subnet_cidrs)
+  subnet_id      = aws_subnet.private_workspace[count.index].id
+  route_table_id = aws_route_table.private_app.id
+}
+
 ################################################################################
 # Internet Gateway
 ################################################################################
@@ -139,11 +154,11 @@ resource "aws_security_group" "vpc_endpoints" {
   vpc_id      = aws_vpc.this.id
 
   ingress {
-    description = "HTTPS from app subnets"
+    description = "HTTPS from app and workspace subnets"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = var.private_app_subnet_cidrs
+    cidr_blocks = concat(var.private_app_subnet_cidrs, var.private_workspace_subnet_cidrs)
   }
 
   tags = { Name = "arclight-${var.environment}-vpce" }

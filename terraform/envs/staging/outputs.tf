@@ -105,4 +105,9 @@ output "podbay_task_role_arn" {
   value       = aws_iam_role.podbay_task_role.arn
 }
 
+output "private_workspace_subnet_ids" {
+  description = "Private workspace subnet IDs (for Podbay RunTask networkConfiguration)"
+  value       = module.vpc.private_workspace_subnet_ids
+}
+
 # turn_endpoint and turn_instance_id removed — coturn module unwired pending spec

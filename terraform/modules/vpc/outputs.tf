@@ -57,3 +57,13 @@ output "private_app_route_table_id" {
   description = "Private app route table ID"
   value       = aws_route_table.private_app.id
 }
+
+output "private_workspace_subnet_ids" {
+  description = "Private workspace subnet IDs"
+  value       = aws_subnet.private_workspace[*].id
+}
+
+output "private_workspace_subnet_cidrs" {
+  description = "Private workspace subnet CIDR blocks"
+  value       = aws_subnet.private_workspace[*].cidr_block
+}
