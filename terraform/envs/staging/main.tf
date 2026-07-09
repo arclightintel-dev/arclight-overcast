@@ -778,6 +778,23 @@ resource "aws_iam_role_policy" "podbay_task_s3" {
   })
 }
 
+resource "aws_iam_role_policy" "podbay_task_turn_secret" {
+  name = "turn-secret-read"
+  role = aws_iam_role.podbay_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ReadTURNSecret"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = [module.secrets.secret_arns["arclight/${var.environment}/podbay/turn-shared-secret"]]
+      },
+    ]
+  })
+}
+
 resource "aws_s3_bucket" "podbay_exports" {
   bucket_prefix = "arclight-podbay-exports-${var.environment}-"
   force_destroy = false
@@ -829,6 +846,50 @@ resource "aws_s3_bucket_lifecycle_configuration" "podbay_exports" {
       days = 30
     }
   }
+}
+
+################################################################################
+# Podbay Controller Service (Phase 2)
+################################################################################
+
+module "podbay_service" {
+  source = "../../modules/ecs-service-fargate"
+
+  service_name           = "podbay"
+  environment            = var.environment
+  cluster_id             = module.ecs_cluster.cluster_id
+  cluster_name           = module.ecs_cluster.cluster_name
+  subnet_ids             = module.vpc.private_app_subnet_ids
+  security_group_id      = module.vpc.sg_podbay_controller_id
+  alb_security_group_id  = module.alb.alb_security_group_id
+  rds_security_group_id  = module.rds.rds_security_group_id
+  cloud_map_namespace_id = module.ecs_cluster.cloud_map_namespace_id
+  target_group_arn       = module.alb.target_group_arns["podbay"]
+  container_port         = 8099
+  desired_count          = var.podbay_desired_count
+  cpu                    = 512
+  memory                 = 1024
+  execution_role_arn     = module.secrets.execution_role_arns["podbay"]
+  task_role_arn          = aws_iam_role.podbay_task_role.arn
+
+  container_definitions = templatefile("${path.module}/../../../services/podbay/task-definition.json.tpl", {
+    environment           = var.environment
+    image                 = "${module.ecr.repository_urls["arclight/podbay"]}:${var.podbay_image_tag}"
+    domain                = "staging.${var.domain_name}"
+    region                = var.aws_region
+    log_group             = "/arclight/${var.environment}/podbay"
+    secret_arn_database_url = module.secrets.podbay_database_url_secret_arn
+    ecs_cluster           = module.ecs_cluster.cluster_name
+    ecs_task_definition   = "arclight-podbay-workspace-${var.environment}"
+    ecs_capacity_provider = module.ec2_capacity.capacity_provider_name
+    ecs_subnets           = join(",", module.vpc.private_workspace_subnet_ids)
+    ecs_security_groups   = module.vpc.sg_podbay_workspace_id
+    export_s3_bucket      = aws_s3_bucket.podbay_exports.id
+    turn_endpoint         = module.coturn.turn_endpoint
+    turn_secret_name      = "arclight/${var.environment}/podbay/turn-shared-secret"
+    core_jwks_url         = "http://core.${var.environment}.internal.${var.domain_name}:8000/.well-known/jwks.json"
+    core_issuer           = "https://core.internal"
+  })
 }
 
 ################################################################################
