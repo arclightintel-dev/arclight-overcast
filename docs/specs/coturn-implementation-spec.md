@@ -71,9 +71,12 @@ Implementation may NOT begin until:
 | `instance_type` | variable | Current (default: t3.micro) | EC2 instance | `terraform/modules/coturn/variables.tf:26-30` |
 | `aws_region` | variable | Current (default: us-east-1) | AWS CLI + IMDS | `terraform/modules/coturn/variables.tf:32-36` |
 | `vpc_cidr` | variable | PROPOSED | denied-peer-ip config — render script converts CIDR to IP range format (coturn does not accept CIDR notation) | Spec §6 |
+| `workspace_subnet_cidrs` | variable | PROPOSED | `allowed-peer-ip` config — render script converts CIDRs to IP range format for coturn | Spec §6 |
 | `turn_endpoint` | output | Current | Podbay (`PODBAY_TURN_ENDPOINT`) | `terraform/modules/coturn/outputs.tf:1-4` |
 | `turn_security_group_id` | output | Current | Staging wiring | `terraform/modules/coturn/outputs.tf:6-9` |
 | `instance_id` | output | Current | Debugging/ops | `terraform/modules/coturn/outputs.tf:11-14` |
+
+**Workspace subnet note**: Workspace containers run in dedicated subnets (`10.0.30.0/24`, `10.0.31.0/24`) separate from private app subnets. These are the only internal ranges that coturn should relay to — the `workspace_subnet_cidrs` variable feeds `allowed-peer-ip` directives that override the broad `denied-peer-ip` rules for these specific ranges. See §6 peer policy table and §9 layered deny/allow model.
 
 ### Ownership boundary
 
@@ -183,20 +186,20 @@ ExecStartPre=+/usr/local/bin/render-coturn-config
 
 | Step | Preconditions | Action | Failure behavior | Evidence source |
 |------|--------------|--------|------------------|-----------------|
-| 1 | Instance running, cloud-init Final stage | `apt-get update && apt-get install -y coturn unzip curl` | cloud-init marks failed; instance unreachable via SSM for debugging | RQ-OS-01 |
-| 2 | Step 1 complete | coturn auto-starts with default (empty) config — **this is expected and harmless** | Service starts but does nothing useful without config | RQ-OS-07 |
-| 3 | Step 1 complete | Install AWS CLI v2 from zip (`awscli-exe-linux-x86_64.zip`) | `exit 1` — instance has no secret access without CLI | RQ-AWS-01 |
-| 4 | Step 1 complete | Verify SSM agent running (`snap.amazon-ssm-agent.amazon-ssm-agent.service`) | Log warning — SSM is pre-installed, failure is unexpected | RQ-AWS-02 |
+| 1 | Instance running, cloud-init Final stage | `systemctl mask coturn.service` — prevent auto-start before package install | `exit 1` — mask must succeed before install to prevent open-relay window | Design decision (mask-before-install) |
+| 2 | Step 1 complete (coturn.service masked) | `apt-get update && apt-get install -y coturn unzip curl` — coturn installed but masked, cannot auto-start | cloud-init marks failed; instance unreachable via SSM for debugging | RQ-OS-01, RQ-OS-07 |
+| 3 | Step 2 complete | Install AWS CLI v2 from zip (`awscli-exe-linux-x86_64.zip`) | `exit 1` — instance has no secret access without CLI | RQ-AWS-01 |
+| 4 | Step 2 complete | Verify SSM agent running (`snap.amazon-ssm-agent.amazon-ssm-agent.service`) | Log warning — SSM is pre-installed, failure is unexpected | RQ-AWS-02 |
 | 5 | Step 3 complete | Write render script to `/usr/local/bin/render-coturn-config` | `exit 1` | Design decision |
 | 6 | Step 5 complete | Write systemd drop-in to `/etc/systemd/system/coturn.service.d/render-config.conf` | `exit 1` | RQ-OS-02 (drop-in support) |
 | 7 | Step 6 complete | `systemctl daemon-reload` | `exit 1` | systemd docs |
-| 8 | Step 7 complete | `systemctl restart coturn` → triggers ExecStartPre → render script | Render script fails → coturn does not start → `systemctl status` shows failure | Design decision (fail hard) |
+| 8 | Step 7 complete | `systemctl unmask coturn.service && systemctl daemon-reload && systemctl enable coturn && systemctl start coturn` → triggers ExecStartPre → render script | Render script fails → coturn does not start → `systemctl status` shows failure | Design decision (mask-before-install bootstrap) |
 
 ### Dependency ordering matrix
 
 | Dependency | Must complete before | Timeout/retry | On failure | Source |
 |-----------|---------------------|---------------|------------|--------|
-| EIP allocation | user-data template rendering (Terraform plan time) | N/A — known at plan time | Plan fails | RQ-AWS-03, RQ-AWS-04 |
+| EIP allocation | user-data template rendering (Terraform apply time) | N/A — EIP `public_ip` resolved during apply (known after apply, resolved before instance creation via dependency ordering) | Plan fails | RQ-AWS-03, RQ-AWS-04 |
 | EIP association | NOT a dependency — public IP injected via Terraform, not IMDS | N/A | N/A | RQ-AWS-03 (race eliminated by design) |
 | Package install | AWS CLI install, render script creation | apt retry (cloud-init default) | `exit 1` | RQ-OS-01 |
 | AWS CLI v2 | Render script (secret fetch) | N/A | `exit 1` | RQ-AWS-01 |
@@ -336,6 +339,7 @@ No explicit skew handling needed. Minimum credential TTL is 60s, providing > 59s
 | `fingerprint` | (flag) | Add STUN fingerprint to responses | Required for WebRTC interop | coturn docs |
 | `no-multicast-peers` | (flag) | Deny multicast relay | Security posture | coturn docs |
 | `denied-peer-ip` | See peer policy table | Deny relay to internal/link-local/VPC ranges | Denied peer test | `docs/specs/coturn-scoping.md:§1`, Enable Security guidance |
+| `allowed-peer-ip` | Workspace subnet ranges (from `var.workspace_subnet_cidrs`, converted to IP range format) | Override `denied-peer-ip` for intended relay targets — workspace containers must receive relayed media | Allowed peer test (relay to workspace IP succeeds) | coturn docs (`allowed-peer-ip` overrides `denied-peer-ip`) |
 
 ### Forbidden option table
 
@@ -372,6 +376,8 @@ denied-peer-ip=172.16.0.0-172.31.255.255
 denied-peer-ip=192.168.0.0-192.168.255.255
 denied-peer-ip=240.0.0.0-255.255.255.255
 denied-peer-ip=${VPC_RANGE_START}-${VPC_RANGE_END}
+allowed-peer-ip=${WORKSPACE_RANGE_1_START}-${WORKSPACE_RANGE_1_END}
+allowed-peer-ip=${WORKSPACE_RANGE_2_START}-${WORKSPACE_RANGE_2_END}
 ```
 
 `${SECRET}` is the only sensitive value. It is fetched at render time from Secrets Manager and written to `/etc/turnserver.conf` (mode `640`, owner `root:turnserver`). It never appears in Terraform state, cloud-init logs (render script does not use `set -x`), or journald (coturn does not log the secret).
@@ -389,6 +395,7 @@ denied-peer-ip=${VPC_RANGE_START}-${VPC_RANGE_END}
 | `192.168.0.0-192.168.255.255` | deny | RFC 1918 private | Enable Security | Denied peer test |
 | `240.0.0.0-255.255.255.255` | deny | Reserved | Enable Security | Denied peer test |
 | VPC CIDR (e.g., `10.0.0.0-10.0.255.255`) | deny | Prevent relay to VPC internal targets (RDS, ALB, other services) | `docs/specs/coturn-scoping.md:§1` | Denied peer test |
+| Workspace subnets (e.g., `10.0.30.0-10.0.30.255`, `10.0.31.0-10.0.31.255`) | ALLOW | Override `denied-peer-ip` for intended relay targets — workspace containers must receive relayed media | coturn docs (`allowed-peer-ip` overrides `denied-peer-ip`) | Relay to workspace IP succeeds |
 
 ### Logging/redaction table
 
@@ -533,6 +540,7 @@ Transport variants: UDP implicit (default for TURN URLs without `?transport=` su
 | TCP | 3478 | `0.0.0.0/0` | TURN control (TCP fallback for restrictive networks) | `turnutils_uclient -T` allocation test | `terraform/modules/coturn/main.tf:17-22`, RFC 8656 |
 | UDP | 49152-65535 | `0.0.0.0/0` | TURN relay (media) | WebRTC E2E test | `terraform/modules/coturn/main.tf:24-30`, RFC 8656 |
 | TCP/UDP | 5349 | — | TURNS (TLS/DTLS) — **NOT opened** | — | Non-goal (deferred) |
+| UDP | 52000-52100 | Coturn SG (`turn_security_group_id`) | Neko WebRTC media relay to workspace containers — rule on **workspace SG**, source is coturn SG | WebRTC E2E test | Design decision |
 
 ### Outbound policy table
 
@@ -556,6 +564,18 @@ Egress restriction is not applied because TURN relay to arbitrary peer IPs is a 
 | Reserved | `240.0.0.0-255.255.255.255` | DENY | `denied-peer-ip` | — | Enable Security |
 | VPC CIDR | Module input `var.vpc_cidr` (e.g., `10.0.0.0/16`), converted to IP range by render script (e.g., `10.0.0.0-10.0.255.255`) | DENY | `denied-peer-ip` (range format, not CIDR) | Allocation to VPC internal IP fails | `docs/specs/coturn-scoping.md:§1`, coturn docs (range-only syntax) |
 | Multicast | `224.0.0.0-239.255.255.255` | DENY | `no-multicast-peers` | — | coturn docs |
+
+### Layered deny/allow model
+
+Relay target access uses a three-layer enforcement model:
+
+1. **Broad deny** (`denied-peer-ip`): All RFC 1918, link-local, CGN, loopback, reserved, and VPC CIDR ranges are denied. This blocks relay to any internal IP by default, including IMDS (`169.254.169.254`), RDS endpoints, ALB, and other VPC services.
+
+2. **Narrow allow** (`allowed-peer-ip`): Only the dedicated workspace subnets (`10.0.30.0/24`, `10.0.31.0/24` in staging) are permitted via `allowed-peer-ip`. coturn evaluates `allowed-peer-ip` after `denied-peer-ip` — an allowed entry overrides a denied entry for the same IP. This ensures relay traffic reaches workspace containers (Neko WebRTC) while all other internal targets remain blocked.
+
+3. **Security groups**: The workspace SG permits inbound UDP 52000-52100 from the coturn SG only. Even if `allowed-peer-ip` were misconfigured to allow a broader range, the SG layer would reject traffic to any host not in the workspace SG.
+
+This layered model ensures that a misconfiguration in any single layer does not create an open relay to internal infrastructure. The `denied-peer-ip` layer is the broadest net; `allowed-peer-ip` is the surgical exception; SGs are the enforcement backstop.
 
 ### Admin/debug access
 
