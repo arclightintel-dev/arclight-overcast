@@ -1,4 +1,5 @@
 name: Deploy Service
+# Supports workflow_dispatch (manual) and repository_dispatch (cross-repo, type: deploy-service)
 
 on:
   workflow_dispatch:
