@@ -132,7 +132,10 @@ resource "aws_iam_role_policy" "overcast_terraform_deploy" {
         Sid      = "PassRole"
         Effect   = "Allow"
         Action   = ["iam:PassRole"]
-        Resource = ["arn:aws:iam::${var.aws_account_id}:role/arclight-ecs-*-${var.environment}"]
+        Resource = [
+          "arn:aws:iam::${var.aws_account_id}:role/arclight-ecs-*-${var.environment}",
+          "arn:aws:iam::${var.aws_account_id}:role/arclight-*-task-role-${var.environment}",
+        ]
         Condition = {
           StringEquals = {
             "iam:PassedToService" = "ecs-tasks.amazonaws.com"
