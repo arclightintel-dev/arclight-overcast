@@ -117,6 +117,15 @@ resource "aws_iam_role_policy" "overcast_terraform_deploy" {
         Resource = ["*"]
       },
       {
+        Sid    = "ECRVerifyImage"
+        Effect = "Allow"
+        Action = [
+          "ecr:DescribeImages",
+          "ecr:BatchGetImage",
+        ]
+        Resource = [for arn in values(var.ecr_repository_arns) : arn]
+      },
+      {
         Sid      = "PassRole"
         Effect   = "Allow"
         Action   = ["iam:PassRole"]
