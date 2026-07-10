@@ -713,7 +713,7 @@ resource "aws_iam_role_policy" "podbay_task_ecs" {
       {
         Sid    = "RunWorkspaceTask"
         Effect = "Allow"
-        Action = ["ecs:RunTask"]
+        Action = ["ecs:RunTask", "ecs:TagResource"]
         Resource = [
           "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/arclight-podbay-workspace-${var.environment}:*"
         ]
