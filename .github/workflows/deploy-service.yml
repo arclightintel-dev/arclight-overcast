@@ -21,9 +21,11 @@ on:
         description: 'ECR image tag to deploy (e.g., v1-abc1234)'
         required: true
         type: string
+  repository_dispatch:
+    types: [deploy-service]
 
 concurrency:
-  group: deploy-${{ github.event.inputs.module }}-${{ github.event.inputs.environment }}
+  group: deploy-${{ github.event.inputs.module || github.event.client_payload.module }}-${{ github.event.inputs.environment || github.event.client_payload.environment }}
   cancel-in-progress: false
 
 permissions:
@@ -33,6 +35,9 @@ permissions:
 env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: '650880817826'
+  DEPLOY_MODULE: ${{ github.event.inputs.module || github.event.client_payload.module }}
+  DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment || github.event.client_payload.environment }}
+  DEPLOY_IMAGE_TAG: ${{ github.event.inputs.image_tag || github.event.client_payload.image_tag }}
 
 jobs:
   verify-image:
@@ -42,23 +47,23 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::650880817826:role/arclight-overcast-terraform-${{ inputs.environment }}
+          role-to-assume: arn:aws:iam::650880817826:role/arclight-overcast-terraform-${{ env.DEPLOY_ENVIRONMENT }}
           aws-region: us-east-1
 
       - name: Check ECR image
         run: |
           aws ecr describe-images \
-            --repository-name arclight/${{ inputs.module }} \
-            --image-ids imageTag=${{ inputs.image_tag }} \
+            --repository-name arclight/${{ env.DEPLOY_MODULE }} \
+            --image-ids imageTag=${{ env.DEPLOY_IMAGE_TAG }} \
             --query 'imageDetails[0].imageSizeInBytes' \
             --output text
-          echo "Image arclight/${{ inputs.module }}:${{ inputs.image_tag }} verified."
+          echo "Image arclight/${{ env.DEPLOY_MODULE }}:${{ env.DEPLOY_IMAGE_TAG }} verified."
 
   deploy:
-    name: Deploy ${{ inputs.module }} to ${{ inputs.environment }}
+    name: Deploy ${{ env.DEPLOY_MODULE }} to ${{ env.DEPLOY_ENVIRONMENT }}
     needs: verify-image
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: ${{ env.DEPLOY_ENVIRONMENT }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,13 +71,13 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::650880817826:role/arclight-overcast-terraform-${{ inputs.environment }}
+          role-to-assume: arn:aws:iam::650880817826:role/arclight-overcast-terraform-${{ env.DEPLOY_ENVIRONMENT }}
           aws-region: us-east-1
 
       - name: Get current task definition
         id: current-task-def
         run: |
-          FAMILY="arclight-${{ inputs.module }}-${{ inputs.environment }}"
+          FAMILY="arclight-${{ env.DEPLOY_MODULE }}-${{ env.DEPLOY_ENVIRONMENT }}"
           TASK_DEF=$(aws ecs describe-task-definition --task-definition "$FAMILY" --query 'taskDefinition' --output json)
           echo "$TASK_DEF" > current-task-def.json
           echo "family=$FAMILY" >> $GITHUB_OUTPUT
@@ -80,7 +85,7 @@ jobs:
       - name: Update image in task definition
         id: new-task-def
         run: |
-          NEW_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/arclight/${{ inputs.module }}:${{ inputs.image_tag }}"
+          NEW_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/arclight/${{ env.DEPLOY_MODULE }}:${{ env.DEPLOY_IMAGE_TAG }}"
 
           # Replace the image in the container definition
           jq --arg img "$NEW_IMAGE" \
@@ -117,8 +122,8 @@ jobs:
 
       - name: Update ECS service
         run: |
-          SERVICE_NAME="arclight-${{ inputs.module }}-${{ inputs.environment }}"
-          CLUSTER="arclight-${{ inputs.environment }}"
+          SERVICE_NAME="arclight-${{ env.DEPLOY_MODULE }}-${{ env.DEPLOY_ENVIRONMENT }}"
+          CLUSTER="arclight-${{ env.DEPLOY_ENVIRONMENT }}"
 
           aws ecs update-service \
             --cluster "$CLUSTER" \
@@ -132,8 +137,8 @@ jobs:
 
       - name: Wait for service stable
         run: |
-          SERVICE_NAME="arclight-${{ inputs.module }}-${{ inputs.environment }}"
-          CLUSTER="arclight-${{ inputs.environment }}"
+          SERVICE_NAME="arclight-${{ env.DEPLOY_MODULE }}-${{ env.DEPLOY_ENVIRONMENT }}"
+          CLUSTER="arclight-${{ env.DEPLOY_ENVIRONMENT }}"
 
           aws ecs wait services-stable \
             --cluster "$CLUSTER" \
@@ -142,18 +147,25 @@ jobs:
           echo "Service is stable."
 
       - name: Verify health
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
-          DOMAIN="${{ inputs.environment }}.arclight-complex.net"
-          URL="https://${{ inputs.module }}.${DOMAIN}/ready"
+          DOMAIN="${{ env.DEPLOY_ENVIRONMENT }}.arclight-complex.net"
+          URL="https://${{ env.DEPLOY_MODULE }}.${DOMAIN}/ready"
+          CF_HEADERS=""
+          if [ -n "$CF_ACCESS_CLIENT_ID" ]; then
+            CF_HEADERS="-H CF-Access-Client-Id:${CF_ACCESS_CLIENT_ID} -H CF-Access-Client-Secret:${CF_ACCESS_CLIENT_SECRET}"
+          fi
 
           echo "Checking $URL..."
 
           # Retry up to 5 times with 10s intervals
           for i in 1 2 3 4 5; do
-            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "$URL" || true)
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" $CF_HEADERS "$URL" || true)
             if [ "$STATUS" = "200" ]; then
               echo "Health check passed: $URL returned 200"
-              curl -sf "$URL" | jq .
+              curl -sf $CF_HEADERS "$URL" | jq .
               exit 0
             fi
             echo "Attempt $i: status=$STATUS, retrying in 10s..."
@@ -170,8 +182,8 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Module | ${{ inputs.module }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Environment | ${{ inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Image Tag | ${{ inputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Module | ${{ env.DEPLOY_MODULE }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ env.DEPLOY_ENVIRONMENT }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Tag | ${{ env.DEPLOY_IMAGE_TAG }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Task Definition | ${{ steps.new-task-def.outputs.new_arn }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Status | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
