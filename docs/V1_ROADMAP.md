@@ -58,7 +58,8 @@ first external developer joins.
 
 | Deliverable | Status | Blocked on |
 |-------------|--------|------------|
-| deploy-service.yml (workflow_dispatch) | Done | — |
+| deploy-service.yml (workflow_dispatch + repository_dispatch) | Done and operational | — |
+| Self-serve deploy pipeline (cross-repo repository_dispatch, module-triggered) | Done | — |
 | terraform-plan.yml (PR comment) | Done | — |
 | terraform-apply.yml (auto-apply staging) | Done | — |
 | Test CI/CD workflows end-to-end | Pending | Merge v2 → main |
@@ -131,7 +132,7 @@ Third service. Controller on Fargate, workspace containers on EC2 capacity provi
 | S3 export bucket (versioned, encrypted, 30-day lifecycle) | Done | — |
 | EC2 managed scaling (auto-scale from 0 on RunTask) | Done | — |
 | Dedicated workspace subnets (10.0.30.0/24, 10.0.31.0/24) | Done | — |
-| coturn TURN server (D-062) | Done |
+| coturn TURN server (D-062) | Done | — |
 | Podbay controller wired in staging (Fargate) | Done | — |
 | Podbay controller task definition template | Done | — |
 | Template DNS fix (.arclight.local → .internal.arclight-complex.net) | Pending | — |

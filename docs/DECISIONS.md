@@ -87,3 +87,21 @@ Account-level resources (ECR repos, GitHub OIDC provider, CloudTrail, budget) ar
 dbbootstrap image uses fixed version tags (v1, v5). NOT git SHA tags. ECR immutable tags mean wasted tags (v2-v4 during CRLF/AL2023 debugging) are permanent.
 
 Current image: `arclight/dbbootstrap:v5` (parameterized for multi-environment).
+
+---
+
+## O-009: Self-serve deploy pipeline via repository_dispatch
+
+**Date**: 2026-07-10 | **Commits**: `8a6b777` (pipeline), `5ebb25c` (env-context fix), `d1c9b7f` (ignore_changes)
+
+`deploy-service.yml` supports both `workflow_dispatch` (manual) and `repository_dispatch` (cross-repo, type `deploy-service`). Module repos self-serve deploys: push image to their ECR repo, then fire one dispatch call. The workflow verifies the image, registers a new task def revision, updates the ECS service, waits for stability, and health-checks through the Cloudflare Access gate.
+
+**Boundary**: Modules own build/push (their repo, their OIDC push role). Overcast owns deploy (registers task def, updates service). This extends O-004's hybrid ownership — the pipeline is the mechanism.
+
+**Terraform coexistence**: The `ecs-service-fargate` module uses `lifecycle { ignore_changes = [task_definition] }` on `aws_ecs_service` so `terraform apply` does not revert pipeline-deployed images. Terraform still owns `container_definitions` (secret ARNs, roles, env, log config); cpu/memory/secret changes register a new revision the next deploy picks up as its base. Conditional `ignore_changes` is impossible (lifecycle takes only literals) — always-ignore is correct because every service is CI/CD-deployed.
+
+**Auth (open platform decision, deferred to arclight-complex)**: Cross-repo dispatch currently requires a token with dispatch access to arclight-overcast. Recommended: an org-wide GitHub App. Health checks use a Cloudflare Access service token (GitHub secrets `CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET`).
+
+**Gotchas (earned)**: GitHub `env` context is invalid in job `name:`/`environment:` keys — using it silently fails workflow compilation and registers zero triggers (the tell: workflow name renders as the file path). `repository_dispatch` needs a nested JSON payload, not `gh -f` bracket keys. Secrets set via PowerShell pipe carry trailing whitespace.
+
+**Prod**: staging only. Prod deploys remain operator-applied per D-059 §6 until a manual-approval gate is added.
