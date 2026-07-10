@@ -61,10 +61,10 @@ jobs:
           echo "Image arclight/${{ env.DEPLOY_MODULE }}:${{ env.DEPLOY_IMAGE_TAG }} verified."
 
   deploy:
-    name: Deploy ${{ env.DEPLOY_MODULE }} to ${{ env.DEPLOY_ENVIRONMENT }}
+    name: Deploy ${{ github.event.inputs.module || github.event.client_payload.module }} to ${{ github.event.inputs.environment || github.event.client_payload.environment }}
     needs: verify-image
     runs-on: ubuntu-latest
-    environment: ${{ env.DEPLOY_ENVIRONMENT }}
+    environment: ${{ github.event.inputs.environment || github.event.client_payload.environment }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
