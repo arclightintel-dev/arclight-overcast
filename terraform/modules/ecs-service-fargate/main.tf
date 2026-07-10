@@ -115,4 +115,15 @@ resource "aws_ecs_service" "this" {
     aws_security_group_rule.https_egress,
     aws_security_group_rule.rds_egress,
   ]
+
+  # The deploy pipeline (deploy-service.yml) and manual deploys register new
+  # task definition revisions and point the service at them, outside Terraform.
+  # Ignore task_definition so `terraform apply` does not revert the running
+  # image. Terraform still owns container_definitions on the task def resource
+  # (secret ARNs, roles, env, log config); cpu/memory/secret changes register a
+  # new revision that the next deploy picks up as its base. Do NOT ignore
+  # desired_count (TF-managed, no autoscaling) or load_balancer (rolling deploy).
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 }
