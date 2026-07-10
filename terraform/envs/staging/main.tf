@@ -713,7 +713,7 @@ resource "aws_iam_role_policy" "podbay_task_ecs" {
       {
         Sid    = "RunWorkspaceTask"
         Effect = "Allow"
-        Action = ["ecs:RunTask", "ecs:TagResource"]
+        Action = ["ecs:RunTask"]
         Resource = [
           "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/arclight-podbay-workspace-${var.environment}:*"
         ]
@@ -722,6 +722,15 @@ resource "aws_iam_role_policy" "podbay_task_ecs" {
             "ecs:cluster" = module.ecs_cluster.cluster_arn
           }
         }
+      },
+      {
+        Sid    = "TagWorkspaceResources"
+        Effect = "Allow"
+        Action = ["ecs:TagResource"]
+        Resource = [
+          "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task/arclight-${var.environment}/*",
+          module.ecs_cluster.cluster_arn
+        ]
       },
       {
         Sid    = "ManageWorkspaceTasks"
