@@ -94,7 +94,7 @@ variable "podbay_image_tag" {
 }
 
 variable "podbay_workspace_image_tag" {
-  description = "Podbay workspace browser image tag (v1-fix1 fixes Dockerfile chown ordering)"
+  description = "Podbay workspace browser image tag (v1-fix2 switches the entrypoint to Neko supervisord so the X server starts)"
   type        = string
-  default     = "v1-fix1"
+  default     = "v1-fix2"
 }
