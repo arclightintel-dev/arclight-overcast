@@ -91,7 +91,7 @@ variable "podbay_image_tag" {
 }
 
 variable "podbay_workspace_image_tag" {
-  description = "Podbay workspace browser image tag (optional until image is pushed)"
+  description = "Podbay workspace browser image tag (v1-fix1 fixes Dockerfile chown ordering)"
   type        = string
-  default     = "v1-initial"
+  default     = "v1-fix1"
 }
