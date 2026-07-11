@@ -16,7 +16,8 @@
       "initProcessEnabled": true,
       "sharedMemorySize": 256,
       "capabilities": {
-        "add": ["SYS_ADMIN"]
+        "add": ["SYS_ADMIN"],
+        "drop": []
       }
     },
     "logConfiguration": {

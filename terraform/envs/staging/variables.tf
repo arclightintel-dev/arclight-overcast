@@ -87,11 +87,14 @@ variable "core_image_tag" {
 variable "podbay_image_tag" {
   description = "Podbay controller container image tag (e.g., v1-abc1234)"
   type        = string
-  default     = "latest"
+  # Pinned to the live deploy base. Never "latest": ECR repos are immutable-tag
+  # and lifecycle policies rotate only v-prefixed tags. The deploy pipeline
+  # advances the running service out-of-band (service ignores task_definition).
+  default     = "v2-phase2-fix3"
 }
 
 variable "podbay_workspace_image_tag" {
-  description = "Podbay workspace browser image tag (v1-fix1 fixes Dockerfile chown ordering)"
+  description = "Podbay workspace browser image tag (v1-fix2 switches the entrypoint to Neko supervisord so the X server starts)"
   type        = string
-  default     = "v1-fix1"
+  default     = "v1-fix2"
 }
