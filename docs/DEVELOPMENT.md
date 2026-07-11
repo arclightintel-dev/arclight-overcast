@@ -31,7 +31,7 @@ C:\Tools\terraform.exe apply
 C:\Tools\terraform.exe fmt -recursive terraform/
 ```
 
-**Staging**: auto-applies on merge to main via `terraform-apply.yml`.
+**Staging**: the working path is **manual apply with admin credentials** from `terraform/envs/staging`. The intended CI auto-apply (`terraform-apply.yml` on merge to main) is **currently broken** — see [CI status](#ci-status) below. Every apply this session was run manually.
 **Prod**: manual operator apply only. OIDC role lacks infra provisioning permissions.
 
 ## Adding a new Terraform module
@@ -59,6 +59,38 @@ docker build -t arclight/{name}:v1-$(git rev-parse --short HEAD) .
 docker tag arclight/{name}:v1-... 650880817826.dkr.ecr.us-east-1.amazonaws.com/arclight/{name}:v1-...
 docker push 650880817826.dkr.ecr.us-east-1.amazonaws.com/arclight/{name}:v1-...
 ```
+
+## Deploying a service
+
+Service image deploys are separate from infrastructure applies. `ecs-service-fargate` sets
+`lifecycle { ignore_changes = [task_definition] }`, so a `terraform apply` does **not** revert a
+running service to the tfvars-pinned image — deploys advance the service out-of-band via
+`deploy-service.yml`, which registers a new task-definition revision and updates the service.
+
+`deploy-service.yml` has two triggers:
+
+- **`workflow_dispatch`** — manual run from the Actions tab (inputs: `module`, `environment`, `image_tag`).
+- **`repository_dispatch`** (type `deploy-service`) — cross-repo self-serve. Module repos fire a
+  `repository_dispatch` at Overcast to deploy their own image after a successful build (O-009). A
+  Cloudflare Access service token is provisioned for automation.
+
+Because the service ignores `task_definition`, keep the tfvars image tag pinned to a real, existing
+tag (never `latest` — ECR tags are immutable and lifecycle policies only rotate `v`-prefixed tags).
+
+## CI status
+
+**As of 2026-07-11, `terraform-plan.yml` and `terraform-apply.yml` are broken.** Do not rely on CI
+auto-apply — apply manually with admin credentials. Two independent causes:
+
+1. **Terraform version.** CI pins `terraform_version: '~> 1.5'`. `terraform/modules/iam-github-oidc/variables.tf`
+   uses a cross-variable `validation` block (`oidc_provider_arn`'s validation references
+   `var.create_oidc_provider`), which requires Terraform ≥ 1.9. Under 1.5 the config is rejected.
+2. **Missing variables.** `terraform.tfvars` is gitignored, and required variables have no defaults
+   (e.g. `core_image_tag`), so CI has no values to plan/apply with.
+
+A deployment-model rework is scoped for next session (see DECISIONS O-009 and
+`docs/handoff/2026-07-10-handoff.md`). Until then: **manual apply is the working path**, and service
+deploys go through `deploy-service.yml` (above).
 
 ## Key gotchas
 
