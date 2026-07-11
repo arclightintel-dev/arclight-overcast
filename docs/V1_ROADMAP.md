@@ -60,14 +60,17 @@ first external developer joins.
 |-------------|--------|------------|
 | deploy-service.yml (workflow_dispatch + repository_dispatch) | Done and operational | — |
 | Self-serve deploy pipeline (cross-repo repository_dispatch, module-triggered) | Done | — |
-| terraform-plan.yml (PR comment) | Done | — |
-| terraform-apply.yml (auto-apply staging) | Done | — |
-| Test CI/CD workflows end-to-end | Pending | Merge v2 → main |
-| Merge v2 branch to main | Pending | CI/CD verification |
+| terraform-plan.yml (PR comment) | BROKEN — same validation-block cause as apply (CI `~> 1.5` rejects cross-var validation) | See PROJECT_STATE "Known debt" |
+| terraform-apply.yml (auto-apply staging) | BROKEN — non-functional | See PROJECT_STATE "Known debt" |
+| Test CI/CD workflows end-to-end | Partial — deploy-service.yml verified end-to-end; terraform plan/apply broken | Deployment model rework |
+| Merge v2 branch to main | Done | — |
 | IAM Identity Center setup | Pending | Google Workspace account |
 | Google Workspace as identity source | Pending | Workspace subscription |
 | Developer permission sets (staging read/debug, prod read-only) | Pending | Identity Center |
 | GitHub environment protection rules (staging, prod) | Pending | — |
+| Deployment model definition (GitHub / AWS / Terraform) | Scoping next session | Definitive model before more ad-hoc CI fixes |
+
+> **CI auto-apply is currently broken** — `terraform-apply.yml` does not run (see PROJECT_STATE "Known debt": a cross-variable `validation` block is rejected by the CI-pinned Terraform, and `core_image_tag` has no default while `terraform.tfvars` is gitignored). Applies are manual with admin creds until the deployment-model rework. The self-serve deploy pipeline (`deploy-service.yml`, `repository_dispatch`) is unaffected — Done and operational.
 
 **Governing decision**: D-059 positions 2 (manual deploy trigger), 3 (hybrid CI/CD),
 4 (SSO + GitHub OIDC)
@@ -141,6 +144,7 @@ Third service. Controller on Fargate, workspace containers on EC2 capacity provi
 
 **Deployment model**: Controller on Fargate (INFRASTRUCTURE_SPEC amended), workspaces on EC2 via RunTask with capacityProviderStrategy (not EKS)
 **Podbay Batch 5 substrate**: workspace infrastructure live, TURN server live, Podbay controller live
+**Status**: All Phase 5 infrastructure deliverables Done (coturn, Podbay controller v2-phase2-fix3, workspace task def v1-fix2, dedicated workspace subnets). Phase 5 is effectively complete pending Podbay's workspace-container startup fix and E2E smoke — both Podbay-side, not infra.
 
 ---
 

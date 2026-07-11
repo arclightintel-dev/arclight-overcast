@@ -105,3 +105,5 @@ Current image: `arclight/dbbootstrap:v5` (parameterized for multi-environment).
 **Gotchas (earned)**: GitHub `env` context is invalid in job `name:`/`environment:` keys — using it silently fails workflow compilation and registers zero triggers (the tell: workflow name renders as the file path). `repository_dispatch` needs a nested JSON payload, not `gh -f` bracket keys. Secrets set via PowerShell pipe carry trailing whitespace.
 
 **Prod**: staging only. Prod deploys remain operator-applied per D-059 §6 until a manual-approval gate is added.
+
+**Auto-apply status (debt, 2026-07-10)**: The *auto-apply* half of the CI/CD model — `terraform-apply.yml` (auto-apply staging on merge, per O-004) — is currently NON-FUNCTIONAL: CI's pinned Terraform (`~> 1.5`) rejects a cross-variable `validation` block, and `core_image_tag` has no default while `terraform.tfvars` is gitignored, leaving CI no value to plan with. Applies this session were run manually with admin credentials. A definitive deployment / staging / CI model is being scoped next session and the fix lands with that rework — tracked debt, not a ratified O-decision.
