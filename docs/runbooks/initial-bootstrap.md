@@ -100,7 +100,7 @@ wait for status `ISSUED`. `main.tf` consumes the issued cert via
 ECR repos are **Terraform-managed** (`module.ecr`, wired in `main.tf`) and are
 created by the first `terraform apply` (Step 4) — you normally do not create them
 by hand. The managed set includes `arclight/core`, `arclight/shuttleforge`,
-`arclight/podbay`, `arclight/podbay-workspace-browser`, and `arclight/dbbootstrap`.
+`arclight/podbay`, `arclight/podbay-workspace-browser`, `arclight/nerfherder`, and `arclight/dbbootstrap`.
 Manual creation is only needed to bootstrap an image (e.g. `dbbootstrap`) before
 the first apply.
 
