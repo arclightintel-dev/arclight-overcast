@@ -121,8 +121,10 @@ is used.
 > C:\Tools\terraform.exe apply
 > ```
 >
-> `terraform-plan.yml` (PR plan) still runs in CI. Do not assume a merge to
-> `main` applies infrastructure until the auto-apply pipeline is restored.
+> Both `terraform-plan.yml` and `terraform-apply.yml` are currently broken
+> in CI (same root cause — cross-variable validation block rejected by CI's
+> pinned Terraform `~> 1.5`). Do not assume any CI pipeline runs until the
+> deployment-model rework lands.
 
 ```bash
 cd terraform/envs/staging
