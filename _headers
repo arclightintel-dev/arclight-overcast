@@ -1,0 +1,12 @@
+# Videos keep stable filenames across regenerations, so they must revalidate
+# rather than be immutable — a day of edge/browser caching, then a cheap 304.
+/bh-loop.mp4
+  Cache-Control: public, max-age=86400
+/bh-loop.webm
+  Cache-Control: public, max-age=86400
+/bh-poster.jpg
+  Cache-Control: public, max-age=86400
+/assets/*
+  Cache-Control: public, max-age=604800
+/index.html
+  Cache-Control: public, max-age=300
