@@ -32,6 +32,19 @@
       .hud-coords,.hud-ticks{display:none!important}
       .hud-eyebrow{font-size:9px!important;letter-spacing:0.3em!important}
     }
+    /* Short viewports (e.g. phone landscape): scroll instead of clipping.
+       margin:auto keeps the block centered whenever it does fit. */
+    .hero{justify-content:flex-start!important;overflow-y:auto;pointer-events:auto}
+    .hero-inner{margin:auto;padding:40px 0}
+    @media (max-height: 560px){
+      .hero-inner{transform:none!important;padding:28px 0}
+      .hero-inner h1{font-size:clamp(26px,8vh,48px)!important}
+      .hero-inner p{margin-top:16px!important;font-size:14px!important}
+      .hud-eyebrow{display:none!important}
+      .hero-cta{margin-top:24px!important}
+      .hud-coords,.hud-ticks{display:none!important}
+      .hero-inner h1{margin-top:34px!important}
+    }
   </style>
 </head>
 <body>
@@ -84,7 +97,7 @@
     <div class="reveal hud-eyebrow" style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10.2px;letter-spacing:0.4em;color:rgba(178,187,201,0.72);text-transform:uppercase;margin-bottom:34px;">Collection&nbsp;&middot;&nbsp;Modeling&nbsp;&middot;&nbsp;Inference</div>
     <h1 class="reveal reveal-2" style="margin:0;font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:clamp(40px,6.2vw,92px);line-height:1.04;letter-spacing:-0.012em;color:#f3f5f9;max-width:13ch;text-wrap:balance;text-shadow:0 2px 50px rgba(0,0,0,0.6);">The unknown is not unknowable</h1>
     <p class="reveal reveal-2" style="margin:36px 0 0;font-weight:300;font-size:clamp(15px,1.5vw,18px);line-height:1.65;letter-spacing:0.01em;color:rgba(196,203,214,0.78);max-width:52ch;text-shadow:0 1px 30px rgba(0,0,0,0.6);">Arclight Labs builds the intelligence infrastructure to capture what cannot be seen &mdash; collecting across open-source domains and modeling the complex systems that reveal hidden structure, activity, capability, and intent.</p>
-    <div class="reveal reveal-3" style="margin-top:44px;pointer-events:auto;">
+    <div class="reveal reveal-3 hero-cta" style="margin-top:44px;pointer-events:auto;">
       <a href="mailto:access@arclightlabs.io" class="btn-primary">Request&nbsp;Access</a>
     </div>
   </div>
