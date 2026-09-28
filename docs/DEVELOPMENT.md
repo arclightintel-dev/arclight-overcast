@@ -9,8 +9,27 @@
 
 ## Authentication
 
-Current: IAM user `john-admin` with direct credentials.
-Future: IAM Identity Center with Google Workspace SSO (D-059 position 4).
+AWS account `650880817826` ("arclight-complex"), the management account of its
+own AWS Organization. Console sign-in for IAM users:
+`https://650880817826.signin.aws.amazon.com/console`
+
+Root user: `arclightintel@gmail.com` (recovery and account-level settings
+only; credentials live in the password manager, never in this repo).
+IAM users can only see billing if root has turned on "IAM user and role access
+to Billing information" (root → Account → Edit → Activate IAM Access).
+
+| IAM user | Access | Notes |
+|---|---|---|
+| `john-admin` | Console + CLI access keys | Runs Terraform and image builds locally |
+| `sam-admin` | Console only | No access keys; does not run Terraform or the CLI |
+
+Admin permissions come from the IAM group `Administrators`
+(`AdministratorAccess` managed policy). Grant or revoke admin by changing
+group membership, not by attaching policies to users. Every admin user must
+have MFA enabled.
+
+Future: IAM Identity Center with Google Workspace SSO (D-059 position 4),
+which replaces these IAM users.
 
 ## Running Terraform
 
