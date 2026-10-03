@@ -14,6 +14,8 @@ arclight-overcast is the AWS deployment substrate for the Arclight platform. **M
 | ALWAYS | `docs/PROJECT_STATE.md` | Every session — current phase, blockers, next actions |
 | ALWAYS | `docs/CONSTITUTION.md` | Every session — invariants and non-negotiable rules |
 | ALWAYS | `docs/DECISIONS.md` | Every session — check for recent O-series decisions |
+| ALWAYS | `docs/handoff/2026-10-03-handoff.md` | Resume point, dated evidence and uncommitted work |
+| SELECTIVE | `docs/service_registry.md` | Corporate identity, provider connections, vault custody and migration status |
 | SELECTIVE | `docs/V1_ROADMAP.md` | When planning work or checking phase status |
 | SELECTIVE | `docs/CHARTER.md` | When scope questions arise |
 | SELECTIVE | `docs/ARCHITECTURE.md` | When modifying modules or adding infrastructure |
@@ -39,6 +41,12 @@ Overcast owns:
 - A monorepo (Dockerfiles stay in module repos)
 - A secrets store (structure and permissions only — never write secret values into Terraform state)
 - A shadow platform spec
+
+## Corporate and Core integration status
+
+The user selected Entra as the workforce IdP and `ansanalytics.com` as the primary corporate domain. The administrator-owned Entra management bootstrap and dedicated corporate state were verified on 2026-09-30; existing-app ownership/imports, Cloudflare connections and the future GitHub migration remain separate work. Corporate roots are isolated from staging/prod and have validation-only CI. See the service registry for identifiers, permission limits and evidence dates; do not treat an old observation as a current connectivity check.
+
+The completed Core 7G/7F review acknowledges the four-counter 7G contract only. No Overcast sweep caller was found; human/MFA authorization still blocks unattended dispatch. The reviewed 7F custody design remains NO-GO, and the historical Phase 6A memo is withdrawn as implementation guidance. No resolver, STS/IAM mechanism or weaker guarantee was selected. SF consumer analysis waits for B2. The [review receipt](docs/platform-interface/module-feedback/core-phase7-integration-response.md) records exact pins and owner prerequisites.
 
 ## Key rules (earned from real work)
 
@@ -74,6 +82,7 @@ Never implement a new infrastructure module from assumptions. Spec the OS, packa
 ```
 terraform/
   modules/          — reusable Terraform modules (vpc, alb, ecs-cluster, etc.)
+  corporate/        — isolated corporate state and Entra management bootstrap
   envs/
     staging/        — staging environment root (main.tf, variables.tf, outputs.tf, backend.tf)
     prod/           — production environment root (same structure)
@@ -120,5 +129,5 @@ Terraform is at `C:\Tools\terraform.exe`. AWS CLI is at `C:\Program Files\Amazon
 - Account: 650880817826
 - Region: us-east-1
 - State bucket: arclight-terraform-state (S3, per-env state keys)
-- Domain: arclight-complex.net (Cloudflare)
-- GitHub org: arclight-intel
+- Platform service domain: arclight-complex.net (Cloudflare); corporate primary domain: ansanalytics.com (separate DNS connection)
+- Current repository owner: arclightintel-dev; future enterprise/org migration remains pending

@@ -4,11 +4,27 @@
 > **To**: Core (arclight-core), Phase 6A — AWS Secrets Manager backend adapter
 > **Date**: 2026-07-08
 > **Verified against**: Terraform commit 9148a85
-> **Status**: Answers received. Non-blocking for 6A0-6A4. Shapes 6A5 adapter.
+> **Status**: WITHDRAWN as implementation guidance by the 2026-10-01 review; notice recorded 2026-10-03. Original July response preserved below for provenance.
+
+## Correction and current disposition — 2026-10-03
+
+The [Core 7G/7F review receipt](core-phase7-integration-response.md) supersedes this memo's runtime-IAM, TTL and invalidation advice. **7F readiness is NO-GO under the reviewed design.** This withdrawal does not select a replacement mechanism or amend a canonical platform contract. The original `9148a85` reference describes the July review, not the later source baseline `5c3a93c`.
+
+| Historical claim | Correction |
+|---|---|
+| Existing service IAM can resolve the proposed references | The cited `arclight-ecs-exec-*` permissions are ECS execution-role permissions for startup secret injection. Core has no task role bound in the reviewed staging root and uses `local_encrypted`; application runtime authorization still needs an agreed design. |
+| Removing `AWSCURRENT`, overwriting or writing a tombstone immediately invalidates an explicit version | A retained explicit `VersionId` selects that immutable version. Label removal or a new version alone does not deny that read. AWS exposes no direct individual-version deletion operation; whole-secret deletion is a different revocation unit and is not selected. |
+| Core sweeps provide independent reference TTL | No custody expiry/retirement enforcement worker was found in the pinned Core source. Registry expiry is not backend denial, and a Core-only sweep cannot enforce a deadline during Core outage. |
+| ARN/version plus existing IAM proves F004 and selective revocation | Shared locator authorization does not distinguish independent references. AWS supports version conditions, but that alone does not establish service-bound references, per-reference deadlines, selective denial or immediate completion. |
+| STS is the fallback; Core writer permissions are optional | STS remains an unselected alternative. Any AWS adapter needs explicit runtime authority; topology, enforcement and failure semantics require owner decisions before provisioning. |
+
+Primary AWS API references and exact source anchors are in the successor receipt. The July network/live-state statements were not reverified by that read-only review or this documentation update.
 
 ---
 
-## Summary of Decisions
+## Original July response — historical, withdrawn guidance
+
+### Summary of Decisions
 
 | Question | Answer |
 |----------|--------|

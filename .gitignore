@@ -14,6 +14,9 @@ terraform.tfvars
 # Secrets — never commit actual values
 *.pem
 *.key
+*.pfx
+*.p12
+*.dpapi
 .env
 .env.*
 

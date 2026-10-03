@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'terraform/**'
+      - '!terraform/corporate/**'
       - 'services/**/*.tpl'
 
 permissions:

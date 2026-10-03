@@ -1,8 +1,41 @@
 # Project State
 
-> Updated: 2026-07-10 | HEAD: `5f74a55` on `main`
+> Updated: 2026-10-03 | Source baseline: `5c3a93c33e0493f72c5e2aef0c2ce99efb6bdcd5` | Working branch: `docs/drift-reconciliation`
+>
+> Documentation reconciliation only. Corporate access evidence is dated 2026-09-30; the Core review is dated 2026-10-01. No live deployment or provider state was refreshed on 2026-10-03.
 
-## Current phase: Phase 5 (Podbay Deploy) — IN PROGRESS
+## Current handoff
+
+Start with the [2026-10-03 handoff](handoff/2026-10-03-handoff.md), [service registry](service_registry.md), and [Core 7G/7F review receipt](platform-interface/module-feedback/core-phase7-integration-response.md). The July deployment snapshot below is retained as history, not current operational acceptance.
+
+| Workstream | Disposition | Remaining work / owner |
+|---|---|---|
+| Corporate Entra management | Initial bootstrap complete as observed 2026-09-30 | Overcast + administrator: choose specific existing applications for ownership/import and verify automation writes. Current permission does not grant general directory administration. |
+| Cloudflare connections | Incomplete | Overcast + administrator: resolve hosting inventory permissions, account/domain ownership and Entra Access/dashboard connections; reconcile existing Terraform adoption work. |
+| GitHub enterprise transition | Deferred | Owner: supply enterprise/org identifiers and account model. Current repositories and deployment trust remain the active source. |
+| Shared deployment vault | Recommendation only | Owner + Overcast: choose custody, consumer permissions and rotation/recovery. AWS Secrets Manager is recommended in the registry; no migration is complete. |
+| Core 7G review | GO for source-contract acknowledgment; NO-GO for unattended dispatch | Inventory found no Overcast caller/scheduler in inspected repository paths. Core + Complex must select the unattended authority model before Overcast implements a caller. |
+| Core 7F/B2 custody | NO-GO under the reviewed design | Core + Complex own enforcement/completion amendments; Overcast supplied infrastructure options. SF consumer work remains deferred until B2. |
+| Deployment model / CI debt | Open; July runtime claims not refreshed | Overcast: resume deployment-model scoping after the corporate connection work; verify actual CI behavior before asserting a repair or current failure. |
+
+The bounded 7G/7F investigation was delivered and acknowledged by Complex in the coordination task. The locally available platform record at `745ec876` still says the response is pending; a committed receipt update was not verified. This difference concerns publication of the receipt, not reopening the completed investigation or accepting a custody mechanism.
+
+## Next actions
+
+1. This delivery includes the earlier corporate Terraform, scripts, CI and registry changes alongside the governance handoff. The user subsequently requested push and merge to `main`; inspect Git/PR status when resuming rather than treating the handoff's pre-publication working-tree inventory as current. Publishing source does not apply the corporate configuration again.
+2. Continue the user's corporate priority: finish the selected Entra application connections and Cloudflare inventory/federation/Terraform adoption. Reuse the established management identity; do not repeat its already completed consent grant merely to reconnect.
+3. Keep 7G scheduling blocked on Core/Complex's authority decision and separately authorized rollout evidence. Keep 7F blocked on the custody amendment; do not start a parallel SF task before B2.
+4. Carry deployment-model/CI debt forward without opportunistic workflow changes. Repository migration, new privileges, secret migration, DNS/SSO changes and operational deployment are not outcomes of this documentation task.
+
+## Corporate management evidence — 2026-09-30
+
+The user requested Microsoft Entra management access and Terraform ownership before further infrastructure work. Azure CLI/Graph access is verified for `ANS Analytics LLC`, tenant `27564b9c-b516-4bc4-9aa5-5692a38a1116`, administrator `john@arclightlabs.io`, default domain `ansanalytics.com`. Entra supersedes the historical Google Workspace workforce-IdP direction below.
+
+The dedicated corporate Terraform backend and management identity were provisioned under `terraform/corporate/`; authenticated post-apply plans returned no changes on that date. The user-approved `Application.ReadWrite.OwnedBy` grant was verified, and a certificate-authenticated application session successfully read 7 application registrations and 364 service principals. Existing Core applications and staging/prod infrastructure were outside this bootstrap; automation ownership/imports and writes to existing applications remain subsequent work. See [service registry](service_registry.md), [design](specs/entra-management.md), and [runbook](runbooks/manage-entra.md) for dated evidence and scope. The deployment snapshot below has not been refreshed by this identity or documentation work.
+
+## Historical deployment snapshot — 2026-07-10
+
+Recorded phase: Phase 5 (Podbay Deploy), in progress at `5f74a55`. All live-state language, image tags, resource counts and external blockers in this section describe that July session. Recheck the relevant service before relying on them operationally. The Google Workspace workforce-IdP direction is superseded by Entra; the old Core Phase 6A custody guidance is withdrawn below and in its source memo.
 
 ### Phase summary
 
@@ -61,7 +94,7 @@ The fix is folded into the deployment-model rework (see Next actions), not patch
 | ShuttleForge deploy | PostgreSQL support in arclight-shuttleforge | ShuttleForge |
 | IAM Identity Center | Google Workspace subscription | Owner (manual) |
 
-### Next actions (priority order)
+### July next actions (historical)
 
 1. **Deployment model definition (scoping)** — next-session research brief across GitHub + AWS + Terraform to define a definitive deployment / staging / CI model, *before* any more ad-hoc CI fixes.
 2. **Cloudflare Terraform transfer** — codify Cloudflare into Terraform; stashed work from a parallel session at `stash@{0}`. Highest-value infrastructure-unification item.
@@ -79,5 +112,5 @@ Waiting on external owners (tracked in Blockers): Podbay E2E (Podbay-side worksp
 ### Open items from arclight-complex
 
 - Infrastructure unification scoping (research complete, implementation pending)
-- Core Phase 6A SM backend — response memorialized, awaiting 6A5
+- Core Phase 6A SM backend — July response memorialized; its authorization/invalidation guidance is now withdrawn by the [7G/7F receipt](platform-interface/module-feedback/core-phase7-integration-response.md). 7F remains NO-GO.
 - Platform Operations Model — ratified, Overcast aligned
