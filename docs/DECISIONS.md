@@ -22,7 +22,7 @@ bootstrap.sql and entrypoint.sh must use an `ENVIRONMENT` variable for all role/
 
 Self-hosted coturn on EC2 t3.micro with Elastic IP, per-environment. Twilio rejected because media relay metadata is an unnecessary external surface.
 
-**Status**: Module exists at `terraform/modules/coturn/` but is NOT WIRED. Rolled back after 4 failed apply cycles due to unspec'd OS/package/systemd interactions. Needs proper spec before reimplementation.
+**Historical status at `d441a5d`**: Rolled back after 4 failed apply cycles due to unspec'd OS/package/systemd interactions; specification was required before reimplementation. This is not the current wiring status: `terraform/envs/staging/main.tf:934` at `5c3a93c` wires the coturn module. The July 10 deployment snapshot records subsequent deployment; this documentation reconciliation does not reverify it live.
 
 ---
 
@@ -46,7 +46,7 @@ INFRASTRUCTURE_SPEC originally said Podbay controller runs on EC2 capacity provi
 - `deploy-service.yml` (workflow_dispatch) — manual service deploy
 - `build-and-push-image.yml` (workflow_dispatch) — Overcast-owned images only (dbbootstrap)
 
-Module repos own build/test. Overcast owns deploy. No cross-repo workflow triggers.
+Module repos own build/test. Overcast owns deploy. The original restriction on cross-repo workflow triggers was extended by O-009's `repository_dispatch` deployment path.
 
 ---
 
@@ -86,7 +86,7 @@ Account-level resources (ECR repos, GitHub OIDC provider, CloudTrail, budget) ar
 
 dbbootstrap image uses fixed version tags (v1, v5). NOT git SHA tags. ECR immutable tags mean wasted tags (v2-v4 during CRLF/AL2023 debugging) are permanent.
 
-Current image: `arclight/dbbootstrap:v5` (parameterized for multi-environment).
+Image recorded on 2026-07-02: `arclight/dbbootstrap:v5` (parameterized for multi-environment).
 
 ---
 
@@ -107,3 +107,27 @@ Current image: `arclight/dbbootstrap:v5` (parameterized for multi-environment).
 **Prod**: staging only. Prod deploys remain operator-applied per D-059 §6 until a manual-approval gate is added.
 
 **Auto-apply status (debt, 2026-07-10)**: The *auto-apply* half of the CI/CD model — `terraform-apply.yml` (auto-apply staging on merge, per O-004) — is currently NON-FUNCTIONAL: CI's pinned Terraform (`~> 1.5`) rejects a cross-variable `validation` block, and `core_image_tag` has no default while `terraform.tfvars` is gitignored, leaving CI no value to plan with. Applies this session were run manually with admin credentials. A definitive deployment / staging / CI model is being scoped next session and the fix lands with that rework — tracked debt, not a ratified O-decision.
+
+**Evidence qualification, 2026-10-03**: The preceding paragraph preserves the July failure report. The workflows still contain the version constraint and staging input requirements, but the resolved CI version and present failure status were not tested in this documentation update. Do not infer the exact installed Terraform version from the constraint alone. The deployment-model repair remains open; corporate path exclusions are not that repair.
+
+---
+
+## O-010: Separate corporate identity bootstrap and state
+
+**Decision / execution date**: 2026-09-30 | **Recorded here**: 2026-10-03 | **Authority**: User-directed Entra management setup and explicit approval of the single Graph grant.
+
+Corporate identity configuration lives under `terraform/corporate/`, outside staging/prod roots. Its backend is `arclight-corporate-terraform-state-650880817826`, with distinct `state/terraform.tfstate` and `entra/bootstrap/terraform.tfstate` keys. This adds a corporate boundary to O-006; it does not move existing shared deployment resources or grant staging roles access to corporate state.
+
+The bootstrap identity remains administrator-owned and human-administered. Terraform stores only its public certificate and declares `Application.ReadWrite.OwnedBy`; administrator consent is separate and was granted after user approval. Private certificate material and passwords stay outside the repository/state. Later automation-managed application configuration belongs in a separate root with deliberately assigned ownership and individually reviewed imports. The bootstrap does not grant user/group/role/Conditional Access or subscription administration.
+
+Corporate CI performs validation and mocked boundary tests without credentials or backend access. Existing staging plan/apply workflows exclude corporate paths; no corporate auto-apply is enabled. These are source properties, not evidence of a hosted CI run.
+
+**Evidence**: September 30 provisioning, authenticated no-change plans and certificate-authenticated inventory reads are recorded in the [service registry](service_registry.md). No live check or additional apply occurred during this documentation update. See the [management design](specs/entra-management.md) and [runbook](runbooks/manage-entra.md).
+
+## Core coordination disposition — not a new mechanism decision
+
+**Review date**: 2026-10-01 | **Recorded here**: 2026-10-03.
+
+The [7G/7F receipt](platform-interface/module-feedback/core-phase7-integration-response.md) records GO for the 7G source-contract acknowledgment, NO-GO for unattended scheduling and NO-GO for the reviewed 7F custody design. The historical [Phase 6A response](platform-interface/module-feedback/core-phase6a-sm-backend-response.md) is withdrawn as implementation guidance: startup execution-role access and version labels do not establish the promised runtime grant enforcement.
+
+Core owns custody semantics and truthful completion/retry; Complex owns contract amendments; Overcast owns an agreed infrastructure realization; SF owns eventual B2 consumption. No resolver, STS/IAM mutation, duplication/deletion mechanism, new privilege or weaker staleness guarantee is selected. SF analysis remains deferred until B2, and 7F is separate from B1 and 7G. Source acknowledgment does not authorize migration, deployment or scheduling.

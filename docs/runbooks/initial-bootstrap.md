@@ -51,55 +51,80 @@ aws s3api put-public-access-block \
     BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 ```
 
-### 2.2 DynamoDB table for state locking
-```bash
-aws dynamodb create-table \
-  --table-name arclight-terraform-locks \
-  --attribute-definitions AttributeName=LockID,AttributeType=S \
-  --key-schema AttributeName=LockID,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST \
-  --region us-east-1
-```
+### 2.2 State locking — S3 native lockfile (no DynamoDB)
 
-### 2.3 Uncomment backend config
-After creating the bucket and table, uncomment the `backend "s3"` block in
-`terraform/envs/staging/backend.tf` and run `terraform init`.
+The backend uses S3 native lockfile locking (`use_lockfile = true` in
+`terraform/envs/staging/backend.tf`), **not** a DynamoDB lock table. There is no
+`arclight-terraform-locks` table to create — bucket versioning (2.1) plus the
+native lockfile provide locking. If you are on an older Terraform that predates
+`use_lockfile`, upgrade rather than adding DynamoDB.
+
+### 2.3 Backend config
+
+`backend.tf` ships with the `backend "s3"` block active (bucket
+`arclight-terraform-state`, key `staging/terraform.tfstate`, `use_lockfile = true`).
+After the bucket exists, run `terraform init`.
 
 ## Step 3: Initial Resources
 
-### 3.1 Route 53 hosted zone
+> **DNS is Cloudflare, not Route 53.** `arclight-complex.net` is hosted on
+> Cloudflare (see CLAUDE.md). Overcast does **not** create a Route 53 hosted zone;
+> `terraform/envs/staging/main.tf` reads the ACM cert via a `data` source and
+> restricts ALB ingress to Cloudflare IP ranges. The Route 53 steps below are
+> retained only as a generic reference for a Route 53-hosted domain — for the
+> live setup, do the DNS/validation work in Cloudflare.
+
+### 3.1 Hosted zone (Cloudflare, or Route 53 if self-hosting DNS)
+For the live domain, the zone already exists in Cloudflare — nothing to create.
+(Route 53 alternative, only if you host DNS in AWS:)
 ```bash
 aws route53 create-hosted-zone \
   --name <your-domain> \
   --caller-reference $(date +%s)
 ```
-Note the NS records — you'll need them for DNS delegation.
 
 ### 3.2 ACM certificate
+The staging cert is `*.staging.<domain>` (+ the apex as SAN), DNS-validated.
 ```bash
 aws acm request-certificate \
-  --domain-name "*.<your-domain>" \
-  --subject-alternative-names "<your-domain>" \
+  --domain-name "*.staging.<your-domain>" \
+  --subject-alternative-names "staging.<your-domain>" \
   --validation-method DNS \
   --region us-east-1
 ```
-Add the CNAME validation records to Route 53 (or your registrar).
+Add the CNAME validation records **in Cloudflare** (for the live domain), then
+wait for status `ISSUED`. `main.tf` consumes the issued cert via
+`data "aws_acm_certificate"`.
 
 ### 3.3 ECR repositories
-```bash
-for repo in arclight/core arclight/shuttleforge arclight/podbay arclight/podbay-workspace-browser; do
-  aws ecr create-repository \
-    --repository-name "$repo" \
-    --image-scanning-configuration scanOnPush=true \
-    --region us-east-1
-done
-```
+ECR repos are **Terraform-managed** (`module.ecr`, wired in `main.tf`) and are
+created by the first `terraform apply` (Step 4) — you normally do not create them
+by hand. The managed set includes `arclight/core`, `arclight/shuttleforge`,
+`arclight/podbay`, `arclight/podbay-workspace-browser`, `arclight/nerfherder`, and `arclight/dbbootstrap`.
+Manual creation is only needed to bootstrap an image (e.g. `dbbootstrap`) before
+the first apply.
 
 ### 3.4 DNS delegation
-If domain registered outside Route 53: add the NS records from step 3.1
-to your registrar's DNS settings. Allow up to 48h for propagation.
+For a Cloudflare-hosted domain, ensure the registrar points to Cloudflare's
+nameservers (one-time, already done for the live domain). No Route 53 delegation
+is used.
 
 ## Step 4: First Terraform Run
+
+> **Applies are currently manual.** The `terraform-apply.yml` CI auto-apply
+> (push to `main`) is **not operational** right now — every apply this cycle was
+> run locally. `terraform.tfvars` is gitignored (holds the real values), so the
+> local working copy is the source of truth for apply:
+>
+> ```
+> cd terraform/envs/staging
+> C:\Tools\terraform.exe apply
+> ```
+>
+> Both `terraform-plan.yml` and `terraform-apply.yml` are currently broken
+> in CI (same root cause — cross-variable validation block rejected by CI's
+> pinned Terraform `~> 1.5`). Do not assume any CI pipeline runs until the
+> deployment-model rework lands.
 
 ```bash
 cd terraform/envs/staging

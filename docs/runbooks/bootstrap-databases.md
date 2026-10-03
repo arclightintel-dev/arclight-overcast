@@ -11,16 +11,25 @@ Creates per-service databases and roles on the RDS instance via a Fargate one-of
 
 ## Step 1: Build and push bootstrap image
 
+> **Current pinned tag: `v5`.** The `arclight-dbbootstrap-staging` and
+> `arclight-dbverify-svc-staging` task definitions both pin `:v5`
+> (`terraform/envs/staging/main.tf`; verified against the live task defs).
+> The image has been rebuilt several times (v1→v5) to fix the entrypoint.
+> **ECR tags are immutable** — you cannot overwrite an existing tag. To rebuild,
+> bump to the next tag (`v6`), push it, and update the two `image = "...:v5"`
+> references in `main.tf`, then `terraform apply`. If `v5` is already present in
+> ECR, skip this step and go to Step 2.
+
 ```bash
 cd services/dbbootstrap/
-docker build -t arclight/dbbootstrap:v1 .
+docker build -t arclight/dbbootstrap:v5 .
 
 aws ecr get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin 650880817826.dkr.ecr.us-east-1.amazonaws.com
 
-docker tag arclight/dbbootstrap:v1 \
-  650880817826.dkr.ecr.us-east-1.amazonaws.com/arclight/dbbootstrap:v1
-docker push 650880817826.dkr.ecr.us-east-1.amazonaws.com/arclight/dbbootstrap:v1
+docker tag arclight/dbbootstrap:v5 \
+  650880817826.dkr.ecr.us-east-1.amazonaws.com/arclight/dbbootstrap:v5
+docker push 650880817826.dkr.ecr.us-east-1.amazonaws.com/arclight/dbbootstrap:v5
 ```
 
 ## Step 2: Populate temporary bootstrap password secrets
@@ -60,7 +69,7 @@ aws secretsmanager put-secret-value \
 Verify image and secrets exist before running the task:
 
 ```bash
-aws ecr describe-images --repository-name arclight/dbbootstrap --image-ids imageTag=v1
+aws ecr describe-images --repository-name arclight/dbbootstrap --image-ids imageTag=v5
 
 for secret in core-db-password shuttleforge-db-password podbay-db-password nerfherder-db-password; do
   aws secretsmanager get-secret-value \
@@ -154,7 +163,14 @@ Expected: databases and roles exist, CREATE/DROP TABLE succeeds in each database
 
 ## Step 6: Populate DATABASE_URL secrets
 
-Reload passwords from the protected file, then construct connection strings:
+Reload passwords from the protected file, then construct connection strings.
+
+> **Driver-prefix caution:** these strings use the bare `postgresql://` scheme
+> (accepted by the `verify-service` psql check in Step 7). Some service runtimes
+> expect a driver-qualified scheme such as `postgresql+asyncpg://` (see
+> `deploy-service.md` / `rotate-secrets.md`). Confirm the exact scheme each
+> consuming module requires before treating these values as final — the secret
+> name is authoritative (`terraform/modules/secrets/main.tf`), the scheme is not.
 
 ```bash
 source /tmp/arclight-phase0-db.env

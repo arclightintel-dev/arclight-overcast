@@ -50,7 +50,14 @@ Never implement a new infrastructure module from assumptions. Spec the following
 | TURN server design | D-062 | arclight-complex |
 | Terraform state (staging) | S3 backend | arclight-terraform-state/staging/ |
 | Terraform state (prod) | S3 backend | arclight-terraform-state/prod/ |
+| Corporate Terraform state | Dedicated S3 backend | arclight-corporate-terraform-state-650880817826; state/terraform.tfstate and entra/bootstrap/terraform.tfstate |
 | Secret values | AWS Secrets Manager | Never in git or Terraform state |
+| Provider inventory and connection evidence | docs/service_registry.md | Account boundaries, dated observations and pending connections; identifiers/references only |
+| Corporate identity bootstrap | docs/specs/entra-management.md + docs/runbooks/manage-entra.md | Administrator-owned identity; public certificate only in Terraform; no self-granted Graph authority |
 | Overcast decisions | O-series | docs/DECISIONS.md (this repo) |
 | Phase status | docs/PROJECT_STATE.md | This repo |
+| Current handoff | docs/handoff/2026-10-03-handoff.md | Resume order, uncommitted work and evidence limits |
+| Core 7G/7F coordination receipt | docs/platform-interface/module-feedback/core-phase7-integration-response.md | Local review evidence; canonical contracts and mechanism selection remain in arclight-complex |
 | Module boundaries | docs/CHARTER.md | This repo (reference copy) |
+
+The secret-values row describes existing AWS application custody. Centralizing cross-provider deployment credentials in that vault remains a recommendation in the registry, not a completed migration. Entra private certificate material remains outside the repository and Terraform state under the management runbook's recovery boundary.

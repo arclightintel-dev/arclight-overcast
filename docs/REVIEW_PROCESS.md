@@ -13,7 +13,13 @@
 | Runbook changes | claude-core | hotpants (operational) |
 | CI/CD workflow changes | claude-core | codex-2 |
 
-## Review protocol
+## Documentation-only validation
+
+Governance reconciliation and handoffs that do not change executable configuration use source/document checks: inspect applicable instructions and immutable evidence, check the diff and local links, and obtain a focused contract/ownership review where claims cross repositories. Do not run cloud-authenticated plans, apply infrastructure or exercise mutating endpoints solely to validate prose.
+
+State what was newly checked, what is dated prior evidence, and what remains unverified. Preserve uncommitted work and use an explicit file allowlist for any later commit. Source-contract acknowledgment is not deployment or runtime acceptance.
+
+## Infrastructure implementation protocol
 
 1. **Implement** — write the code
 2. **Self-verify** — `terraform validate`, `terraform fmt`, `terraform plan` for both staging AND prod
@@ -21,7 +27,7 @@
 4. **Fix findings** — address all FAIL items before external review
 5. **External review** — provide prompts with required reading, specific checks, and GO/NO-GO gate
 6. **Fix external findings** — address all FAIL items
-7. **Apply** — `terraform apply` after all reviewers are GO
+7. **Apply** — `terraform apply` within the user's authorized scope, against the reviewed target/plan, after all required reviewers are GO. Review GO alone does not authorize an operation.
 
 ## Review prompt template
 
