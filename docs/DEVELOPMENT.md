@@ -9,27 +9,40 @@
 
 ## Authentication
 
-AWS account `650880817826` ("arclight-complex"), the management account of its
-own AWS Organization. Console sign-in for IAM users:
-`https://650880817826.signin.aws.amazon.com/console`
+AWS account `650880817826` is the management account of AWS Organization
+`o-626c11uior`; the organization's management email is `arclightintel@gmail.com`.
+Console sign-in for IAM users: `https://650880817826.signin.aws.amazon.com/console`.
+No account alias is set. The account display name was not verified from the CLI.
 
-Root user: `arclightintel@gmail.com` (recovery and account-level settings
-only; credentials live in the password manager, never in this repo).
-IAM users can only see billing if root has turned on "IAM user and role access
-to Billing information" (root → Account → Edit → Activate IAM Access).
+Root user: recovery and account-level settings only. Credentials live in the
+password manager, never in this repo. Root MFA is enabled. IAM users can only
+see billing if root has turned on "IAM user and role access to Billing
+information" (root → Account → Edit → Activate IAM Access); this setting was
+not inspected.
 
-| IAM user | Access | Notes |
-|---|---|---|
-| `john-admin` | Console + CLI access keys | Runs Terraform and image builds locally |
-| `sam-admin` | Console only | No access keys; does not run Terraform or the CLI |
+IAM inventory observed 2026-10-05 (read-only `iam list-*`/`get-*` calls as
+`john-admin`; re-verify before relying on it):
 
-Admin permissions come from the IAM group `Administrators`
-(`AdministratorAccess` managed policy). Grant or revoke admin by changing
-group membership, not by attaching policies to users. Every admin user must
-have MFA enabled.
+| IAM user | Created | Access | MFA | Permissions |
+|---|---|---|---|---|
+| `john-admin` | 2026-06-23 | Console + one active access key | Yes | `Administrators` group **and** a direct `AdministratorAccess` attachment |
+| `sam-admin` | 2026-09-28 | Console only, no access keys | **No** | `Administrators` group + direct `IAMUserChangePassword` |
+| `arclight-dev` | 2026-06-23 | Console profile, no access keys, never signed in | No | None (no groups, no policies) |
 
-Future: IAM Identity Center with Google Workspace SSO (D-059 position 4),
-which replaces these IAM users.
+The `Administrators` group carries `AdministratorAccess`,
+`AWSManagementConsoleAdministratorAccess` and
+`AWSManagementConsoleBasicUserAccess`.
+
+Intended practice: grant or revoke admin by changing group membership, not by
+attaching policies to users, and require MFA on every admin user. The
+inventory above shows two deviations (the direct attachment on `john-admin`,
+no MFA device on `sam-admin`) and one orphan (`arclight-dev`). Resolving them
+is an operator decision, not something Terraform manages today.
+
+Future: IAM Identity Center federated to Microsoft Entra ID (D-059 position 4,
+Entra superseded the earlier Google Workspace direction) replaces these IAM
+users. No Identity Center instance has been located yet; see the
+[service registry](service_registry.md).
 
 ## Running Terraform
 

@@ -1,8 +1,8 @@
 # Project State
 
-> Updated: 2026-10-03 | Source baseline: `5c3a93c33e0493f72c5e2aef0c2ce99efb6bdcd5` | Working branch: `docs/drift-reconciliation`
+> Updated: 2026-10-05 | Source baseline: `00c93d8` (PR #6 merged) | Working branch: `chore/cleanup-2026-10-05`
 >
-> Documentation reconciliation only. Corporate access evidence is dated 2026-09-30; the Core review is dated 2026-10-01. No live deployment or provider state was refreshed on 2026-10-03.
+> Checkout cleanup and read-only observations only. Corporate access evidence is dated 2026-09-30; the Core review is dated 2026-10-01. On 2026-10-05 the only live calls were read-only AWS IAM/Organizations reads and a fresh Entra Graph credential read (see below); no deployment, apply or provider configuration changed.
 
 ## Current handoff
 
@@ -19,6 +19,16 @@ Start with the [2026-10-03 handoff](handoff/2026-10-03-handoff.md), [service reg
 | Deployment model / CI debt | Open; July runtime claims not refreshed | Overcast: resume deployment-model scoping after the corporate connection work; verify actual CI behavior before asserting a repair or current failure. |
 
 The bounded 7G/7F investigation was delivered and acknowledged by Complex in the coordination task. The locally available platform record at `745ec876` still says the response is pending; a committed receipt update was not verified. This difference concerns publication of the receipt, not reopening the completed investigation or accepting a custody mechanism.
+
+## Checkout cleanup and observations — 2026-10-05
+
+- PR #6 is merged at `00c93d8`; its Terraform Corporate Validate checks passed. The **Cloudflare Pages** check (project `arclight-labs`, account CF-01) failed on both the PR and the merge commit. The project builds this repository on push; its logs are only reachable from the Cloudflare dashboard, which the current API tokens cannot list (403). Cause not established. Record under the Cloudflare hosting connection in the [service registry](service_registry.md).
+- The July Cloudflare adoption stash was moved unchanged to branch `cloudflare-adoption` (commit `3d2e57c`, pushed). It is **not** for merge: the provider needs `CLOUDFLARE_API_TOKEN` at plan time, the ALB hostname is hardcoded, and the Access policy is not adopted. The stash entry itself is left for the operator to drop after confirming the branch.
+- Six fully merged local branches (`claude-dev-worskspaces`, `coturn-reimpl`, `docs/drift-reconciliation`, `fix/ecs-taskdef-json-churn`, `podbay-controller-wiring`, `v2`) and five merged remote twins are candidates for deletion by the operator. `origin/gh-pages` (the GitHub Pages site, separate lineage) and `origin/claude/gh-pages-work-4gdos8` (PR #5) are not.
+- PR #5's account documentation was folded into [DEVELOPMENT.md](DEVELOPMENT.md) after read-only IAM corroboration. Deviations found: `john-admin` has a direct `AdministratorAccess` attachment in addition to group membership; `sam-admin` has no MFA device; an orphan console user `arclight-dev` (no keys, no policies, never signed in) exists since 2026-06-23. Operator decisions, not Terraform-managed.
+- A fresh Graph read by codex astra on 2026-10-05 confirmed one certificate, zero secrets and the single original Graph grant on the Entra management application.
+- `terraform fmt -check` reports four pre-existing unformatted files under `terraform/` on `main` (`envs/staging/main.tf`, `envs/staging/variables.tf`, `modules/coturn/main.tf`, `modules/iam-github-oidc/main.tf`). Left untouched here because any `terraform/**` change on `main` triggers the broken auto-apply workflow; fold into the deployment-model work.
+- `demo/eval/*` nested repositories remain untouched and dirty (three carry local modifications the gitlinks do not preserve). Disposition pending.
 
 ## Next actions
 
