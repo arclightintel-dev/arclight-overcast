@@ -27,7 +27,7 @@ IAM inventory observed 2026-10-05 (read-only `iam list-*`/`get-*` calls as
 |---|---|---|---|---|
 | `john-admin` | 2026-06-23 | Console + one active access key | Yes | `Administrators` group **and** a direct `AdministratorAccess` attachment |
 | `sam-admin` | 2026-09-28 | Console only, no access keys | **No** | `Administrators` group + direct `IAMUserChangePassword` |
-| `arclight-dev` | 2026-06-23 | Console profile, no access keys, never signed in | No | None (no groups, no policies) |
+| `arclight-dev` | 2026-06-23 | Console profile, no access keys, never signed in | No | None (no groups, no policies). Owner's personal account, per the owner on 2026-10-05 |
 
 The `Administrators` group carries `AdministratorAccess`,
 `AWSManagementConsoleAdministratorAccess` and
@@ -36,8 +36,9 @@ The `Administrators` group carries `AdministratorAccess`,
 Intended practice: grant or revoke admin by changing group membership, not by
 attaching policies to users, and require MFA on every admin user. The
 inventory above shows two deviations (the direct attachment on `john-admin`,
-no MFA device on `sam-admin`) and one orphan (`arclight-dev`). Resolving them
-is an operator decision, not something Terraform manages today.
+no MFA device on `sam-admin`). `arclight-dev` is the owner's personal
+console account with no permissions assigned; whether it needs any is the
+owner's call. None of this is Terraform-managed today.
 
 Future: IAM Identity Center federated to Microsoft Entra ID (D-059 position 4,
 Entra superseded the earlier Google Workspace direction) replaces these IAM
