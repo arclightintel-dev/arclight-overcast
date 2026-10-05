@@ -28,7 +28,3 @@ Thumbs.db
 *.swp
 *.swo
 
-# Demo site (has its own .gitignore)
-demo/node_modules/
-demo/dist/
-demo/dist-ssr/

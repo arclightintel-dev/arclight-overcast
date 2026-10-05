@@ -24,7 +24,6 @@ terraform/
 services/        # ECS task definition templates per module
 docs/            # Charter, architecture decisions, runbooks
 .github/         # CI/CD workflows
-demo/            # Archived blackhole-hero visual demo
 ```
 
 ## Governing documents
