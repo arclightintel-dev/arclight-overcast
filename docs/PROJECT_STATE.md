@@ -30,6 +30,20 @@ The bounded 7G/7F investigation was delivered and acknowledged by Complex in the
 - `terraform fmt -check` reports four pre-existing unformatted files under `terraform/` on `main` (`envs/staging/main.tf`, `envs/staging/variables.tf`, `modules/coturn/main.tf`, `modules/iam-github-oidc/main.tf`). Left untouched here because any `terraform/**` change on `main` triggers the broken auto-apply workflow; fold into the deployment-model work.
 - `demo/` (earlier React+Vite landing page plus four third-party black-hole shader clones under `demo/eval`) was archived out of the repository on 2026-10-05 to `C:\Projects\_archive\arclight-overcast-demo` with its untracked content and local edits intact; history retains the tracked files. The live website is the `gh-pages` branch, built by Cloudflare Pages project `arclight-labs` (production branch `gh-pages`); its failing checks on `main` are preview builds of a branch with no site, to be disabled in the Pages dashboard.
 
+## Debt register
+
+Open items that are known, bounded and deliberately not being worked. Each row names an owner and the trigger that reopens it. Add rows here when deferring; remove rows when the fix merges or the item is formally dropped.
+
+| # | Item | Evidence | Owner | Reopen when |
+|---|---|---|---|---|
+| DR-1 | CI `terraform-plan.yml` / `terraform-apply.yml` non-functional (version constraint vs cross-variable validation; no-default variables with gitignored tfvars). Not re-tested since 2026-07-11. | Known debt section below; O-009 | Overcast | Deployment-model scoping (after corporate connections) |
+| DR-2 | `terraform fmt -check` fails on four files under `terraform/` on `main` (`envs/staging/main.tf`, `envs/staging/variables.tf`, `modules/coturn/main.tf`, `modules/iam-github-oidc/main.tf`). Left alone because any `terraform/**` change on `main` triggers the broken auto-apply. | 2026-10-05 local check | Overcast | Same change set as DR-1 |
+| DR-3 | IAM user `sam-admin` has no MFA device; `john-admin` carries a direct `AdministratorAccess` attachment in addition to `Administrators` group membership. Owner declared not a concern for now (2026-10-16). | [DEVELOPMENT.md](DEVELOPMENT.md) inventory, 2026-10-05 | Owner | Identity Center / Entra federation replaces IAM users, or earlier at owner discretion |
+| DR-4 | Cloudflare Pages project `arclight-labs` (CF-01) builds preview deployments for every non-`gh-pages` push and fails each time, leaving a red check on every `main` commit. The CF-01 API token lacks Pages permission (HTTP 403 on project read), so this cannot be changed from here. | PR #6, #7, #9, #10 checks | Owner (dashboard) or Overcast once token gains `Cloudflare Pages: Edit` | Disable preview deployments or restrict them to `gh-pages`; then record the project in the registry |
+| DR-5 | GitHub Pages also deploys `gh-pages` to `arclightintel-dev.github.io/arclight-overcast`, a redundant public copy of the site. | Repo Pages config, 2026-10-05 | Owner | Any website change |
+| DR-6 | The public website lives on the orphan `gh-pages` branch of the infrastructure repo. Owner decision 2026-10-16: keep it there for now. | gh-pages = Cloudflare Pages production branch | Owner | Next substantive website work; candidate for a dedicated site repo |
+| DR-7 | `cloudflare-adoption` branch holds unreviewed Cloudflare Terraform adoption (hardcoded ALB hostname, Access policy not adopted, provider needs `CLOUDFLARE_API_TOKEN` at plan time). Not for merge. | branch `cloudflare-adoption` | Overcast | Cloudflare Terraform workstream (after Entra application connections) |
+
 ## Next actions
 
 1. This delivery includes the earlier corporate Terraform, scripts, CI and registry changes alongside the governance handoff. The user subsequently requested push and merge to `main`; inspect Git/PR status when resuming rather than treating the handoff's pre-publication working-tree inventory as current. Publishing source does not apply the corporate configuration again.
