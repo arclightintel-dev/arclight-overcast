@@ -15,6 +15,7 @@ Start with the [2026-10-03 handoff](handoff/2026-10-03-handoff.md), [service reg
 | GitHub enterprise transition | Deferred | Owner: supply enterprise/org identifiers and account model. Current repositories and deployment trust remain the active source. |
 | Shared deployment vault | Recommendation only | Owner + Overcast: choose custody, consumer permissions and rotation/recovery. AWS Secrets Manager is recommended in the registry; no migration is complete. |
 | Core 7G review | GO for source-contract acknowledgment; NO-GO for unattended dispatch | Inventory found no Overcast caller/scheduler in inspected repository paths. Core + Complex must select the unattended authority model before Overcast implements a caller. |
+| ShuttleForge deployment manifest (v1 exit item 4) | ACCEPT-WITH-CHANGES, 2026-10-20 | SF: six manifest defects (M-1..M-6, DNS namespace and policy-file delivery the blocking ones). Overcast: O-1..O-5 (dataplane SG rules, singleton rollout knobs, digest deploys, template refresh, prod push-role trust). D-059 §6 attestation not available until the staging restore drill is run. See the [receipt](platform-interface/module-feedback/shuttleforge-deployment-manifest-response.md). |
 | Core 7F/B2 custody | NO-GO under the reviewed design | Core + Complex own enforcement/completion amendments; Overcast supplied infrastructure options. SF consumer work remains deferred until B2. |
 | Deployment model / CI debt | Open; July runtime claims not refreshed | Overcast: resume deployment-model scoping after the corporate connection work; verify actual CI behavior before asserting a repair or current failure. |
 
@@ -43,6 +44,7 @@ Open items that are known, bounded and deliberately not being worked. Each row n
 | DR-5 | GitHub Pages also deploys `gh-pages` to `arclightintel-dev.github.io/arclight-overcast`, a redundant public copy of the site. | Repo Pages config, 2026-10-05 | Owner | Any website change |
 | DR-6 | The public website lives on the orphan `gh-pages` branch of the infrastructure repo. Owner decision 2026-10-16: keep it there for now. | gh-pages = Cloudflare Pages production branch | Owner | Next substantive website work; candidate for a dedicated site repo |
 | DR-7 | `cloudflare-adoption` branch holds unreviewed Cloudflare Terraform adoption (hardcoded ALB hostname, Access policy not adopted, provider needs `CLOUDFLARE_API_TOKEN` at plan time). Not for merge. | branch `cloudflare-adoption` | Overcast | Cloudflare Terraform workstream (after Entra application connections) |
+| DR-8 | `arclight-shuttleforge-ecr-push-prod` trusts `repo:arclight-intel/arclight-shuttleforge`, the obsolete owner; the staging twin trusts `arclightintel-dev`. Prod image pushes from SF will fail until the trust is updated. Likely the same for core/podbay prod roles (not read). | IAM read 2026-10-20 | Overcast | Before any prod image push; fold into the deployment-model work or fix with the prod root's next operator apply |
 
 ## Next actions
 
