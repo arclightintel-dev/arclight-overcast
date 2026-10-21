@@ -121,7 +121,9 @@ Second service. Depends on arclight-shuttleforge adding PostgreSQL support.
 
 ---
 
-## Phase 5: Podbay Deploy
+## Phase 5: Podbay Deploy — WITHDRAWN (O-011, 2026-10-21)
+
+> Podbay support was withdrawn by the owner on 2026-10-21. The controller is stopped; a reviewed Terraform change removes the substrate below. The table is retained as history.
 
 Third service. Controller on Fargate, workspace containers on EC2 capacity provider.
 
@@ -170,8 +172,8 @@ Frontend deployment, operational tooling, and V1 polish.
 
 All of the following must be true:
 
-- [ ] Core, ShuttleForge, and Podbay running on staging
-- [ ] Core and ShuttleForge running on production (Podbay prod = stretch)
+- [ ] Core and ShuttleForge running on staging (Podbay withdrawn, O-011)
+- [ ] Core and ShuttleForge running on production
 - [ ] CI/CD: image push → manual deploy trigger → verified rollout
 - [ ] IAM Identity Center: developers can access AWS via SSO
 - [ ] All secrets documented with rotation procedures

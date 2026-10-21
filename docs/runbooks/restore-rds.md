@@ -125,14 +125,14 @@ must be rewritten (secret names are lowercase-hyphen —
 ### 5. Restart services
 
 Force new deployment on the deployed services to pick up the new endpoint. Only
-**core** and **podbay** are currently deployed as ECS services (verified via
-`ecs list-services`); ShuttleForge is not yet running — add it to the loop once
-it is. If a service was scaled to zero for the change, set the desired count and
+**core** is running as an ECS service (Podbay was stopped on 2026-10-21, O-011;
+ShuttleForge and Nerfherder are not yet deployed — add them to the loop once they
+are). If a service was scaled to zero for the change, set the desired count and
 the intended task-definition revision explicitly instead of relying on
 `--force-new-deployment` alone:
 
 ```bash
-for svc in arclight-core-staging arclight-podbay-staging; do
+for svc in arclight-core-staging; do
   aws ecs update-service --cluster arclight-staging --service $svc --force-new-deployment
 done
 # or, for a service parked at zero during a migration rollback:
