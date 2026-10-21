@@ -57,7 +57,9 @@ and Run Command sessions, the hold file `/run/backstage/hold` (honoured six hour
 in the last four minutes, and the first hour after boot. Thirty zero minutes stop the instance;
 the weekday 07:00 America/New_York schedule or the next deploy starts it.
 
-- Keep the host up during manual work: `sudo touch /run/backstage/hold` (renew within six hours).
+- Keep the host up during manual work: `sudo install -d -m 0755 /run/backstage && sudo touch /run/backstage/hold`
+  (renew within six hours; Session Manager and Run Command sessions also count while open).
+- Operator compose commands: `sudo backstage-compose ps`, `logs`, `stop`, `up -d ...` (the current release).
 - Keep it up for days (migration week): apply with `-var=idle_stop_enabled=false`.
 - A browser tab left open on a stopped host produces ALB 503s, which count toward prod's
   `alb-5xx` alarm (more than 10 in 5 minutes, twice). If that pages at night, raise it.

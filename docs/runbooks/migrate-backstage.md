@@ -43,32 +43,43 @@ dockerd already restarted keep running. Busy publisher failing: no datapoint, no
   assignment on `arclight-backstage` done.
 - GitHub environment `backstage` exists, restricted to `main`. Cloudflare record, Full (strict)
   and the WAF skip in place.
-- During the whole migration: apply with `-var=idle_stop_enabled=false`, or keep
-  `/run/backstage/hold` fresh.
+- During the whole migration: apply with `-var=idle_stop_enabled=false`, or keep the hold file
+  fresh (`sudo install -d -m 0755 /run/backstage && sudo touch /run/backstage/hold`).
+
+All host commands below run in a Session Manager shell (user `ssm-user`), so they use `sudo`:
+`/srv/backstage` and `/run/backstage` are root-owned. `sudo backstage-compose ARGS` is
+`docker compose` for the current release (`/usr/local/sbin/backstage-compose`).
 
 ## Smoke deploy (after Backstage WP1; Litestream stays off)
 
 1. Run the workflow with the WP1 commit and `mode = stage-only`: images pulled, release
    selected, secrets rendered, nothing started (so Litestream never sees the smoke stores).
-2. S1-S2 over Session Manager as Backstage's spec gives them, as one-off containers:
-   `sudo docker compose --project-directory /srv/backstage/deploy/current run --rm --no-deps app python -m podbay init-corpus --db /srv/backstage/corpus/podbay.db`,
-   then the identity `recovery` and `bootstrap` claims, read and deleted over SSM.
-3. S3 `sudo docker compose --project-directory /srv/backstage/deploy/current up -d app engine`
-   (not Litestream); S4 the owner signs in with the bootstrap claim.
-4. S5 discard: stop the project; remove the smoke `podbay.db*`, `control.sqlite*`, `-wal`,
-   `-shm` and `.owner.lock`; clear `s3://arclight-backstage-prod-litestream/backstage/` if
-   Litestream ran at all. A smoke control store must not survive (restore refuses a different
-   `installation_id`).
+2. S1-S2 as one-off containers, with the exact commands Backstage's spec gives (WP1 is final):
+   ```
+   sudo backstage-compose run --rm --no-deps app python -m podbay init-corpus --db /srv/backstage/corpus/podbay.db
+   sudo backstage-compose run --rm --no-deps app python -m podbay.identity --control-db /srv/backstage/control/control.sqlite recovery --output /srv/backstage/runtime/recovery.claim
+   sudo backstage-compose run --rm --no-deps app python -m podbay.identity --control-db /srv/backstage/control/control.sqlite bootstrap --output /srv/backstage/runtime/bootstrap.claim
+   ```
+   Read both claims with `sudo cat`, hand them over out of band, then `sudo rm` them.
+3. S3 `sudo backstage-compose up -d app engine` (not Litestream); S4 the owner signs in with the
+   bootstrap claim.
+4. S5 discard:
+   ```
+   sudo backstage-compose stop
+   sudo rm -f /srv/backstage/corpus/podbay.db* /srv/backstage/control/control.sqlite* /srv/backstage/categorization/.owner*
+   aws s3 rm --recursive s3://arclight-backstage-prod-litestream/backstage/   # only if Litestream ran
+   ```
+   A smoke control store must not survive (restore refuses a different `installation_id`).
 
 ## Cutover
 
 | # | Step | Who |
 |---|---|---|
 | C1-C3 | Freeze the PC, back up the control store, checkpoint the corpus, upload to `s3://arclight-backstage-prod-migration/` (validation copies under `archive/`) | Owner (Backstage's spec) |
-| C4 | Run the workflow with the cutover commit and `mode = stage-only` if it is not already current; `touch /run/backstage/hold`; `compose stop`; confirm the smoke stores are gone; `aws s3 sync s3://arclight-backstage-prod-migration/<prefix>/ /srv/backstage/...` for the corpus, assets, Portal store and categorization; `chown -R 997:997` those trees; `sqlite3 /srv/backstage/corpus/podbay.db 'PRAGMA quick_check'` (from a one-off container if `sqlite3` is absent on the host) | Overcast |
-| C5 | `docker compose --project-directory /srv/backstage/deploy/current run --rm --no-deps app python tools/control_store.py restore --from-backup <file>`, Litestream stopped | Overcast |
-| C6 | `compose up -d litestream` alone; wait for the first snapshot of both databases (container logs, `s3 ls` under `backstage/prod/`) | Overcast |
-| C7 | `compose up -d app engine`; `/ready` shows `recovery_required:true` | Overcast |
+| C4 | Run the workflow with the cutover commit and `mode = stage-only` if it is not already current. Then: `sudo install -d -m 0755 /run/backstage && sudo touch /run/backstage/hold`; `sudo backstage-compose stop`; confirm the smoke stores are gone (`sudo ls -la /srv/backstage/corpus /srv/backstage/control`); `sudo aws s3 sync s3://arclight-backstage-prod-migration/<prefix>/<tree>/ /srv/backstage/<tree>/` for each of the corpus, Portal store and categorization trees (the bucket layout the owner uploaded); `sudo chown -R 997:997 /srv/backstage/corpus /srv/backstage/portal /srv/backstage/categorization`; `sudo backstage-compose run --rm --no-deps app python -c "import sqlite3; print(sqlite3.connect('/srv/backstage/corpus/podbay.db').execute('PRAGMA quick_check').fetchone()[0])"` prints `ok` | Overcast |
+| C5 | `sudo backstage-compose run --rm --no-deps app python tools/control_store.py restore --from-backup <file>` (the backup copied under `/srv/backstage/control/`), Litestream stopped | Overcast |
+| C6 | `sudo backstage-compose up -d litestream` alone; wait for the first snapshot of both databases (`sudo backstage-compose logs litestream`, `aws s3 ls --recursive s3://arclight-backstage-prod-litestream/backstage/prod/`) | Overcast |
+| C7 | `sudo backstage-compose up -d app engine`; `curl -s http://127.0.0.1:8430/ready` shows `recovery_required:true` | Overcast |
 | C8-C10 | Reconcile and complete recovery, link-claim before the owner's first sign-in, analysts by role | Backstage, owner, administrator |
 | After | Remove the hold, re-enable idle-stop; the PC stays stopped and intact for 14 days as warm standby (D15) | Owner |
 

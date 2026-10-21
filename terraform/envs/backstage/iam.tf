@@ -17,8 +17,9 @@ resource "aws_iam_role" "host" {
   assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
 }
 
-# Session Manager and Run Command. Also grants Parameter Store reads, so no separate SSM
-# statement is needed for the host scripts.
+# Session Manager and Run Command. The managed policy also allows Parameter Store reads on
+# every parameter; the DenyOtherParameters statement below narrows that to Backstage's
+# prefix without copying (and then maintaining) the managed policy.
 resource "aws_iam_role_policy_attachment" "host_ssm" {
   role       = aws_iam_role.host.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
@@ -31,6 +32,15 @@ resource "aws_iam_role_policy" "host" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      {
+        Sid    = "DenyOtherParameters"
+        Effect = "Deny"
+        Action = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:GetParameterHistory"]
+        NotResource = [
+          "arn:aws:ssm:${var.aws_region}:${local.account_id}:parameter${local.ssm_prefix}",
+          "arn:aws:ssm:${var.aws_region}:${local.account_id}:parameter${local.ssm_prefix}/*",
+        ]
+      },
       {
         Sid      = "BackstageSecrets"
         Effect   = "Allow"

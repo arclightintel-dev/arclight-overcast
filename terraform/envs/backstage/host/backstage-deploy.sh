@@ -109,10 +109,18 @@ revision=$(curl -fsS -m 5 -H "Host: $(param public-host)" -H "X-Forwarded-Proto:
   python3 -c 'import json, sys; print(json.load(sys.stdin)["runtime_identity"]["revision"])')
 [ "$revision" = "$sha" ] || die "the app reports revision $revision, not $sha"
 
-# 6. Keep the five newest releases as rollback targets (never the current one).
+# 6. Keep the five newest releases as rollback targets (never the current one), and only the
+# images they reference: ECR's lifecycle policy prunes the registry, not this disk. Never a
+# blanket "image prune -a": the Portal image is unused by any container between sessions.
 current=$(readlink -f "$DEPLOY_DIR/current")
 find "$DEPLOY_DIR/releases" -mindepth 1 -maxdepth 1 -type d -not -name '.*' -printf '%T@ %p\n' |
   sort -rn | tail -n +6 | cut -d' ' -f2- | while read -r old; do
   [ "$(readlink -f "$old")" = "$current" ] || rm -rf "$old"
 done
+keep=$(cat "$DEPLOY_DIR"/releases/*/digests.env 2>/dev/null | cut -d= -f2 | sort -u)
+docker image ls --digests --format '{{.Repository}} {{.Digest}}' |
+  awk -v r="$registry/arclight/" 'index($1, r) == 1 && $2 ~ /^sha256:/' |
+  while read -r repo digest; do
+    grep -qx "${digest#sha256:}" <<<"$keep" || docker image rm "$repo@$digest" >/dev/null 2>&1 || true
+  done
 log "deployed $sha"

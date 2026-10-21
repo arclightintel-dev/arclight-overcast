@@ -28,6 +28,7 @@ locals {
     "/usr/local/sbin/backstage-render-env"                = { mode = "0755", src = "backstage-render-env.sh" }
     "/usr/local/sbin/backstage-render-secrets"            = { mode = "0755", src = "backstage-render-secrets.sh" }
     "/usr/local/sbin/backstage-compose-up"                = { mode = "0755", src = "backstage-compose-up.sh" }
+    "/usr/local/sbin/backstage-compose"                   = { mode = "0755", src = "backstage-compose.sh" }
     "/usr/local/sbin/backstage-busy-publish"              = { mode = "0755", src = "backstage-busy-publish.sh" }
     "/usr/local/sbin/backstage-deploy"                    = { mode = "0755", src = "backstage-deploy.sh" }
     "/etc/systemd/system/backstage-data.service"          = { mode = "0644", src = "backstage-data.service" }
