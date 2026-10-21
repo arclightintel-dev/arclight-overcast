@@ -149,7 +149,7 @@ Backstage (the owner's bootstrapped analyst application; repository `arclightint
 1. **Same account, not walled off.** Backstage lives in the existing account `650880817826`, in the existing prod VPC behind the existing prod ALB (which already holds the `*.arclight-complex.net` certificate and runs nothing). A separate Terraform root `terraform/envs/backstage/` references the prod VPC and ALB through data sources, so Backstage changes never touch the prod root's state. D-059 position 5's account-separation trigger is acknowledged and consciously deferred by the owner.
 2. **Egress is enforced by proxy, not by a firewall product.** The app's own proxy rule is primary; the host's security group permits egress only to the proxy provider, the Anthropic API, Entra and AWS endpoints. ShuttleForge is the intended enforcement point once it is deployed: Backstage's proxy setting moves to SF's lease API and the host's egress narrows to SF's security group. Backstage becomes SF's first consumer.
 3. **Windows installers signed with Azure Trusted Signing; macOS out of scope.**
-4. **Identity**: direct Entra ID (the existing `backstage` registration in tenant `27564b9c-b516-4bc4-9aa5-5692a38a1116`, app roles for ops/operator/dev/admin) now; a later issuer swap to Core-brokered login is under question to Core.
+4. **Identity**: direct Entra ID in tenant `27564b9c-b516-4bc4-9aa5-5692a38a1116` with app roles for ops/operator/dev/admin. *Amended 2026-10-21 by O-014: a new registration `arclight-backstage` is created by the applications root rather than reusing the existing Dex-era `backstage` registration (owner confirmation to both Overcast and Backstage).* Core-brokered login is not available in v1 (Core is not an OpenID provider).
 5. **Backups**: Litestream continuous replication to S3 plus weekly EBS snapshots with 30-day retention.
 6. **Cost posture**: smallest host that serves three analysts (`t3.large` to start), idle-stop with scheduled start, wake-on-request later if wanted. No new VPC, NAT or load balancer.
 7. **Cutover window is open now.** Overcast starts as soon as Backstage delivers its deployment manifest; the host is specified inside the implementation PR rather than in a separate spec cycle (owner's ruling on ceremony, as for O-011).
@@ -190,6 +190,8 @@ This supersedes, for these two applications only, O-012 item 4 ("the existing `b
 Outside the root, by the administrator: client secrets straight into Secrets Manager shells (never in state), admin consent, app-role assignments (owner to `admin` first), Conditional Access, the Cloudflare Access identity provider. Service-principal owners are declared exactly and reconciled by the provider; the runbook records the drift rule.
 
 **Reviews before implementation (2026-10-21)**: Astra (codex `gpt-6-astra`, read-only) GO-WITH-CHANGES, blocking finding the `amr` claim (verified against Core `api/routes/auth.py:355-382` and Microsoft's optional-claims documentation); Opus internal review GO-WITH-CHANGES; both reconciled in the plan record.
+
+**Applied 2026-10-21 21:24:11Z to 21:24:26Z** on the owner's go: 14 resources created, post-apply plan clean, Graph read-back matched the declared shapes; IDs in the [service registry](service_registry.md).
 
 ## Core coordination disposition — not a new mechanism decision
 
