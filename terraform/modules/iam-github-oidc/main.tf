@@ -151,14 +151,18 @@ resource "aws_iam_role_policy" "overcast_terraform_deploy" {
 ################################################################################
 
 locals {
+  # refs: branches whose GitHub Actions runs may assume the push role. ShuttleForge
+  # builds v1 images from its release line v1-operate (SF-D-0252), not main.
   ecr_push_roles = {
     core = {
       repo_name = "arclight-core"
       ecr_repos = ["arclight/core"]
+      refs      = ["main"]
     }
     shuttleforge = {
       repo_name = "arclight-shuttleforge"
       ecr_repos = ["arclight/shuttleforge"]
+      refs      = ["main", "v1-operate"]
     }
   }
 }
@@ -180,7 +184,7 @@ data "aws_iam_policy_document" "ecr_push_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_org}/${each.value.repo_name}:ref:refs/heads/main"]
+      values   = [for ref in each.value.refs : "repo:${var.github_org}/${each.value.repo_name}:ref:refs/heads/${ref}"]
     }
   }
 }
