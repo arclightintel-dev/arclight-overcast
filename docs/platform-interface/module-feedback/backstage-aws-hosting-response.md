@@ -94,3 +94,21 @@ Verdict on the §4 shape: **GO-WITH-CONDITIONS** (conditions at the end).
 7. Deploys pin image digests and keep the previous image on the host for rollback.
 
 Overcast will not start Terraform for Backstage until conditions 1 and 2 are met; everything else is sequenced in the build list above.
+
+## Addendum: owner decisions, 2026-10-21 (O-012)
+
+The owner answered the needs-owner items and asked three questions; the shape is revised accordingly.
+
+| Topic | Decision / answer |
+|---|---|
+| A1 account | Same account, not walled off; prototype platform app. Backstage uses the existing **prod VPC and prod ALB** (wildcard certificate already attached, nothing else running) through a separate Terraform root with data sources. No new VPC, NAT or ALB. |
+| "More direct than Ubuntu + Docker + ALB?" | The ALB is already paid for and already does WebSockets; reusing it is the direct path. A Cloudflare Tunnel from the host would remove the ALB and all inbound surface but buys nothing while the ALB exists. |
+| E11 backups | Weekly EBS snapshots, 30-day retention (owner), **plus** Litestream continuous WAL shipping to S3 (cents per month) so the recovery point is minutes, not a week. |
+| Cost | With the shared VPC/ALB: `t3.large` about $60/month running all day, about $20/month with idle-stop (no ALB requests for 30 min, then stop; scheduled start in the morning), plus about $12 for gp3 100 GB, S3 and logs. Wake-on-login (Cloudflare Worker starts the instance on the first request, "starting" page for about two minutes) is a later step if wanted. 16 GB only if many concurrent Portal sessions. |
+| D9 egress | Proxy-only, no firewall product. Launch with the app's proxy rule and a host security group allowing egress only to the proxy provider, Anthropic, Entra and AWS endpoints; move to ShuttleForge's lease API when SF is deployed and narrow egress to SF's security group. |
+| F16 signing | Azure Trusted Signing, Windows only. |
+| C6/C7 identity | Direct Entra now with the existing `backstage` registration and app roles. Whether Core should broker login later (Core as OIDC issuer with Arclight scopes) was asked of Core on 2026-10-21; if supported, the issuer swap is a configuration change in the same relying-party code. |
+| Cutover | Open now. Gate: Backstage's deployment manifest (G19.1). |
+
+Verdict unchanged: GO-WITH-CONDITIONS; condition 1 (account, egress) is met by O-012, condition 2 (manifest) is the remaining gate.
+
