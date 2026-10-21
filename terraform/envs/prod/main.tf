@@ -45,8 +45,6 @@ data "aws_ecr_repository" "repos" {
   for_each = toset([
     "arclight/core",
     "arclight/shuttleforge",
-    "arclight/podbay",
-    "arclight/podbay-workspace-browser",
     "arclight/nerfherder",
     "arclight/dbbootstrap",
   ])
@@ -93,7 +91,6 @@ module "rds" {
   app_security_group_ids = [
     module.vpc.sg_core_id,
     module.vpc.sg_shuttleforge_id,
-    module.vpc.sg_podbay_controller_id,
     module.vpc.sg_dbbootstrap_id,
   ]
 }
@@ -113,7 +110,6 @@ module "alb" {
   service_security_group_ids = {
     core         = module.vpc.sg_core_id
     shuttleforge = module.vpc.sg_shuttleforge_id
-    podbay       = module.vpc.sg_podbay_controller_id
   }
 }
 
@@ -144,17 +140,6 @@ module "observability" {
   create_service_alarms = false
 }
 
-module "ec2_capacity" {
-  source = "../../modules/ecs-ec2-capacity-provider"
-
-  environment        = var.environment
-  cluster_name       = module.ecs_cluster.cluster_name
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_app_subnet_ids
-  instance_type      = var.podbay_ec2_instance_type
-  desired_capacity   = var.podbay_ec2_desired_capacity
-}
-
 module "iam_github_oidc" {
   source = "../../modules/iam-github-oidc"
 
@@ -176,7 +161,7 @@ module "iam_github_oidc" {
 
 resource "aws_ecs_cluster_capacity_providers" "this" {
   cluster_name       = module.ecs_cluster.cluster_name
-  capacity_providers = ["FARGATE", "FARGATE_SPOT", module.ec2_capacity.capacity_provider_name]
+  capacity_providers = ["FARGATE", "FARGATE_SPOT"]
 
   default_capacity_provider_strategy {
     capacity_provider = "FARGATE"
@@ -197,11 +182,6 @@ resource "aws_secretsmanager_secret" "dbbootstrap_core_pw" {
 resource "aws_secretsmanager_secret" "dbbootstrap_sf_pw" {
   name        = "arclight/${var.environment}/dbbootstrap/shuttleforge-db-password"
   description = "Temporary bootstrap password for shuttleforge_${var.environment} DB role"
-}
-
-resource "aws_secretsmanager_secret" "dbbootstrap_podbay_pw" {
-  name        = "arclight/${var.environment}/dbbootstrap/podbay-db-password"
-  description = "Temporary bootstrap password for podbay_${var.environment} DB role"
 }
 
 resource "aws_secretsmanager_secret" "dbbootstrap_nf_pw" {
@@ -358,7 +338,6 @@ resource "aws_ecs_task_definition" "dbbootstrap" {
         { name = "PGPASSWORD", valueFrom = "${module.rds.master_user_secret_arn}:password::" },
         { name = "CORE_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_core_pw.arn },
         { name = "SF_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_sf_pw.arn },
-        { name = "PODBAY_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_podbay_pw.arn },
         { name = "NF_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_nf_pw.arn },
       ]
 
@@ -404,7 +383,6 @@ resource "aws_iam_role_policy" "dbverify_svc_secrets" {
         Resource = [
           module.secrets.core_database_url_secret_arn,
           module.secrets.shuttleforge_db_url_secret_arn,
-          module.secrets.podbay_database_url_secret_arn,
           module.secrets.nerfherder_database_url_secret_arn,
         ]
       },
@@ -491,7 +469,6 @@ resource "aws_ecs_task_definition" "dbverify_svc" {
       secrets = [
         { name = "CORE_DATABASE_URL", valueFrom = module.secrets.core_database_url_secret_arn },
         { name = "SF_DATABASE_URL", valueFrom = module.secrets.shuttleforge_db_url_secret_arn },
-        { name = "PODBAY_DATABASE_URL", valueFrom = module.secrets.podbay_database_url_secret_arn },
         { name = "NF_DATABASE_URL", valueFrom = module.secrets.nerfherder_database_url_secret_arn },
       ]
 

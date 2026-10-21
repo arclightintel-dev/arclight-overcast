@@ -38,16 +38,6 @@ output "sg_shuttleforge_id" {
   value       = aws_security_group.shuttleforge.id
 }
 
-output "sg_podbay_controller_id" {
-  description = "Podbay controller security group ID"
-  value       = aws_security_group.podbay_controller.id
-}
-
-output "sg_podbay_workspace_id" {
-  description = "Podbay workspace security group ID"
-  value       = aws_security_group.podbay_workspace.id
-}
-
 output "sg_dbbootstrap_id" {
   description = "DB bootstrap task security group ID"
   value       = aws_security_group.dbbootstrap.id
@@ -56,14 +46,4 @@ output "sg_dbbootstrap_id" {
 output "private_app_route_table_id" {
   description = "Private app route table ID"
   value       = aws_route_table.private_app.id
-}
-
-output "private_workspace_subnet_ids" {
-  description = "Private workspace subnet IDs"
-  value       = aws_subnet.private_workspace[*].id
-}
-
-output "private_workspace_subnet_cidrs" {
-  description = "Private workspace subnet CIDR blocks"
-  value       = aws_subnet.private_workspace[*].cidr_block
 }

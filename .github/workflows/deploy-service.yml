@@ -11,7 +11,6 @@ on:
         options:
           - core
           - shuttleforge
-          - podbay
       environment:
         description: 'Target environment'
         required: true
@@ -165,9 +164,16 @@ jobs:
           for i in 1 2 3 4 5; do
             STATUS=$(curl -sf -o /dev/null -w "%{http_code}" $CF_HEADERS "$URL" || true)
             if [ "$STATUS" = "200" ]; then
-              echo "Health check passed: $URL returned 200"
-              curl -sf $CF_HEADERS "$URL" | jq .
-              exit 0
+              BODY=$(curl -sf $CF_HEADERS "$URL")
+              echo "$BODY" | jq .
+              READY=$(echo "$BODY" | jq -r '.status // empty')
+              if [ "$READY" = "ready" ]; then
+                echo "Health check passed: $URL returned 200 with status=ready"
+                exit 0
+              fi
+              echo "Attempt $i: HTTP 200 but body status=${READY:-missing}, retrying in 10s..."
+              sleep 10
+              continue
             fi
             echo "Attempt $i: status=$STATUS, retrying in 10s..."
             sleep 10

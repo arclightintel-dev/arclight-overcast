@@ -108,7 +108,6 @@ module "rds" {
   app_security_group_ids = [
     module.vpc.sg_core_id,
     module.vpc.sg_shuttleforge_id,
-    module.vpc.sg_podbay_controller_id,
     module.vpc.sg_dbbootstrap_id,
   ]
 }
@@ -128,7 +127,6 @@ module "alb" {
   service_security_group_ids = {
     core         = module.vpc.sg_core_id
     shuttleforge = module.vpc.sg_shuttleforge_id
-    podbay       = module.vpc.sg_podbay_controller_id
   }
 }
 
@@ -154,17 +152,6 @@ module "observability" {
   alb_arn_suffix   = module.alb.alb_arn_suffix
   rds_instance_id  = "arclight-${var.environment}"
   ecs_cluster_name = module.ecs_cluster.cluster_name
-}
-
-module "ec2_capacity" {
-  source = "../../modules/ecs-ec2-capacity-provider"
-
-  environment        = var.environment
-  cluster_name       = module.ecs_cluster.cluster_name
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_workspace_subnet_ids
-  instance_type      = var.podbay_ec2_instance_type
-  desired_capacity   = var.podbay_ec2_desired_capacity
 }
 
 module "iam_github_oidc" {
@@ -204,19 +191,22 @@ module "core_service" {
   execution_role_arn     = module.secrets.execution_role_arns["core"]
 
   container_definitions = templatefile("${path.module}/../../../services/core/task-definition.json.tpl", {
-    environment                = var.environment
-    image                      = "${module.ecr.repository_urls["arclight/core"]}:${var.core_image_tag}"
-    domain                     = "staging.${var.domain_name}"
-    region                     = var.aws_region
-    log_group                  = "/arclight/${var.environment}/core"
-    secret_arn_database_url    = module.secrets.core_database_url_secret_arn
-    secret_arn_signing_key     = module.secrets.secret_arns["arclight/${var.environment}/core/signing-key-encryption-key"]
-    secret_arn_admin_bootstrap     = module.secrets.secret_arns["arclight/${var.environment}/core/admin-bootstrap-secret"]
+    environment                     = var.environment
+    image                           = "${module.ecr.repository_urls["arclight/core"]}:${var.core_image_tag}"
+    domain                          = "staging.${var.domain_name}"
+    region                          = var.aws_region
+    log_group                       = "/arclight/${var.environment}/core"
+    secret_arn_database_url         = module.secrets.core_database_url_secret_arn
+    secret_arn_signing_key          = module.secrets.secret_arns["arclight/${var.environment}/core/signing-key-encryption-key"]
+    secret_arn_admin_bootstrap      = module.secrets.secret_arns["arclight/${var.environment}/core/admin-bootstrap-secret"]
     secret_arn_asset_encryption_key = module.secrets.secret_arns["arclight/${var.environment}/core/asset-encryption-key"]
-    asset_backend                  = "local_encrypted"
-    secret_arn_oidc_google         = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-google-client-secret"]
-    secret_arn_oidc_microsoft  = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-microsoft-client-secret"]
-    secret_arn_oidc_github     = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-github-client-secret"]
+    asset_backend                   = "local_encrypted"
+    secret_arn_oidc_google          = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-google-client-secret"]
+    secret_arn_oidc_microsoft       = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-microsoft-client-secret"]
+    secret_arn_oidc_github          = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-github-client-secret"]
+    # JSON array of trusted proxy ranges: the VPC (ALB nodes) plus Cloudflare, so the
+    # rate limiter keys on the real client. Same source of truth as the ALB ingress rules.
+    trusted_proxy_cidrs = replace(jsonencode(concat([var.vpc_cidr], local.cloudflare_ipv4_cidrs, local.cloudflare_ipv6_cidrs)), "\"", "\\\"")
   })
 }
 
@@ -226,7 +216,7 @@ module "core_service" {
 
 resource "aws_ecs_cluster_capacity_providers" "this" {
   cluster_name       = module.ecs_cluster.cluster_name
-  capacity_providers = ["FARGATE", "FARGATE_SPOT", module.ec2_capacity.capacity_provider_name]
+  capacity_providers = ["FARGATE", "FARGATE_SPOT"]
 
   default_capacity_provider_strategy {
     capacity_provider = "FARGATE"
@@ -247,11 +237,6 @@ resource "aws_secretsmanager_secret" "dbbootstrap_core_pw" {
 resource "aws_secretsmanager_secret" "dbbootstrap_sf_pw" {
   name        = "arclight/${var.environment}/dbbootstrap/shuttleforge-db-password"
   description = "Temporary bootstrap password for shuttleforge_staging DB role"
-}
-
-resource "aws_secretsmanager_secret" "dbbootstrap_podbay_pw" {
-  name        = "arclight/${var.environment}/dbbootstrap/podbay-db-password"
-  description = "Temporary bootstrap password for podbay_staging DB role"
 }
 
 resource "aws_secretsmanager_secret" "dbbootstrap_nf_pw" {
@@ -408,7 +393,6 @@ resource "aws_ecs_task_definition" "dbbootstrap" {
         { name = "PGPASSWORD", valueFrom = "${module.rds.master_user_secret_arn}:password::" },
         { name = "CORE_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_core_pw.arn },
         { name = "SF_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_sf_pw.arn },
-        { name = "PODBAY_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_podbay_pw.arn },
         { name = "NF_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_nf_pw.arn },
       ]
 
@@ -454,7 +438,6 @@ resource "aws_iam_role_policy" "dbverify_svc_secrets" {
         Resource = [
           module.secrets.core_database_url_secret_arn,
           module.secrets.shuttleforge_db_url_secret_arn,
-          module.secrets.podbay_database_url_secret_arn,
           module.secrets.nerfherder_database_url_secret_arn,
         ]
       },
@@ -541,7 +524,6 @@ resource "aws_ecs_task_definition" "dbverify_svc" {
       secrets = [
         { name = "CORE_DATABASE_URL", valueFrom = module.secrets.core_database_url_secret_arn },
         { name = "SF_DATABASE_URL", valueFrom = module.secrets.shuttleforge_db_url_secret_arn },
-        { name = "PODBAY_DATABASE_URL", valueFrom = module.secrets.podbay_database_url_secret_arn },
         { name = "NF_DATABASE_URL", valueFrom = module.secrets.nerfherder_database_url_secret_arn },
       ]
 
@@ -555,401 +537,4 @@ resource "aws_ecs_task_definition" "dbverify_svc" {
       }
     }
   ])
-}
-
-################################################################################
-# Podbay Batch 5 — Workspace Substrate
-################################################################################
-
-resource "aws_security_group_rule" "workspace_cdp_ingress" {
-  type                     = "ingress"
-  from_port                = 9222
-  to_port                  = 9222
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_podbay_workspace_id
-  source_security_group_id = module.vpc.sg_podbay_controller_id
-  description              = "CDP from controller"
-}
-
-resource "aws_security_group_rule" "workspace_capture_ingress" {
-  type                     = "ingress"
-  from_port                = 9280
-  to_port                  = 9280
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_podbay_workspace_id
-  source_security_group_id = module.vpc.sg_podbay_controller_id
-  description              = "Capture service from controller"
-}
-
-resource "aws_security_group_rule" "workspace_neko_ingress" {
-  type                     = "ingress"
-  from_port                = 8080
-  to_port                  = 8080
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_podbay_workspace_id
-  source_security_group_id = module.vpc.sg_podbay_controller_id
-  description              = "Neko stream from controller"
-}
-
-resource "aws_security_group_rule" "workspace_all_egress" {
-  type              = "egress"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  security_group_id = module.vpc.sg_podbay_workspace_id
-  cidr_blocks       = ["0.0.0.0/0"]
-  description       = "S-016 direct egress (tighten to ShuttleForge in Phase 4)"
-}
-
-resource "aws_security_group_rule" "controller_to_workspace_cdp" {
-  type                     = "egress"
-  from_port                = 9222
-  to_port                  = 9222
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_podbay_controller_id
-  source_security_group_id = module.vpc.sg_podbay_workspace_id
-  description              = "CDP to workspace"
-}
-
-resource "aws_security_group_rule" "controller_to_workspace_capture" {
-  type                     = "egress"
-  from_port                = 9280
-  to_port                  = 9280
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_podbay_controller_id
-  source_security_group_id = module.vpc.sg_podbay_workspace_id
-  description              = "Capture service to workspace"
-}
-
-resource "aws_security_group_rule" "controller_to_workspace_neko" {
-  type                     = "egress"
-  from_port                = 8080
-  to_port                  = 8080
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_podbay_controller_id
-  source_security_group_id = module.vpc.sg_podbay_workspace_id
-  description              = "Neko stream to workspace"
-}
-
-resource "aws_iam_role" "ecs_exec_podbay_workspace" {
-  name               = "arclight-ecs-exec-podbay-workspace-${var.environment}"
-  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
-}
-
-resource "aws_iam_role_policy" "podbay_workspace_ecr" {
-  name = "ecr-pull"
-  role = aws_iam_role.ecs_exec_podbay_workspace.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid      = "ECRAuth"
-        Effect   = "Allow"
-        Action   = ["ecr:GetAuthorizationToken"]
-        Resource = ["*"]
-      },
-      {
-        Sid    = "ECRPull"
-        Effect = "Allow"
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage",
-        ]
-        Resource = [module.ecr.repository_arns["arclight/podbay-workspace-browser"]]
-      },
-    ]
-  })
-}
-
-resource "aws_iam_role_policy" "podbay_workspace_logs" {
-  name = "cloudwatch-logs"
-  role = aws_iam_role.ecs_exec_podbay_workspace.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "Logs"
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-        ]
-        Resource = ["arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/arclight/${var.environment}/podbay-workspace:*"]
-      },
-    ]
-  })
-}
-
-resource "aws_ecs_task_definition" "podbay_workspace" {
-  family                   = "arclight-podbay-workspace-${var.environment}"
-  requires_compatibilities = ["EC2"]
-  network_mode             = "awsvpc"
-  cpu                      = "1024"
-  memory                   = "2048"
-  execution_role_arn       = aws_iam_role.ecs_exec_podbay_workspace.arn
-
-  container_definitions = templatefile("${path.module}/../../../services/podbay/workspace-task-definition.json.tpl", {
-    image     = "${module.ecr.repository_urls["arclight/podbay-workspace-browser"]}:${var.podbay_workspace_image_tag}"
-    region    = var.aws_region
-    log_group = "/arclight/${var.environment}/podbay-workspace"
-  })
-}
-
-resource "aws_iam_role" "podbay_task_role" {
-  name               = "arclight-podbay-task-role-${var.environment}"
-  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
-}
-
-resource "aws_iam_role_policy" "podbay_task_ecs" {
-  name = "ecs-workspace-management"
-  role = aws_iam_role.podbay_task_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "RunWorkspaceTask"
-        Effect = "Allow"
-        Action = ["ecs:RunTask"]
-        Resource = [
-          "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/arclight-podbay-workspace-${var.environment}:*"
-        ]
-        Condition = {
-          ArnEquals = {
-            "ecs:cluster" = module.ecs_cluster.cluster_arn
-          }
-        }
-      },
-      {
-        Sid    = "TagWorkspaceResources"
-        Effect = "Allow"
-        Action = ["ecs:TagResource"]
-        Resource = [
-          "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task/arclight-${var.environment}/*",
-          module.ecs_cluster.cluster_arn
-        ]
-      },
-      {
-        Sid    = "ManageWorkspaceTasks"
-        Effect = "Allow"
-        Action = [
-          "ecs:DescribeTasks",
-          "ecs:StopTask",
-        ]
-        Resource = ["arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task/*"]
-        Condition = {
-          ArnEquals = {
-            "ecs:cluster" = module.ecs_cluster.cluster_arn
-          }
-        }
-      },
-      {
-        Sid      = "PassWorkspaceRole"
-        Effect   = "Allow"
-        Action   = ["iam:PassRole"]
-        Resource = [aws_iam_role.ecs_exec_podbay_workspace.arn]
-        Condition = {
-          StringEquals = {
-            "iam:PassedToService" = "ecs-tasks.amazonaws.com"
-          }
-        }
-      },
-    ]
-  })
-}
-
-resource "aws_iam_role_policy" "podbay_task_s3" {
-  name = "s3-exports"
-  role = aws_iam_role.podbay_task_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "ExportBucketAccess"
-        Effect = "Allow"
-        Action = [
-          "s3:PutObject",
-          "s3:GetObject",
-        ]
-        Resource = ["${aws_s3_bucket.podbay_exports.arn}/*"]
-      },
-      {
-        Sid      = "ExportBucketList"
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
-        Resource = [aws_s3_bucket.podbay_exports.arn]
-      },
-    ]
-  })
-}
-
-resource "aws_security_group_rule" "podbay_to_core_egress" {
-  type                     = "egress"
-  from_port                = 8000
-  to_port                  = 8000
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_podbay_controller_id
-  source_security_group_id = module.vpc.sg_core_id
-  description              = "Podbay controller to Core internal API (JWKS, token validation)"
-}
-
-resource "aws_security_group_rule" "core_from_podbay_ingress" {
-  type                     = "ingress"
-  from_port                = 8000
-  to_port                  = 8000
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_core_id
-  source_security_group_id = module.vpc.sg_podbay_controller_id
-  description              = "Core internal API from Podbay controller"
-}
-
-resource "aws_iam_role_policy" "podbay_task_turn_secret" {
-  name = "turn-secret-read"
-  role = aws_iam_role.podbay_task_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid      = "ReadTURNSecret"
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = [module.secrets.secret_arns["arclight/${var.environment}/podbay/turn-shared-secret"]]
-      },
-    ]
-  })
-}
-
-resource "aws_s3_bucket" "podbay_exports" {
-  bucket_prefix = "arclight-podbay-exports-${var.environment}-"
-  force_destroy = false
-
-  tags = { Name = "arclight-podbay-exports-${var.environment}" }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-resource "aws_s3_bucket_versioning" "podbay_exports" {
-  bucket = aws_s3_bucket.podbay_exports.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "podbay_exports" {
-  bucket = aws_s3_bucket.podbay_exports.id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "podbay_exports" {
-  bucket = aws_s3_bucket.podbay_exports.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "podbay_exports" {
-  bucket = aws_s3_bucket.podbay_exports.id
-
-  rule {
-    id     = "expire-staging-exports"
-    status = "Enabled"
-    filter {
-      prefix = "podbay-exports/"
-    }
-
-    expiration {
-      days = 30
-    }
-  }
-}
-
-################################################################################
-# Podbay Controller Service (Phase 2)
-################################################################################
-
-module "podbay_service" {
-  source = "../../modules/ecs-service-fargate"
-
-  service_name           = "podbay"
-  environment            = var.environment
-  cluster_id             = module.ecs_cluster.cluster_id
-  cluster_name           = module.ecs_cluster.cluster_name
-  subnet_ids             = module.vpc.private_app_subnet_ids
-  security_group_id      = module.vpc.sg_podbay_controller_id
-  alb_security_group_id  = module.alb.alb_security_group_id
-  rds_security_group_id  = module.rds.rds_security_group_id
-  cloud_map_namespace_id = module.ecs_cluster.cloud_map_namespace_id
-  target_group_arn       = module.alb.target_group_arns["podbay"]
-  container_port         = 8099
-  desired_count          = var.podbay_desired_count
-  cpu                    = 512
-  memory                 = 1024
-  execution_role_arn     = module.secrets.execution_role_arns["podbay"]
-  task_role_arn          = aws_iam_role.podbay_task_role.arn
-
-  container_definitions = templatefile("${path.module}/../../../services/podbay/task-definition.json.tpl", {
-    environment           = var.environment
-    image                 = "${module.ecr.repository_urls["arclight/podbay"]}:${var.podbay_image_tag}"
-    domain                = "staging.${var.domain_name}"
-    region                = var.aws_region
-    log_group             = "/arclight/${var.environment}/podbay"
-    secret_arn_database_url = module.secrets.podbay_database_url_secret_arn
-    ecs_cluster           = module.ecs_cluster.cluster_name
-    ecs_task_definition   = "arclight-podbay-workspace-${var.environment}"
-    ecs_capacity_provider = module.ec2_capacity.capacity_provider_name
-    ecs_subnets           = join(",", module.vpc.private_workspace_subnet_ids)
-    ecs_security_groups   = module.vpc.sg_podbay_workspace_id
-    export_s3_bucket      = aws_s3_bucket.podbay_exports.id
-    turn_endpoint         = module.coturn.turn_endpoint
-    turn_secret_name      = "arclight/${var.environment}/podbay/turn-shared-secret"
-    core_jwks_url         = "http://core.${var.environment}.internal.${var.domain_name}:8000/.well-known/jwks.json"
-    core_issuer           = "https://core.internal"
-    snapshot_registry     = replace(jsonencode({
-      snap_browser_chromium_v1 = {
-        image_ref    = "${module.ecr.repository_urls["arclight/podbay-workspace-browser"]}"
-        image_digest = "sha256:3d96b9f8a189f6bdfa52c97d1d5d5ee31af0066bdfff171bff1931ee448fd095"
-      }
-    }), "\"", "\\\"")
-  })
-}
-
-################################################################################
-# coturn TURN server (D-062)
-################################################################################
-
-module "coturn" {
-  source = "../../modules/coturn"
-
-  environment            = var.environment
-  vpc_id                 = module.vpc.vpc_id
-  subnet_id              = module.vpc.public_subnet_ids[0]
-  turn_secret_arn        = module.secrets.secret_arns["arclight/${var.environment}/podbay/turn-shared-secret"]
-  realm                  = "staging.${var.domain_name}"
-  aws_region             = var.aws_region
-  vpc_cidr               = var.vpc_cidr
-  workspace_subnet_cidrs = module.vpc.private_workspace_subnet_cidrs
-}
-
-resource "aws_security_group_rule" "workspace_turn_relay_ingress" {
-  type                     = "ingress"
-  from_port                = 52000
-  to_port                  = 52100
-  protocol                 = "udp"
-  security_group_id        = module.vpc.sg_podbay_workspace_id
-  source_security_group_id = module.coturn.turn_security_group_id
-  description              = "TURN relay UDP from coturn to Neko WebRTC (52000-52100)"
 }

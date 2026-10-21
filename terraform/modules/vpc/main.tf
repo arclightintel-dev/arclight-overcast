@@ -45,21 +45,6 @@ resource "aws_subnet" "private_db" {
   tags = { Name = "arclight-${var.environment}-private-db-${var.azs[count.index]}" }
 }
 
-resource "aws_subnet" "private_workspace" {
-  count             = length(var.private_workspace_subnet_cidrs)
-  vpc_id            = aws_vpc.this.id
-  cidr_block        = var.private_workspace_subnet_cidrs[count.index]
-  availability_zone = var.azs[count.index]
-
-  tags = { Name = "arclight-${var.environment}-private-workspace-${var.azs[count.index]}" }
-}
-
-resource "aws_route_table_association" "private_workspace" {
-  count          = length(var.private_workspace_subnet_cidrs)
-  subnet_id      = aws_subnet.private_workspace[count.index].id
-  route_table_id = aws_route_table.private_app.id
-}
-
 ################################################################################
 # Internet Gateway
 ################################################################################
@@ -154,11 +139,11 @@ resource "aws_security_group" "vpc_endpoints" {
   vpc_id      = aws_vpc.this.id
 
   ingress {
-    description = "HTTPS from app and workspace subnets"
+    description = "HTTPS from app subnets"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = concat(var.private_app_subnet_cidrs, var.private_workspace_subnet_cidrs)
+    cidr_blocks = var.private_app_subnet_cidrs
   }
 
   tags = { Name = "arclight-${var.environment}-vpce" }
@@ -229,22 +214,6 @@ resource "aws_security_group" "shuttleforge" {
   vpc_id      = aws_vpc.this.id
 
   tags = { Name = "sg-shuttleforge-${var.environment}" }
-}
-
-resource "aws_security_group" "podbay_controller" {
-  name_prefix = "arclight-${var.environment}-podbay-ctrl-"
-  description = "Podbay controller Fargate tasks"
-  vpc_id      = aws_vpc.this.id
-
-  tags = { Name = "sg-podbay-controller-${var.environment}" }
-}
-
-resource "aws_security_group" "podbay_workspace" {
-  name_prefix = "arclight-${var.environment}-podbay-ws-"
-  description = "Podbay workspace containers"
-  vpc_id      = aws_vpc.this.id
-
-  tags = { Name = "sg-podbay-workspace-${var.environment}" }
 }
 
 resource "aws_security_group" "dbbootstrap" {

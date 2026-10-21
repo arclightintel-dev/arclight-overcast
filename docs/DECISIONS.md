@@ -138,7 +138,7 @@ Podbay support is withdrawn. Overcast stops the Podbay controller immediately an
 
 **Platform record**: D-062 (coturn) and the Podbay sections of D-056 / INFRASTRUCTURE_SPEC are Complex-owned. Overcast removes the implementation; the platform decision that retires them is the owner's to route through Complex. Core will disable Podbay principals and clients on staging Core separately.
 
-**Process**: the removal is a new infrastructure change: spec (INV-005 applies to removals as much as to builds, because of the destroy order and the capacity-provider dependency), plan, internal and external review, then owner apply (DR-1).
+**Process (owner ruling, 2026-10-21)**: no spec/plan/review cycle; the data is staging-only with no retention value, so no snapshot or archive is kept. The removal is one Terraform change bundled with Core's deploy prerequisites (`CORE_TRUSTED_PROXY_CIDRS` from the Cloudflare locals, ECS container check on `/health`, 30 s target-group deregistration delay, NF/SF `core-client-secret` shells), reviewed by plan output and applied by the owner (DR-1). Plan at the PR: staging 6 add / 6 change / 78 destroy; prod 7 add / 6 change / 31 destroy. The `podbay_staging` database and role are left in place (harmless; the bootstrap image still creates them for new environments).
 
 ## Core coordination disposition — not a new mechanism decision
 

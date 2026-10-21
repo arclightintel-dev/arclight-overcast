@@ -49,6 +49,18 @@ Open items that are known, bounded and deliberately not being worked. Each row n
 | DR-7 | `cloudflare-adoption` branch holds unreviewed Cloudflare Terraform adoption (hardcoded ALB hostname, Access policy not adopted, provider needs `CLOUDFLARE_API_TOKEN` at plan time). Not for merge. | branch `cloudflare-adoption` | Overcast | Cloudflare Terraform workstream (after Entra application connections) |
 | DR-8 | `arclight-shuttleforge-ecr-push-prod` trusts `repo:arclight-intel/arclight-shuttleforge`, the obsolete owner; the staging twin trusts `arclightintel-dev`. Prod image pushes from SF will fail until the trust is updated. Likely the same for core/podbay prod roles (not read). | IAM read 2026-10-20 | Overcast | Before any prod image push; fold into the deployment-model work or fix with the prod root's next operator apply |
 
+## Pending owner apply — Podbay removal + Core deploy prerequisites (PR "Remove Podbay; add Core deploy prerequisites")
+
+Branch `infra/podbay-removal-core-prereqs`. **Apply from the branch checkout, then merge**: merging first would fire `terraform-apply.yml`, which is believed broken (DR-1) but has not been re-tested, and a surprise auto-apply of a 78-resource destroy is not acceptable (D-059 §9).
+
+Pre-steps (operator, `john-admin`), in order:
+
+1. Delete the two Podbay ECR repositories; Terraform cannot delete repositories that hold images (12 each): `aws ecr delete-repository --repository-name arclight/podbay --force` and the same for `arclight/podbay-workspace-browser`.
+2. Terminate the unmanaged EC2 instance `coturn-probe-disposable` (`i-07b8dc451e38bf204`), a July probe leftover that Terraform does not own and the removal will not touch.
+3. The export bucket is already empty (0 versions, 0 delete markers on 2026-10-21) and the workspace subnets have 0 ENIs; no action.
+
+Then `terraform plan` fresh in `terraform/envs/staging` (do not reuse a saved plan after step 1), compare with the PR's summary, apply; repeat for `terraform/envs/prod`. Expected after apply: the only ECS service is `arclight-core-staging`, still on revision 7; the new Core revision (with `CORE_TRUSTED_PROXY_CIDRS` and the `/health` container check) is registered but not deployed; two new secret shells `arclight/staging/{nerfherder,shuttleforge}/core-client-secret`. Known side effects: the dbbootstrap/dbverify task definitions get new revisions; the RDS ingress rule list re-indexes (dbbootstrap's rule is recreated); the prod apply also lands three pre-existing unapplied changes (SNS email subscription, `arclight/prod/core/asset-encryption-key` shell, OIDC role trust update). Send Core the apply time; tranche C may be scheduled after it.
+
 ## Next actions
 
 1. This delivery includes the earlier corporate Terraform, scripts, CI and registry changes alongside the governance handoff. The user subsequently requested push and merge to `main`; inspect Git/PR status when resuming rather than treating the handoff's pre-publication working-tree inventory as current. Publishing source does not apply the corporate configuration again.

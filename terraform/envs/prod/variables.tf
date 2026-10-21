@@ -51,24 +51,6 @@ variable "shuttleforge_desired_count" {
   default     = 1
 }
 
-variable "podbay_desired_count" {
-  description = "Podbay controller ECS service desired task count"
-  type        = number
-  default     = 1
-}
-
-variable "podbay_ec2_instance_type" {
-  description = "EC2 instance type for Podbay capacity provider"
-  type        = string
-  default     = "m5.large"
-}
-
-variable "podbay_ec2_desired_capacity" {
-  description = "Desired number of EC2 instances for Podbay"
-  type        = number
-  default     = 0
-}
-
 variable "alarm_email" {
   description = "Email for CloudWatch alarm notifications"
   type        = string

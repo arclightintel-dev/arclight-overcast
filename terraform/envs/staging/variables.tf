@@ -45,24 +45,6 @@ variable "shuttleforge_desired_count" {
   default     = 1
 }
 
-variable "podbay_desired_count" {
-  description = "Podbay controller ECS service desired task count"
-  type        = number
-  default     = 1
-}
-
-variable "podbay_ec2_instance_type" {
-  description = "EC2 instance type for Podbay capacity provider"
-  type        = string
-  default     = "t3.medium"
-}
-
-variable "podbay_ec2_desired_capacity" {
-  description = "Desired number of EC2 instances for Podbay"
-  type        = number
-  default     = 0
-}
-
 variable "alarm_email" {
   description = "Email for CloudWatch alarm notifications"
   type        = string
@@ -84,17 +66,3 @@ variable "core_image_tag" {
   type        = string
 }
 
-variable "podbay_image_tag" {
-  description = "Podbay controller container image tag (e.g., v1-abc1234)"
-  type        = string
-  # Pinned to the live deploy base. Never "latest": ECR repos are immutable-tag
-  # and lifecycle policies rotate only v-prefixed tags. The deploy pipeline
-  # advances the running service out-of-band (service ignores task_definition).
-  default     = "v2-phase2-fix3"
-}
-
-variable "podbay_workspace_image_tag" {
-  description = "Podbay workspace browser image tag (v1-fix2 switches the entrypoint to Neko supervisord so the X server starts)"
-  type        = string
-  default     = "v1-fix2"
-}
