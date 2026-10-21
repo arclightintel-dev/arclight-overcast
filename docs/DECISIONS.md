@@ -156,6 +156,29 @@ Backstage (the owner's bootstrapped analyst application; repository `arclightint
 
 **Platform record**: Complex is to be told that Backstage is hosted as a prototype application outside the module charter; no D-series decision is required for Overcast to proceed on the owner's direction.
 
+## O-013: Nerfherder staging wiring under D-072
+
+**Authority**: platform decision D-072 "Nerfherder Staging Deployment Enabled (staging only)", ratified by the platform owner 2026-10-21, `arclight-complex@020ef5d` (`platform/DECISIONS.md` l.1445-1455). | **Recorded**: 2026-10-21, as D-072 paragraph 2 requires before anything is scheduled.
+
+Overcast will provision Nerfherder on **staging only**, exactly D-072's list and nothing more:
+
+- a security group with egress to Core (port 8000) and to ShuttleForge (lease API 9000 and proxy ports 9050/9100), with the matching ingress rules on the Core and ShuttleForge groups;
+- an execution role and a task role (S3 access through IAM, no static keys);
+- a log group `/arclight/staging/nerfherder`;
+- an ECS task template with `desired_count` 1, stop-then-start deployment (`deployment_minimum_healthy_percent` 0 / `maximum_percent` 100, obligation O-2 on the Fargate module) and `stopTimeout` of at least 35 seconds;
+- an OIDC push role scoped to repository `arclightintel-dev/arclight-nerfherder`, branch `main`;
+- a dedicated artifact bucket;
+- the secret shells Nerfherder names: `arclight/staging/nerfherder/database-url` (exists; runtime, new DML-only role `nerfherder_app_staging`), `arclight/staging/nerfherder/migration-database-url` (owner role `nerfherder_staging`), `arclight/staging/nerfherder/core-client-secret` (exists);
+- one-off task families for migrations and bootstrap.
+
+**Out of scope (D-072 paragraph 3)**: production; any new seam or contract; more than one replica; Podbay integration (Podbay withdrawn, O-011).
+
+**Preconditions carried (D-072 paragraph 4)**: D-059 section 9 in full (no real source registration, provider credential or live collection plugin on staging until the section 6 postures hold; the staging restore drill, R3, remains the open posture); Nerfherder's own constraints (one secret-bearing `role=all` task; ShuttleForge as the required egress route, which means NF's egress is fail-closed only once SF is deployed); the platform `/ready` status-code convention for the task health check; TLS to RDS is already enforced (`rds.force_ssl` = 1).
+
+**Sequencing (D-072 paragraph 5)**: Nerfherder's P3.5 plans are awaiting the owner's GO; NF's wiring change in this repository follows that GO; the apply is owner-authorized (DR-1). Nothing is scheduled by this record.
+
+**Correction**: Overcast's P3.5 answer 16 cited "D-056 section 15". The deferral lived in the Overcast charter's Deferred list (amended by D-072) and in the infrastructure spec's "What NOT to Build Yet" section 15, which still lists Nerfherder and remains accurate for production. D-072 amends the charter entry only.
+
 ## Core coordination disposition — not a new mechanism decision
 
 **Review date**: 2026-10-01 | **Recorded here**: 2026-10-03.
