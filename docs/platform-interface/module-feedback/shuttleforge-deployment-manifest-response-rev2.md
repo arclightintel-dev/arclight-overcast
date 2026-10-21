@@ -53,3 +53,10 @@ Unasked corrections in revision 2 are accepted: `/ready` is 200 for `ready` and 
 ## Verdict
 
 **ACCEPT-WITH-CHANGES.** M-1 through M-6 are closed on the evidence above and hold on the release line. Before Overcast writes the SF task definition it needs M-7 corrected in the manifest and M-9 answered; M-8 is a cap Overcast will apply regardless. None of this schedules a deploy; SF.11 stays deferred and R3 remains the gate for live credentials.
+
+## Addendum — revision 3 (`arclight-shuttleforge@d031251`, 2026-10-21): ACCEPT
+
+Verified at the pin (`d5d34f5` is an ancestor): the manifest now states the image imposes no scheme on `SHUTTLEFORGE_CORE_JWKS_URL`, that the HTTPS-only rule belongs to the local appliance controller, and names the staging value `http://core.staging.internal.arclight-complex.net:8000/.well-known/jwks.json` (l.188–190); it carries the 32 KiB decoded / 43 KiB encoded environment limit with the S3 `environmentFiles` path for larger policies (l.199–201; operating policy about 7 KiB); and it records that v1 images build from `v1-operate` and asks for `refs/heads/v1-operate` on the staging push-role trust (l.230–237). M-7, M-8 and M-9 are closed. SF's note that `SECURITY.md` §5.6 requires the JWKS fetch over TLS in production is recorded as DR-10: Core's internal path has no TLS today, so a production SF deployment needs Core-side termination or a private CA the image trusts; an SF.11 input, not a staging item.
+
+**Verdict: ACCEPT.** No SF-side items remain. Overcast obligations O-1..O-6 and R3 stand as listed above; O-6 is now a concrete change (trust `main` and `v1-operate` for the SF push role).
+
