@@ -124,6 +124,22 @@ Corporate CI performs validation and mocked boundary tests without credentials o
 
 **Evidence**: September 30 provisioning, authenticated no-change plans and certificate-authenticated inventory reads are recorded in the [service registry](service_registry.md). No live check or additional apply occurred during this documentation update. See the [management design](specs/entra-management.md) and [runbook](runbooks/manage-entra.md).
 
+## O-011: Podbay removed from staging
+
+**Decision**: Owner, 2026-10-21, relayed first through Core's deploy-plan coordination and then confirmed directly to Overcast. | **Recorded**: 2026-10-21.
+
+Podbay support is withdrawn. Overcast stops the Podbay controller immediately and removes Podbay's staging infrastructure through a reviewed Terraform change, with final snapshots taken before any data is deleted.
+
+**Executed 2026-10-21**: `aws ecs update-service --cluster arclight-staging --service arclight-podbay-staging --desired-count 0` at 17:27:18Z; `services-stable` confirmed desired 0 / running 0 at 17:27:19Z. Previous revision `arclight-podbay-staging:9`. No Terraform changed; `var.podbay_desired_count` still defaults to 1, so **a `terraform apply` of the staging root before the removal change lands would restart the controller**. Operators must not apply staging until O-011's removal PR is merged or must pass `-var podbay_desired_count=0`.
+
+**Removal scope (staging root, `terraform/envs/staging/main.tf` at `9dea289`)**: `module.podbay_service` (l.884), workspace task definition and roles (l.634–700), controller task role and policies (l.701–826), security-group rules between Podbay and Core and for workspaces (l.564–632, 790–809, 947), the S3 export bucket and its configuration (l.827–883), `module.coturn` (l.934, D-062), `dbbootstrap_podbay_pw` (l.252), the Podbay entries in the secrets module and ECR list, the workspace subnets if nothing else uses them, and the EC2 capacity provider (l.159, 229) if no other EC2-backed workload is planned. Prod has no Podbay services; its substrate entries are removed in the same change set.
+
+**Data disposition (owner, 2026-10-21)**: snapshot, then delete. A final RDS snapshot before the `podbay_staging` database and role are dropped; the S3 export bucket's object listing recorded and contents copied or deliberately abandoned before the bucket is destroyed; secret shells deleted with the standard recovery window.
+
+**Platform record**: D-062 (coturn) and the Podbay sections of D-056 / INFRASTRUCTURE_SPEC are Complex-owned. Overcast removes the implementation; the platform decision that retires them is the owner's to route through Complex. Core will disable Podbay principals and clients on staging Core separately.
+
+**Process**: the removal is a new infrastructure change: spec (INV-005 applies to removals as much as to builds, because of the destroy order and the capacity-provider dependency), plan, internal and external review, then owner apply (DR-1).
+
 ## Core coordination disposition — not a new mechanism decision
 
 **Review date**: 2026-10-01 | **Recorded here**: 2026-10-03.

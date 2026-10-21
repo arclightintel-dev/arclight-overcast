@@ -18,6 +18,7 @@ Start with the [2026-10-03 handoff](handoff/2026-10-03-handoff.md), [service reg
 | ShuttleForge deployment manifest (v1 exit item 4) | ACCEPT-WITH-CHANGES, 2026-10-20 | SF: six manifest defects (M-1..M-6, DNS namespace and policy-file delivery the blocking ones). Overcast: O-1..O-5 (dataplane SG rules, singleton rollout knobs, digest deploys, template refresh, prod push-role trust). D-059 §6 attestation not available until the staging restore drill is run. See the [receipt](platform-interface/module-feedback/shuttleforge-deployment-manifest-response.md). |
 | Nerfherder P3.5 onboarding questions | Answered 2026-10-20 | Sixteen answers recorded in the [response](platform-interface/module-feedback/nerfherder-p35-onboarding-response.md). Blocking facts: rollout 100/200 hardcoded (shared fix with SF O-2); fail-closed 443 egress needs Secrets Manager/KMS/SSM endpoints; `db.t3.micro` connection budget; Nerfherder deployment still deferred by charter and D-056 §15 pending a D-series amendment. |
 | Core staging deploy plan v3 (Phase 7 build + Entra) | Reviewed 2026-10-21: B GO, C NO-GO as written, D GO, E GO | Blocking for C: `deploy-service.yml` cannot start a service from zero (operator runs `update-service --desired-count 1` directly) and the restore runbook lacked the RDS security group (fixed 2026-10-21). Overcast follow-ups: `migrate` job and `/ready` body check in the deploy workflow; `CORE_TRUSTED_PROXY_CIDRS` rendered from the Cloudflare locals; optional 30 s deregistration delay; secret shells for NF/SF Core clients. See the [review](platform-interface/module-feedback/core-staging-deploy-plan-review-20261021.md). |
+| Podbay removal (O-011) | Controller stopped 2026-10-21 17:27Z; Terraform removal pending | Owner decided to withdraw Podbay. Removal is a spec'd staging-root change with final snapshots before data deletion. **Do not `terraform apply` staging until it lands** (`podbay_desired_count` default 1 would restart the controller). Phase 5 and the July Podbay snapshot below are historical. |
 | Core 7F/B2 custody | NO-GO under the reviewed design | Core + Complex own enforcement/completion amendments; Overcast supplied infrastructure options. SF consumer work remains deferred until B2. |
 | Deployment model / CI debt | Open; July runtime claims not refreshed | Overcast: resume deployment-model scoping after the corporate connection work; verify actual CI behavior before asserting a repair or current failure. |
 
@@ -64,6 +65,8 @@ The dedicated corporate Terraform backend and management identity were provision
 ## Historical deployment snapshot — 2026-07-10
 
 Recorded phase: Phase 5 (Podbay Deploy), in progress at `5f74a55`. All live-state language, image tags, resource counts and external blockers in this section describe that July session. Recheck the relevant service before relying on them operationally. The Google Workspace workforce-IdP direction is superseded by Entra; the old Core Phase 6A custody guidance is withdrawn below and in its source memo.
+
+> **2026-10-21**: Podbay is withdrawn (O-011). Every Podbay, workspace and coturn line in this snapshot is historical.
 
 ### Phase summary
 

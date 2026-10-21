@@ -69,7 +69,7 @@ Use `v1-<git-sha-short>` format. The `v` prefix is required — ECR lifecycle po
 - Prod infrastructure changes are operator-applied (admin credentials) — OIDC role lacks infra provisioning permissions
 
 ### Boot order (D-056 §9)
-Core → ShuttleForge → Podbay. Services depend on Core JWKS being available.
+Core → ShuttleForge (→ Nerfherder when onboarded). Podbay was withdrawn on 2026-10-21 (O-011). Services depend on Core JWKS being available.
 
 ### RDS managed password
 `manage_master_user_password = true`. The managed secret contains only `username` and `password` — NOT `host`, `port`, or `dbname`. PGHOST/PGPORT must be injected as environment variables from Terraform outputs.
