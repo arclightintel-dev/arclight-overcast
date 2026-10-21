@@ -10,7 +10,7 @@ Start with the [2026-10-03 handoff](handoff/2026-10-03-handoff.md), [service reg
 
 | Workstream | Disposition | Remaining work / owner |
 |---|---|---|
-| Corporate Entra management | Initial bootstrap complete as observed 2026-09-30 | Overcast + administrator: choose specific existing applications for ownership/import and verify automation writes. Current permission does not grant general directory administration. |
+| Corporate Entra management | Bootstrap complete 2026-09-30; applications root written 2026-10-21 (O-014), awaiting its first certificate-authenticated apply | Overcast runs the apply on the owner's go (14 creates). Administrator afterwards: client secrets into Secrets Manager, admin consent, Backstage role assignments (owner to `admin` first), retire the old registrations. Current permission does not grant general directory administration. |
 | Cloudflare connections | Incomplete | Overcast + administrator: resolve hosting inventory permissions, account/domain ownership and Entra Access/dashboard connections; reconcile existing Terraform adoption work. |
 | GitHub enterprise transition | Deferred | Owner: supply enterprise/org identifiers and account model. Current repositories and deployment trust remain the active source. |
 | Shared deployment vault | Recommendation only | Owner + Overcast: choose custody, consumer permissions and rotation/recovery. AWS Secrets Manager is recommended in the registry; no migration is complete. |

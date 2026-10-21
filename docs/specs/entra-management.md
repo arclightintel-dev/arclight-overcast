@@ -20,6 +20,14 @@ PowerShell 7 on Windows supplies the .NET certificate and DPAPI facilities; no s
 
 GitHub OIDC is a later execution connection after the enterprise/repository/environment and reviewer policy are known. Do not trust an unconfirmed future repository or add tenant write authority to pull-request jobs.
 
+## Applications root
+
+`terraform/corporate/entra/applications/` creates and owns the app registrations that Arclight applications use for sign-in: `arclight-core-staging` (Core's Microsoft broker) and `arclight-backstage` (O-012). It runs only as the automation identity through certificate authentication (`ARM_TENANT_ID`, `ARM_CLIENT_ID`, `ARM_CLIENT_CERTIFICATE_PATH`, process-only `ARM_CLIENT_CERTIFICATE_PASSWORD`; CLI, OIDC and MSI authentication disabled), with the tenant and client ID pinned in configuration and a client-config check that refuses any caller other than the management service principal, including the human administrator. Its state key is `entra/applications/terraform.tfstate` in the corporate bucket.
+
+The root declares only what the applications read: sign-in audience, Web redirect URIs, optional ID-token claims (`email` for both; `amr` for Core, which it reads to establish direct MFA verification), app roles (Backstage: ops, operator, dev, admin, assignment required), and the delegated `openid`, `email` and `profile` scopes on Microsoft Graph, using the provider's split application resources. Both registrations are **created** by the automation identity rather than adopted (owner decision 2026-10-21, O-014), so they are owned by it by construction and no import or ownership transfer is needed; the pre-existing `Arclight Core Staging` and `backstage` registrations are retired by the administrator afterwards. Service-principal `owners` is declared as exactly the management service principal; the provider reconciles that set, and the identity cannot add owners it does not hold, so an owner added by hand must be added to the configuration first or the next apply removes it.
+
+Outside this root and outside `Application.ReadWrite.OwnedBy`: client secrets (created by the administrator and delivered straight to the application's Secrets Manager shell, never printed, never in state), admin consent for the delegated scopes, app-role assignments to users, Conditional Access, and the Cloudflare Access identity provider.
+
 ## State and execution
 
 Use a dedicated corporate S3 state bucket, separate from `arclight-terraform-state`: the current staging deploy roles can access that entire existing bucket. A new key alone would not isolate corporate identity state. Provisioned bucket: `arclight-corporate-terraform-state-650880817826`, region `us-east-1`, native S3 locking, key `entra/bootstrap/terraform.tfstate`, encryption and versioning enabled, public access blocked. Bucket bootstrap and access must be verified before an authenticated Terraform plan. AWS backend authentication is independent of Entra authentication.
@@ -30,11 +38,11 @@ Corporate changes must not trigger staging deployment. The working configuration
 
 1. Prepare and validate configuration and local tooling.
 2. Authenticate the named administrator to the exact tenant. Verify `/me` and organization/domain data. Stop on an account or tenant mismatch.
-3. Inspect existing applications for the intended name. Reconcile/import an existing match instead of creating duplicates.
+3. Inspect existing applications for the intended name. For the bootstrap, reconcile/import an existing match instead of creating duplicates; for the applications root, create the registration and retire the old one by hand afterwards (O-014).
 4. Generate the local credential and configure only its public certificate, fixed dates, and administrator object ID as Terraform inputs.
 5. Establish the dedicated state backend. Review the saved plan: only the new management application and its explicit dependent resources may change.
 6. Apply the reviewed plan, grant the one declared Graph permission as an administrator, and verify certificate-authenticated Graph access.
-7. Inventory candidate SSO integrations. Add owned, individually imported objects to subsequent Terraform configuration and test each connection.
+7. Inventory candidate SSO integrations. Declare them in the applications root (created there, or imported individually only when an existing object must be adopted) and test each connection.
 
 Authentication or consent failures leave the connection pending. A successful Terraform validate is syntax/schema evidence, not a live tenant plan. A created application without consent is not a functioning management connection. If provisioning partially succeeds, inspect remote state and import/reconcile before retrying. Never replace existing corporate SSO or DNS as a side effect of bootstrap.
 
