@@ -23,9 +23,11 @@ esac
 install -d -m 0755 "$RUN_DIR"
 touch "$RUN_DIR/hold"
 registry=""
+stage=""
 cleanup() {
   rm -f "$RUN_DIR/hold"
   if [ -n "$registry" ]; then docker logout "$registry" >/dev/null 2>&1 || true; fi
+  if [ -n "$stage" ] && [ -d "$stage" ]; then rm -rf "$stage"; fi
 }
 trap cleanup EXIT
 
@@ -47,8 +49,10 @@ PY
 check_allowlisted login.microsoftonline.com "$(param entra-cidrs)"
 check_allowlisted api.anthropic.com "$(param anthropic-cidrs)"
 
-# 2. The bundle into its own release directory. Not "s3 sync": it skips same-size files,
-# which would leave the previous release's images.json in place.
+# 2. The bundle into a staging directory. Not "s3 sync": it skips same-size files, which
+# would leave the previous release's images.json in place. Everything that can fail (copy,
+# digests, .env, pulls) happens in staging, so a failed deploy never touches the release
+# that is running, including a redeploy of the same commit after a secret rotation.
 rel="$DEPLOY_DIR/releases/$sha"
 stage=$(mktemp -d "$DEPLOY_DIR/releases/.stage.XXXXXX")
 "$AWS" s3 cp --recursive --only-show-errors "s3://$(param deploy-bucket)/$sha/" "$stage/"
@@ -65,16 +69,25 @@ for key, var in (("app", "BACKSTAGE_APP_DIGEST"), ("portal", "BACKSTAGE_PORTAL_D
         sys.exit(f"images.json: {key} is not a sha256 digest")
     print(f"{var}={digest}")
 PY
-rm -rf "$rel"
-mv "$stage" "$rel"
-chmod 0750 "$rel"
-/usr/local/sbin/backstage-render-env "$rel"
+/usr/local/sbin/backstage-render-env "$stage"
 
 # 3. Pull the pinned images (root's Docker client only; logged out on exit).
 registry=$(param ecr-registry)
 "$AWS" ecr get-login-password | docker login --username AWS --password-stdin "$registry" >/dev/null
-compose "$rel" pull --quiet
-compose "$rel" --profile prepull pull --quiet
+compose "$stage" pull --quiet
+compose "$stage" --profile prepull pull --quiet
+
+# The staged release is complete: replace the release directory with it. Running containers
+# keep their bind mounts across the rename; the old directory is removed only afterwards.
+chmod 0750 "$stage"
+old=""
+if [ -e "$rel" ]; then
+  old="$DEPLOY_DIR/releases/.old.$sha.$$"
+  mv "$rel" "$old"
+fi
+mv "$stage" "$rel"
+stage=""
+if [ -n "$old" ]; then rm -rf "$old"; fi
 
 # 4. Switch the current release and start it. Secrets are re-read so a rotated value takes
 # effect; app and Engine are recreated explicitly because env_file contents are not part of

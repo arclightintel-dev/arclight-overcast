@@ -61,6 +61,17 @@ data "aws_vpc_endpoint" "s3" {
   service_name = "com.amazonaws.${var.aws_region}.s3"
 }
 
+# The host reaches these AWS APIs only through interface endpoints, which the prod root owns
+# (terraform/envs/prod, extra_interface_endpoints; O-012/OW-6). Looking them up makes that
+# prerequisite mechanical: until they exist and are available, this root does not plan.
+data "aws_vpc_endpoint" "required" {
+  for_each = toset(["secretsmanager", "ssm", "ssmmessages", "ec2messages", "monitoring", "ecr.api", "ecr.dkr", "logs"])
+
+  vpc_id       = data.aws_vpc.prod.id
+  service_name = "com.amazonaws.${var.aws_region}.${each.key}"
+  state        = "available"
+}
+
 data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
 }

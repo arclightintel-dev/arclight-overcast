@@ -22,7 +22,8 @@ operator-applied with admin credentials; the legacy CI workflows exclude this ro
 
 1. **Prerequisite**: the prod root's five interface endpoints (Secrets Manager, SSM, ssmmessages,
    ec2messages, monitoring) are applied. Without them the host cannot read its parameters or
-   secrets, and Session Manager does not work.
+   secrets, and Session Manager does not work. This root looks the endpoints up, so its plan
+   fails with "no matching VPC Endpoint found" until they exist.
 2. **First apply, instance created**: `maintenance_egress` must be true, because first boot
    installs Docker, the AWS CLI and the CloudWatch agent from the internet.
    ```
