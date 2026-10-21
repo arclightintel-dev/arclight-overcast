@@ -179,6 +179,18 @@ Overcast will provision Nerfherder on **staging only**, exactly D-072's list and
 
 **Correction**: Overcast's P3.5 answer 16 cited "D-056 section 15". The deferral lived in the Overcast charter's Deferred list (amended by D-072) and in the infrastructure spec's "What NOT to Build Yet" section 15, which still lists Nerfherder and remains accurate for production. D-072 amends the charter entry only.
 
+## O-014: Entra applications root creates the Core staging and Backstage registrations
+
+**Decision**: Owner, 2026-10-21 (create new registrations for both applications rather than adopt the existing ones). | **Recorded**: 2026-10-21.
+
+`terraform/corporate/entra/applications/` is the automation-authenticated root the bootstrap specification anticipated. It runs as `arclight-overcast-entra-management` through certificate authentication, refuses any other caller, and **creates** `arclight-core-staging` and `arclight-backstage` with their redirect URIs, optional ID-token claims (`email`; `amr` for Core's direct MFA verification), Backstage's four app roles with assignment required, and the delegated `openid`/`email`/`profile` Graph scopes. State key `entra/applications/terraform.tfstate`.
+
+This supersedes, for these two applications only, O-012 item 4 ("the existing `backstage` registration") and O-010's expectation of "individually reviewed imports": creation by the owning identity needs neither an ownership transfer, which `Application.ReadWrite.OwnedBy` cannot perform, nor an import. The pre-existing `Arclight Core Staging` and Dex-era `backstage` registrations are untouched and are the administrator's to retire after Core's broker is bound and Backstage has cut over. Nothing links users to the old registrations yet (Core's personal-account link is retired under its tranche D5; Backstage's links are keyed to the Dex issuer).
+
+Outside the root, by the administrator: client secrets straight into Secrets Manager shells (never in state), admin consent, app-role assignments (owner to `admin` first), Conditional Access, the Cloudflare Access identity provider. Service-principal owners are declared exactly and reconciled by the provider; the runbook records the drift rule.
+
+**Reviews before implementation (2026-10-21)**: Astra (codex `gpt-6-astra`, read-only) GO-WITH-CHANGES, blocking finding the `amr` claim (verified against Core `api/routes/auth.py:355-382` and Microsoft's optional-claims documentation); Opus internal review GO-WITH-CHANGES; both reconciled in the plan record.
+
 ## Core coordination disposition — not a new mechanism decision
 
 **Review date**: 2026-10-01 | **Recorded here**: 2026-10-03.
