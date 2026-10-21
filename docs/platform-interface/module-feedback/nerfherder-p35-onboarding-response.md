@@ -23,7 +23,7 @@ NF's own inventory of Overcast ("what we believe we found") was correct on every
 | 13 | Observability | Log group `/arclight/staging/nerfherder`; running-task alarm + SNS to `alarm_email` added like other services. Unauthenticated `/ready/detail` and `/metrics` inside the VPC acceptable; nothing internal reaches the ALB without a host rule. | `terraform/modules/observability/` |
 | 14 | Bootstrap seeding | One-off RunTask with command override is the accepted pattern; execution role for secrets plus NF's own DB role; no operator AWS keys in the task. | dbbootstrap precedent |
 | 15 | Event sink | No consumer exists (no bus/topic/queue for module events). `event_sink_mode = disabled` stands. | staging/prod roots |
-| 16 | Governance | Charter "Nerfherder deployment: deferred" and D-056 §15 are Complex-owned; an O-series decision cannot lift them. Needs a small D-series amendment, then Overcast records the wiring as an O-decision. | `docs/CHARTER.md`; D-056 §15 |
+| 16 | Governance | Charter "Nerfherder deployment: deferred" is Complex-owned; an O-series decision cannot lift it. Needs a small D-series amendment, then Overcast records the wiring as an O-decision. **Resolved 2026-10-21**: D-072 (`arclight-complex@020ef5d`) lifts the deferral for staging only; Overcast recorded O-013. The infrastructure spec's section 15 ("What NOT to Build Yet") still lists Nerfherder and remains accurate for production. | `docs/CHARTER.md`; D-072; O-013 |
 
 ## Overcast work implied (not scheduled)
 
@@ -41,5 +41,5 @@ New NF security group and rules; module variables for rollout percentages (share
 | 4c | Bounded SG-rule removal demonstration | Acceptable: at most five minutes, NF's own ingress rule only, operator-run, restored by `terraform apply`, outside Core hours, owner's go at the time. Affects NF alone (rules are per source group). | same |
 | 5 | Task size 1 vCPU / 2 GB | Valid Fargate pair; module takes plain numbers. Start there and measure. | `terraform/modules/ecs-service-fargate/variables.tf:53-63` |
 
-Gate order on Overcast's side is unchanged: D-series amendment lifting the Nerfherder deployment deferral, then NF's wiring change, then the owner's apply.
+Gate order on Overcast's side: D-072 is ratified and O-013 recorded; NF's wiring change follows the owner's GO on NF's P3.5 plans; the apply is owner-authorized.
 
