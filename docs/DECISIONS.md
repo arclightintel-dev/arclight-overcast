@@ -140,6 +140,22 @@ Podbay support is withdrawn. Overcast stops the Podbay controller immediately an
 
 **Process (owner ruling, 2026-10-21)**: no spec/plan/review cycle; the data is staging-only with no retention value, so no snapshot or archive is kept. The removal is one Terraform change bundled with Core's deploy prerequisites (`CORE_TRUSTED_PROXY_CIDRS` from the Cloudflare locals, ECS container check on `/health`, 30 s target-group deregistration delay, NF/SF `core-client-secret` shells), reviewed by plan output and applied by the owner (DR-1). Applied 2026-10-21 (staging 6/6/74 after the ECR pre-step, prod 7/6/31); receipt in PROJECT_STATE. The `podbay_staging` database and role are left in place (harmless; the bootstrap image still creates them for new environments).
 
+## O-012: Overcast hosts Backstage as a prototype platform application
+
+**Decision**: Owner, 2026-10-21, in answer to Overcast's hosting response. | **Recorded**: 2026-10-21.
+
+Backstage (the owner's bootstrapped analyst application; repository `arclightintel-dev/podbay`, a legacy name unrelated to the removed Podbay platform substrate) is hosted by Overcast on AWS as a **prototype platform application**, not a module and not a separate tenant. The owner's rulings:
+
+1. **Same account, not walled off.** Backstage lives in the existing account `650880817826`, in the existing prod VPC behind the existing prod ALB (which already holds the `*.arclight-complex.net` certificate and runs nothing). A separate Terraform root `terraform/envs/backstage/` references the prod VPC and ALB through data sources, so Backstage changes never touch the prod root's state. D-059 position 5's account-separation trigger is acknowledged and consciously deferred by the owner.
+2. **Egress is enforced by proxy, not by a firewall product.** The app's own proxy rule is primary; the host's security group permits egress only to the proxy provider, the Anthropic API, Entra and AWS endpoints. ShuttleForge is the intended enforcement point once it is deployed: Backstage's proxy setting moves to SF's lease API and the host's egress narrows to SF's security group. Backstage becomes SF's first consumer.
+3. **Windows installers signed with Azure Trusted Signing; macOS out of scope.**
+4. **Identity**: direct Entra ID (the existing `backstage` registration in tenant `27564b9c-b516-4bc4-9aa5-5692a38a1116`, app roles for ops/operator/dev/admin) now; a later issuer swap to Core-brokered login is under question to Core.
+5. **Backups**: Litestream continuous replication to S3 plus weekly EBS snapshots with 30-day retention.
+6. **Cost posture**: smallest host that serves three analysts (`t3.large` to start), idle-stop with scheduled start, wake-on-request later if wanted. No new VPC, NAT or load balancer.
+7. **Cutover window is open now.** Overcast starts as soon as Backstage delivers its deployment manifest; the host is specified inside the implementation PR rather than in a separate spec cycle (owner's ruling on ceremony, as for O-011).
+
+**Platform record**: Complex is to be told that Backstage is hosted as a prototype application outside the module charter; no D-series decision is required for Overcast to proceed on the owner's direction.
+
 ## Core coordination disposition — not a new mechanism decision
 
 **Review date**: 2026-10-01 | **Recorded here**: 2026-10-03.
