@@ -151,7 +151,7 @@ Backstage (the owner's bootstrapped analyst application; repository `arclightint
 3. **Windows installers signed with Azure Trusted Signing; macOS out of scope.**
 4. **Identity**: direct Entra ID in tenant `27564b9c-b516-4bc4-9aa5-5692a38a1116` with app roles for ops/operator/dev/admin. *Amended 2026-10-21 by O-014: a new registration `arclight-backstage` is created by the applications root rather than reusing the existing Dex-era `backstage` registration (owner confirmation to both Overcast and Backstage).* Core-brokered login is not available in v1 (Core is not an OpenID provider).
 5. **Backups**: Litestream continuous replication to S3 plus weekly EBS snapshots with 30-day retention.
-6. **Cost posture**: smallest host that serves three analysts (`t3.large` to start), idle-stop with scheduled start, wake-on-request later if wanted. No new VPC, NAT or load balancer.
+6. **Cost posture**: smallest host that serves three analysts (`t3.large` to start), idle-stop with scheduled start, wake-on-request later if wanted. No new VPC, NAT or load balancer. *Amended 2026-10-21 (manifest receipt OW-2): `t3.xlarge` with a Portal concurrency cap of 3 and unlimited credits, because each Portal container is capped at 2 CPUs and 2 GiB and the 12.7 GB corpus needs page cache; the idle-stop posture is unchanged.*
 7. **Cutover window is open now.** Overcast starts as soon as Backstage delivers its deployment manifest; the host is specified inside the implementation PR rather than in a separate spec cycle (owner's ruling on ceremony, as for O-011).
 
 **Platform record**: Complex is to be told that Backstage is hosted as a prototype application outside the module charter; no D-series decision is required for Overcast to proceed on the owner's direction.
