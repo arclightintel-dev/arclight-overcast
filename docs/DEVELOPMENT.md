@@ -66,6 +66,12 @@ C:\Tools\terraform.exe fmt -recursive terraform/
 
 **Staging**: the working path is **manual apply with admin credentials** from `terraform/envs/staging`. The intended CI auto-apply (`terraform-apply.yml` on merge to main) is **currently broken** — see [CI status](#ci-status) below. Every apply this session was run manually.
 **Prod**: manual operator apply only. OIDC role lacks infra provisioning permissions.
+**Backstage** (`terraform/envs/backstage`): manual operator apply, excluded from the CI plan and
+apply workflows; credential-free checks run in `terraform-backstage-validate.yml`. Every variable
+has a committed default. An apply that creates or replaces the instance needs
+`-var=maintenance_egress=true`, followed by a closing apply without it. The rendered user data
+is about 27 KB, so it is sent gzip-compressed through `user_data_base64` (a single encoding;
+INV-006 is about base64-encoding text passed to `user_data`). See the root's README.
 
 ## Adding a new Terraform module
 

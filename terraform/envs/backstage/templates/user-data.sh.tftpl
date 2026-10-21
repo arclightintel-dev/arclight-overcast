@@ -1,0 +1,93 @@
+#!/bin/bash
+# Backstage host, first boot (cloud-init runs this once per instance). Rendered by
+# terraform/envs/backstage/host.tf; the host scripts and units are embedded from host/.
+# Needs maintenance_egress = true on the apply that creates or replaces the instance: the
+# Ubuntu and Docker apt repositories and the AWS CLI download are outside the allowlist.
+# No secret is read or written here; the app starts with the first deploy, not at boot.
+set -euo pipefail
+echo "backstage bootstrap: start"
+
+# 1. Fixed uid/gid 997 (the Portal image's user), before any package can take it.
+if getent group 997 >/dev/null && [ "$(getent group 997 | cut -d: -f1)" != backstage ]; then
+  echo "backstage bootstrap: FATAL: gid 997 is already taken"
+  exit 1
+fi
+if getent passwd 997 >/dev/null && [ "$(getent passwd 997 | cut -d: -f1)" != backstage ]; then
+  echo "backstage bootstrap: FATAL: uid 997 is already taken"
+  exit 1
+fi
+getent group backstage >/dev/null || groupadd --system --gid 997 backstage
+getent passwd backstage >/dev/null || useradd --system --uid 997 --gid 997 --no-create-home --shell /usr/sbin/nologin backstage
+[ "$(id -u backstage)" = 997 ] && [ "$(id -g backstage)" = 997 ]
+
+# 2. Docker must not start until its data volume and firewall exist (the package would
+#    otherwise start it during installation).
+systemctl mask docker.service docker.socket
+
+# 3. Static per-instance configuration and the host files.
+install -d -m 0700 /etc/backstage
+cat >/etc/backstage/host.conf <<'BACKSTAGE_HOST_CONF'
+ENVIRONMENT=${environment}
+AWS_REGION=${aws_region}
+SSM_PREFIX=${ssm_prefix}
+DATA_VOLUME_ID=${data_volume_id}
+APP_UID=997
+PORTAL_SUBNET=${portal_subnet}
+BRIDGE_IFNAME=${bridge_ifname}
+BACKSTAGE_HOST_CONF
+chmod 0644 /etc/backstage/host.conf
+
+%{ for dest, f in files ~}
+mkdir -p "$(dirname '${dest}')"
+cat >'${dest}' <<'BACKSTAGE_FILE_EOF'
+${chomp(f.content)}
+BACKSTAGE_FILE_EOF
+chmod ${f.mode} '${dest}'
+%{ endfor ~}
+
+# 4. Packages (this is the step that needs maintenance egress).
+export DEBIAN_FRONTEND=noninteractive
+echo 'Acquire::Retries "5";' >/etc/apt/apt.conf.d/80-retries
+apt-get update
+apt-get install -y ca-certificates curl gnupg unzip
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" >/etc/apt/sources.list.d/docker.list
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install
+rm -rf /tmp/awscliv2.zip /tmp/aws
+
+curl -fsSL "https://amazoncloudwatch-agent-${aws_region}.s3.${aws_region}.amazonaws.com/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb" -o /tmp/cwagent.deb
+dpkg -i -E /tmp/cwagent.deb
+rm -f /tmp/cwagent.deb
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/backstage.json
+
+# 5. Time from the Amazon Time Sync Service (link-local: no egress rule; public NTP is
+#    outside the allowlist).
+if [ -d /etc/chrony ]; then
+  install -d /etc/chrony/sources.d
+  echo 'server 169.254.169.123 prefer iburst minpoll 4 maxpoll 4' >/etc/chrony/sources.d/amazon-time-sync.sources
+  systemctl restart chrony || true
+else
+  install -d /etc/systemd/timesyncd.conf.d
+  printf '[Time]\nNTP=169.254.169.123\n' >/etc/systemd/timesyncd.conf.d/amazon-time-sync.conf
+  systemctl restart systemd-timesyncd || true
+fi
+
+# 6. Enable and start in order. Docker pulls in the data volume and the firewall; the
+#    compose unit is skipped until the first deploy selects a release.
+systemctl unmask docker.service docker.socket
+systemctl daemon-reload
+systemctl enable backstage-data.service backstage-firewall.service docker.socket docker.service \
+  backstage-network.service backstage-compose.service backstage-busy.timer
+systemctl start docker.service
+systemctl start backstage-network.service backstage-compose.service backstage-busy.timer
+systemctl is-active --quiet snap.amazon-ssm-agent.amazon-ssm-agent.service ||
+  systemctl start snap.amazon-ssm-agent.amazon-ssm-agent.service
+echo "backstage bootstrap: complete"

@@ -71,3 +71,5 @@ Punted or assumed to be Overcast's when it is not:
 - Your §8 step 6 reconcile and the proxy test are app-side, as written.
 
 Overcast-side items this review created (tracked in Overcast's plan for `terraform/envs/backstage/`): the downloads-upload role and `backstage-downloads` name (C6); `s3:PutObject` on the deploy prefix for the push role; the deploy reading `images.json` (C4); the Anthropic range; creating the host's uid/gid 997 before Docker installs so the `docker` group cannot take gid 997.
+
+**Outcome (2026-10-21):** Backstage accepted all six conditions in spec v2 (`aws/hosting` `899d7f0`, verified read-only by Overcast) and the owner signed the spec at `fcc39ec` ("yes. hit it").

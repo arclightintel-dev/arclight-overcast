@@ -1,0 +1,79 @@
+# Backstage host: specification, smoke deploy, migration and cutover
+
+Overcast's half of moving Backstage from the owner's PC to AWS (O-012). Backstage's half is its
+signed spec, `legacy/podbay` `docs/specs/aws_hosting_spec.md` §8 (`aws/hosting` `fcc39ec`); the
+step numbers S1-S5 and C1-C10 below are that section's. Infrastructure:
+`terraform/envs/backstage` ([README](../../terraform/envs/backstage/README.md)).
+
+## Host specification (INV-005)
+
+| Item | Value |
+|---|---|
+| OS | Ubuntu 24.04 LTS (Canonical AMI `ubuntu-noble-24.04-amd64-server-*`), `t3.xlarge`, unlimited credits, us-east-1a private app subnet, no public IP, no key pair |
+| Access | Session Manager only (no SSH ingress, no bastion); IMDSv2 required, hop limit 1 |
+| Packages (first boot, maintenance egress) | `docker-ce docker-ce-cli containerd.io docker-compose-plugin` from Docker's apt repository; AWS CLI v2 from the official zip; CloudWatch agent from the regional deb; `ca-certificates curl gnupg unzip` |
+| Users | `backstage` system user and group, uid/gid **997** (the Portal image's user), created before Docker so the `docker` group cannot take 997; first boot fails if 997 is taken |
+| Volumes | root gp3 30 GB (OS, Docker images); data gp3 100 GB at `/srv/backstage`, ext4 label `backstage`, created on first use only, fstab by UUID, `prevent_destroy`, weekly AWS Backup snapshot kept 30 days |
+| Paths | `/srv/backstage/{corpus,control,portal,categorization,logs,runtime}` 0750 997:997; `/srv/backstage/deploy` 0750 root (`releases/<sha>/`, `current` symlink); `/etc/backstage` 0700 root: `host.conf` (static), `app.env` and `engine.env` 0600, `categorization.capability` 0640 root:997, `proxy-endpoints` cache; `/run/backstage/hold` |
+| Time | Amazon Time Sync Service `169.254.169.123` (chrony source or timesyncd), no public NTP |
+| Docker daemon | default log driver `awslogs` → `/arclight/backstage/<env>/portal` (create-group false, non-blocking), `shutdown-timeout` 120 s; `no-new-privileges` is set per compose service, not as a daemon default (Portal containers are Backstage's to harden) |
+| Bridge | `backstage-portal`, subnet `10.255.0.0/24`, interface `br-bkstgportal`, inter-container traffic off |
+| Firewall | `DOCKER-USER`: from the bridge, established flows and the proxy endpoints only, then drop; `BACKSTAGE-PORTAL-IN` (from `INPUT -i br-bkstgportal`): replies only, then drop. Reapplied before and after every Docker start |
+
+**Boot sequence (every boot).** `backstage-data` (mount; Docker requires it) and
+`backstage-firewall` (Docker requires it) → `docker` (its drop-in reapplies the firewall,
+stop timeout 150 s) → `backstage-network` → `backstage-compose` (skipped until a release exists;
+renders secrets, then `compose up -d` of the current release) → `backstage-busy.timer`.
+First boot runs cloud-init once: uid/gid, mask Docker, write files, install packages, time
+source, unmask and start in that order. The app never starts at boot on a fresh host.
+
+**Failure modes.** Data volume missing or unmountable: Docker stays stopped (nothing writes to
+the root disk). Firewall cannot get the proxy list: the cached list is used; without one Docker
+stays stopped. SSM or Secrets Manager unreachable: `backstage-compose` fails, containers that
+dockerd already restarted keep running. Busy publisher failing: no datapoint, no idle-stop.
+
+## Preconditions
+
+- Prod root's interface endpoints applied; the Backstage root applied twice (maintenance egress
+  on, then off) and the boot verified (README).
+- The owner rotated the proxy credentials committed in Backstage's migration 002 and on the PC
+  (D11/D18) before any image push or corpus copy.
+- Secrets written: `cookie-key` (the PC's existing key, never a new one), `oidc-client-secret`,
+  `anthropic-api-key`, `categorization-capability`. Admin consent and the owner's `admin` role
+  assignment on `arclight-backstage` done.
+- GitHub environment `backstage` exists, restricted to `main`. Cloudflare record, Full (strict)
+  and the WAF skip in place.
+- During the whole migration: apply with `-var=idle_stop_enabled=false`, or keep
+  `/run/backstage/hold` fresh.
+
+## Smoke deploy (after Backstage WP1; Litestream stays off)
+
+1. Run the workflow with the WP1 commit and `mode = stage-only`: images pulled, release
+   selected, secrets rendered, nothing started (so Litestream never sees the smoke stores).
+2. S1-S2 over Session Manager as Backstage's spec gives them, as one-off containers:
+   `sudo docker compose --project-directory /srv/backstage/deploy/current run --rm --no-deps app python -m podbay init-corpus --db /srv/backstage/corpus/podbay.db`,
+   then the identity `recovery` and `bootstrap` claims, read and deleted over SSM.
+3. S3 `sudo docker compose --project-directory /srv/backstage/deploy/current up -d app engine`
+   (not Litestream); S4 the owner signs in with the bootstrap claim.
+4. S5 discard: stop the project; remove the smoke `podbay.db*`, `control.sqlite*`, `-wal`,
+   `-shm` and `.owner.lock`; clear `s3://arclight-backstage-prod-litestream/backstage/` if
+   Litestream ran at all. A smoke control store must not survive (restore refuses a different
+   `installation_id`).
+
+## Cutover
+
+| # | Step | Who |
+|---|---|---|
+| C1-C3 | Freeze the PC, back up the control store, checkpoint the corpus, upload to `s3://arclight-backstage-prod-migration/` (validation copies under `archive/`) | Owner (Backstage's spec) |
+| C4 | Run the workflow with the cutover commit and `mode = stage-only` if it is not already current; `touch /run/backstage/hold`; `compose stop`; confirm the smoke stores are gone; `aws s3 sync s3://arclight-backstage-prod-migration/<prefix>/ /srv/backstage/...` for the corpus, assets, Portal store and categorization; `chown -R 997:997` those trees; `sqlite3 /srv/backstage/corpus/podbay.db 'PRAGMA quick_check'` (from a one-off container if `sqlite3` is absent on the host) | Overcast |
+| C5 | `docker compose --project-directory /srv/backstage/deploy/current run --rm --no-deps app python tools/control_store.py restore --from-backup <file>`, Litestream stopped | Overcast |
+| C6 | `compose up -d litestream` alone; wait for the first snapshot of both databases (container logs, `s3 ls` under `backstage/prod/`) | Overcast |
+| C7 | `compose up -d app engine`; `/ready` shows `recovery_required:true` | Overcast |
+| C8-C10 | Reconcile and complete recovery, link-claim before the owner's first sign-in, analysts by role | Backstage, owner, administrator |
+| After | Remove the hold, re-enable idle-stop; the PC stays stopped and intact for 14 days as warm standby (D15) | Owner |
+
+## Restore drill (before cutover; verdict condition 4)
+
+On a scratch volume or a stopped project: `litestream restore` both databases with **one**
+`-timestamp`, `tools/control_store.py mark-restored`, start, confirm `recovery_required:true`,
+time it. Record the RTO and the Litestream lag metric name here; the lag alarm waits for that.

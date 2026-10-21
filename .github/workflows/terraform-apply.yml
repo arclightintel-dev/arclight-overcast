@@ -6,6 +6,7 @@ on:
     paths:
       - 'terraform/**'
       - '!terraform/corporate/**'
+      - '!terraform/envs/backstage/**'
       - 'services/**/*.tpl'
 
 concurrency:

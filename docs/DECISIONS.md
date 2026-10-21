@@ -156,6 +156,8 @@ Backstage (the owner's bootstrapped analyst application; repository `arclightint
 
 **Platform record**: Complex is to be told that Backstage is hosted as a prototype application outside the module charter; no D-series decision is required for Overcast to proceed on the owner's direction.
 
+**Implementation note (2026-10-21).** Backstage's deployment manifest was accepted with changes and its app-change spec, reviewed by Overcast, was signed by the owner (Backstage `aws/hosting` `fcc39ec`). Owner decisions recorded since: OW-2 `t3.xlarge` with a Portal cap of 3 (amends item 6); OW-6 five interface endpoints in one AZ, owned by the prod root, which makes them every prod workload's only path to Secrets Manager, SSM and CloudWatch metrics until a second AZ is added; D16 idle-stop never stops a running job or an open Portal; D19 no Cloudflare Access gate in v1; D15 the PC stays as warm standby for 14 days; **D14a the Desktop installer ships unsigned first**, signing following once Trusted Signing validation clears, which amends item 3's timing and supersedes the hosting response's condition that installers be signed before the download link appears. The Backstage root (`terraform/envs/backstage`) owns its three ECR repositories, an exception to O-006 because nothing else uses them. Reviewed before implementation by Astra and an Opus internal review (both GO-WITH-CHANGES, reconciled).
+
 ## O-013: Nerfherder staging wiring under D-072
 
 **Authority**: platform decision D-072 "Nerfherder Staging Deployment Enabled (staging only)", ratified by the platform owner 2026-10-21, `arclight-complex@020ef5d` (`platform/DECISIONS.md` l.1445-1455). | **Recorded**: 2026-10-21, as D-072 paragraph 2 requires before anything is scheduled.

@@ -1,3 +1,5 @@
 *.sh text eol=lf
 *.sql text eol=lf
 Dockerfile text eol=lf
+*.tftpl text eol=lf
+terraform/envs/backstage/host/** text eol=lf

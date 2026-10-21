@@ -1,0 +1,17 @@
+[Unit]
+Description=Backstage compose project (current release)
+Requires=docker.service backstage-network.service
+Wants=network-online.target
+After=docker.service backstage-network.service backstage-firewall.service network-online.target
+# No release until the first deploy: skip, and fetch no secrets.
+ConditionPathExists=/srv/backstage/deploy/current
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/usr/local/sbin/backstage-render-secrets
+ExecStart=/usr/local/sbin/backstage-compose-up
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
