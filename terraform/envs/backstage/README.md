@@ -30,7 +30,7 @@ operator-applied with admin credentials; the legacy CI workflows exclude this ro
    terraform plan -var=maintenance_egress=true -out=backstage-first.tfplan
    terraform apply backstage-first.tfplan
    ```
-   Expect only additions (85 on 2026-10-21) and no change to any prod-owned object.
+   Expect only additions (86 on 2026-10-21) and no change to any prod-owned object.
 3. **Verify the boot** over Session Manager:
    `sudo cloud-init status --long`, `systemctl status backstage-data backstage-firewall docker backstage-network backstage-busy.timer`,
    `sudo iptables -S DOCKER-USER`, `sudo iptables -S BACKSTAGE-PORTAL-IN`, `findmnt /srv/backstage`.

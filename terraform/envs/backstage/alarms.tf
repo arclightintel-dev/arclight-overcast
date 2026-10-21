@@ -50,18 +50,23 @@ resource "aws_cloudwatch_metric_alarm" "status_check" {
   ok_actions          = [data.aws_sns_topic.alarms.arn]
 }
 
-resource "aws_cloudwatch_metric_alarm" "data_disk" {
-  alarm_name          = "${local.name}-data-disk"
-  alarm_description   = "Backstage data volume (/srv/backstage) above 85 percent"
+# Root (OS, Docker images and layers) and data (/srv/backstage) filesystems, above 80 percent
+# (hosting response F15). The CloudWatch agent publishes both with drop_device, so the
+# dimensions are InstanceId, path and fstype.
+resource "aws_cloudwatch_metric_alarm" "disk" {
+  for_each = { root = "/", data = "/srv/backstage" }
+
+  alarm_name          = "${local.name}-${each.key}-disk"
+  alarm_description   = "Backstage ${each.key} filesystem (${each.value}) above 80 percent"
   namespace           = "CWAgent"
   metric_name         = "disk_used_percent"
   statistic           = "Maximum"
-  dimensions          = { InstanceId = aws_instance.host.id, path = "/srv/backstage", fstype = "ext4" }
+  dimensions          = { InstanceId = aws_instance.host.id, path = each.value, fstype = "ext4" }
   period              = 300
   evaluation_periods  = 3
   datapoints_to_alarm = 3
   comparison_operator = "GreaterThanThreshold"
-  threshold           = 85
+  threshold           = 80
   treat_missing_data  = "notBreaching"
   alarm_actions       = [data.aws_sns_topic.alarms.arn]
   ok_actions          = [data.aws_sns_topic.alarms.arn]
