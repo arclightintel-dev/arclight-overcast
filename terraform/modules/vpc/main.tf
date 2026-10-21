@@ -194,6 +194,30 @@ resource "aws_vpc_endpoint" "logs" {
   tags = { Name = "arclight-${var.environment}-logs" }
 }
 
+# Additional interface endpoints (O-012/OW-6): same shape as the three above. Private
+# DNS makes each one the only path to its service from this VPC, so add services here,
+# never from another root.
+locals {
+  extra_endpoint_subnet_ids = (
+    var.extra_interface_endpoint_subnet_indexes == null
+    ? aws_subnet.private_app[*].id
+    : [for i in var.extra_interface_endpoint_subnet_indexes : aws_subnet.private_app[i].id]
+  )
+}
+
+resource "aws_vpc_endpoint" "extra" {
+  for_each = toset(var.extra_interface_endpoints)
+
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.${each.value}"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = local.extra_endpoint_subnet_ids
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+
+  tags = { Name = "arclight-${var.environment}-${each.value}" }
+}
+
 data "aws_region" "current" {}
 
 ################################################################################
