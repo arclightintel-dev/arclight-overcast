@@ -18,11 +18,6 @@ output "shuttleforge_db_url_secret_arn" {
   value       = aws_secretsmanager_secret.service["arclight/${var.environment}/shuttleforge/db-url"].arn
 }
 
-output "podbay_database_url_secret_arn" {
-  description = "ARN of the Podbay database URL secret"
-  value       = aws_secretsmanager_secret.service["arclight/${var.environment}/podbay/database-url"].arn
-}
-
 output "nerfherder_database_url_secret_arn" {
   description = "ARN of the Nerfherder database URL secret"
   value       = aws_secretsmanager_secret.service["arclight/${var.environment}/nerfherder/database-url"].arn

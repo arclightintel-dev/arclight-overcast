@@ -133,6 +133,9 @@ resource "aws_lb_target_group" "this" {
   vpc_id      = var.vpc_id
   target_type = "ip"
 
+  # Short drain so a scale-to-zero (singleton deploys) does not wait the 300 s default.
+  deregistration_delay = 30
+
   health_check {
     enabled             = true
     path                = each.value.health_check_path

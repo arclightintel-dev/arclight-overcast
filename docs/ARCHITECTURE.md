@@ -2,22 +2,20 @@
 
 ## Terraform module structure
 
-15 modules in `terraform/modules/`:
+13 modules in `terraform/modules/`:
 
 | Module | Purpose | Status |
 |--------|---------|--------|
-| `vpc` | VPC, 8 subnets (public/app/db/workspace ×2 AZ), IGW, NAT GW, VPC endpoints (endpoint SG includes workspace CIDRs), placeholder SGs | Active |
+| `vpc` | VPC, 6 subnets (public/app/db ×2 AZ), IGW, NAT GW, VPC endpoints (S3 gateway; ECR API/DKR and Logs interfaces), service SGs | Active |
 | `ecr` | 6 ECR repositories, lifecycle policies, immutable tags | Active |
 | `ecs-cluster` | ECS cluster, Cloud Map namespace | Active |
-| `ecs-service-fargate` | Generic Fargate service (task def, service, Cloud Map, SG rules); `lifecycle { ignore_changes = [task_definition] }` so out-of-band deploys aren't reverted | Active (Core, Podbay) |
+| `ecs-service-fargate` | Generic Fargate service (task def, service, Cloud Map, SG rules); `lifecycle { ignore_changes = [task_definition] }` so out-of-band deploys aren't reverted | Active (Core) |
 | `ecs-service-ec2` | Generic EC2-backed service | Stub only |
-| `ecs-ec2-capacity-provider` | EC2 ASG, launch template, capacity provider, managed scaling | Active |
 | `rds-postgres` | PostgreSQL instance, managed password, SGs | Active |
 | `alb` | ALB, listeners, target groups, host routing, Cloudflare CIDR restriction | Active |
 | `secrets` | Secrets Manager shells, SSM parameters, per-service execution roles | Active |
 | `observability` | CloudWatch log groups, alarms, SNS, CloudTrail (conditional), budget (conditional) | Active |
 | `iam-github-oidc` | GitHub OIDC provider (conditional), Overcast terraform role, per-service ECR push roles | Active |
-| `coturn` | coturn TURN server (EC2, EIP, SG, templatefile user-data, denied/allowed-peer-ip) | Active — wired in staging (D-062) |
 | `acm` | ACM certificate management | Stub only |
 | `route53` | Route 53 DNS | Stub only (Cloudflare used instead) |
 | `s3` | S3 buckets | Stub only |
@@ -26,7 +24,7 @@
 
 ```
 terraform/envs/
-  staging/          — full environment: Core + Podbay controller live, coturn live, Podbay workspace substrate
+  staging/          — full environment: Core live (Podbay and coturn removed under O-011)
     main.tf         — ~955 lines, 12 module calls + root resources
     variables.tf    — 17 variables
     outputs.tf      — 24 outputs

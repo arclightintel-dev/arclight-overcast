@@ -35,7 +35,7 @@ data "aws_iam_policy_document" "overcast_trust" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [
+      values = [
         "repo:${var.github_org}/arclight-overcast:ref:refs/heads/main",
         "repo:${var.github_org}/arclight-overcast:environment:${var.environment}",
       ]
@@ -129,9 +129,9 @@ resource "aws_iam_role_policy" "overcast_terraform_deploy" {
         Resource = [for arn in values(var.ecr_repository_arns) : arn]
       },
       {
-        Sid      = "PassRole"
-        Effect   = "Allow"
-        Action   = ["iam:PassRole"]
+        Sid    = "PassRole"
+        Effect = "Allow"
+        Action = ["iam:PassRole"]
         Resource = [
           "arn:aws:iam::${var.aws_account_id}:role/arclight-ecs-*-${var.environment}",
           "arn:aws:iam::${var.aws_account_id}:role/arclight-*-task-role-${var.environment}",
@@ -159,10 +159,6 @@ locals {
     shuttleforge = {
       repo_name = "arclight-shuttleforge"
       ecr_repos = ["arclight/shuttleforge"]
-    }
-    podbay = {
-      repo_name = "arclight-podbay"
-      ecr_repos = ["arclight/podbay", "arclight/podbay-workspace-browser"]
     }
   }
 }

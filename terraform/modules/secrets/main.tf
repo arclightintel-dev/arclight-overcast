@@ -16,17 +16,16 @@ locals {
     "arclight/${var.environment}/shuttleforge/listener-auth-hmac-key" = "ShuttleForge listener HMAC key"
     "arclight/${var.environment}/shuttleforge/lease-hmac-key"         = "ShuttleForge lease HMAC key"
     "arclight/${var.environment}/shuttleforge/operator-token"         = "ShuttleForge operator token"
-    "arclight/${var.environment}/podbay/database-url"                 = "Podbay PostgreSQL connection string"
-    "arclight/${var.environment}/podbay/turn-shared-secret"           = "Podbay TURN server shared secret (coturn use-auth-secret)"
     "arclight/${var.environment}/nerfherder/database-url"             = "Nerfherder PostgreSQL connection string"
+    "arclight/${var.environment}/nerfherder/core-client-secret"       = "Nerfherder service-client secret issued by Core (tranche E)"
+    "arclight/${var.environment}/shuttleforge/core-client-secret"     = "ShuttleForge service-client secret issued by Core (tranche E)"
   }
 
-  services = ["core", "shuttleforge", "podbay"]
+  services = ["core", "shuttleforge"]
 
   ecr_repo_map = {
     core         = "arclight/core"
     shuttleforge = "arclight/shuttleforge"
-    podbay       = "arclight/podbay"
   }
 }
 
@@ -49,8 +48,6 @@ locals {
     "/arclight/${var.environment}/core/internal-url"         = "http://core.${var.private_dns_namespace}:8000"
     "/arclight/${var.environment}/core/jwks-url"             = "http://core.${var.private_dns_namespace}:8000/.well-known/jwks.json"
     "/arclight/${var.environment}/core/token-url"            = "http://core.${var.private_dns_namespace}:8000/oauth/token"
-    "/arclight/${var.environment}/podbay/public-url"         = "https://podbay.${var.public_domain}"
-    "/arclight/${var.environment}/podbay/internal-url"       = "http://podbay.${var.private_dns_namespace}:8099"
     "/arclight/${var.environment}/shuttleforge/public-url"   = "https://shuttleforge.${var.public_domain}"
     "/arclight/${var.environment}/shuttleforge/internal-url" = "http://shuttleforge.${var.private_dns_namespace}:9000"
   }

@@ -10,7 +10,7 @@
       }
     ],
     "healthCheck": {
-      "command": ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')\""],
+      "command": ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""],
       "interval": 30,
       "timeout": 5,
       "retries": 3,
@@ -21,7 +21,8 @@
       { "name": "CORE_ISSUER", "value": "https://core.internal" },
       { "name": "CORE_BASE_URL", "value": "https://core.${domain}" },
       { "name": "CORE_ENVIRONMENT", "value": "${environment}" },
-      { "name": "CORE_ASSET_BACKEND", "value": "${asset_backend}" }
+      { "name": "CORE_ASSET_BACKEND", "value": "${asset_backend}" },
+      { "name": "CORE_TRUSTED_PROXY_CIDRS", "value": "${trusted_proxy_cidrs}" }
     ],
     "secrets": [
       { "name": "CORE_DATABASE_URL", "valueFrom": "${secret_arn_database_url}" },

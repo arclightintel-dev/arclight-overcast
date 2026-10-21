@@ -9,8 +9,6 @@ variable "repository_names" {
   default = [
     "arclight/core",
     "arclight/shuttleforge",
-    "arclight/podbay",
-    "arclight/podbay-workspace-browser",
     "arclight/nerfherder",
     "arclight/dbbootstrap",
   ]

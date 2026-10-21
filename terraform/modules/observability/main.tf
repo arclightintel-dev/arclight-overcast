@@ -6,9 +6,6 @@ locals {
   log_groups = [
     "core",
     "shuttleforge",
-    "podbay",
-    "podbay-workspace",
-    "ecs-agent",
     "dbbootstrap",
   ]
 }

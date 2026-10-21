@@ -66,7 +66,10 @@ Same MultiFernet-style rotation:
 Applies to `core/oidc-google-client-secret`, `core/oidc-microsoft-client-secret`,
 and `core/oidc-github-client-secret`.
 
-### Podbay TURN shared secret (coturn)
+### Podbay TURN shared secret (coturn) — REMOVED under O-011 (2026-10-21)
+
+> The secret shell, coturn instance and Podbay controller no longer exist once the O-011 removal change is applied. Retained for history only.
+
 Secret: `arclight/staging/podbay/turn-shared-secret` (coturn `use-auth-secret`).
 This value is shared between **two** consumers — the coturn EC2 instance
 (`module.coturn`, EIP `52.72.36.174`) and the Podbay controller (reads it as

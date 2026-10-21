@@ -55,9 +55,5 @@ variable "services" {
       port              = 9000
       health_check_path = "/ready"
     }
-    podbay = {
-      port              = 8099
-      health_check_path = "/health"
-    }
   }
 }

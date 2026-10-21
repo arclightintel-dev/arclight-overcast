@@ -5,7 +5,7 @@
 ```
 1. Core (Tier 0 — no upstream module dependencies)
 2. ShuttleForge (depends on Core for JWKS)
-3. Podbay (depends on Core for JWKS, ShuttleForge for leases at Phase 3)
+3. Nerfherder (depends on Core for JWKS and ShuttleForge for leases; Podbay withdrawn, O-011)
 ```
 
 Deploy in this order. Each service must pass `/ready` before deploying the next.
@@ -27,7 +27,7 @@ as `v1-<git-sha-short>` (Overcast does not build service images — see the
 ### Trigger A — manual (workflow_dispatch)
 
 From the GitHub Actions UI (or `gh`), run **Deploy Service** with inputs
-`module` (core | shuttleforge | podbay), `environment` (staging), and
+`module` (core | shuttleforge), `environment` (staging), and
 `image_tag` (e.g. `v1-abc1234`):
 
 ```bash
