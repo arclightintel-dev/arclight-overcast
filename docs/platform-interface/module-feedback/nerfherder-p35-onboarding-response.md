@@ -28,3 +28,18 @@ NF's own inventory of Overcast ("what we believe we found") was correct on every
 ## Overcast work implied (not scheduled)
 
 New NF security group and rules; module variables for rollout percentages (shared with SF's O-2); Secrets Manager/KMS/SSM interface endpoints if fail-closed egress is required; `core-client-secret` shell and task role; artifact bucket; migration task family; NF ECR push role; internal-only post-deploy check in `deploy-service.yml`; log group and alarm. All wait on the owner's sequencing and the platform amendment in item 16.
+
+## Follow-ups answered 2026-10-21 (five items from NF, via the owner)
+
+| # | NF ask | Overcast answer | Evidence |
+|---|---|---|---|
+| 1 | Enable `rds.force_ssl` | Already enforced: `rds.force_ssl = 1` on parameter group `arclight-staging-pg16-20260624130504373200000002` (RDS PostgreSQL 16 engine default, in-sync); CA `rds-ca-rsa2048-g1`. Plaintext connects are refused today; Core already connects over TLS. No apply needed. | live `describe-db-parameters` 2026-10-21 |
+| 2 | Separate migration and runtime roles, two leaves | Agreed with NF's naming: shell `nerfherder/migration-database-url` added beside `database-url`; existing `nerfherder_staging` (database owner) becomes the migration role; new DML-only `nerfherder_app_staging` backs `database-url`. Lands with NF's wiring change. | `terraform/modules/secrets/main.tf:19-20`; `services/dbbootstrap/bootstrap.sql:24-37` |
+| 3 | NF trims its pool to 13 | Fine; no upsize for NF. `max_connections` = LEAST(DBInstanceClassMemory/9531392, 5000) = 112 on `db.t3.micro`; 24 h peak usage 3. Upsize when the committed sum approaches about 80. | live parameter + CloudWatch `DatabaseConnections` |
+| 4a | RDS SG admits only service SGs | Confirmed: `sg-0098d9af3d843bfa1` has three ingress rules, tcp 5432 from the core, shuttleforge and dbbootstrap groups; no CIDR rules. NF's group becomes a fourth list entry. | live `describe-security-group-rules`; `terraform/modules/rds-postgres/main.tf:32-41` |
+| 4b | Client behaviour during maintenance or failover | Single-AZ `db.t3.micro`, no failover. A reboot (maintenance window sat 09:43-10:13 UTC, auto minor upgrade on, class change) drops connections with TCP reset / refused for roughly 1-3 min, longer for a minor upgrade; loud, self-recovering. The silent case is a removed or broken SG path: packets dropped, no RST, client hangs until its own keepalive or timeout. Server-side `tcp_keepalives_idle` is engine default; `idle_in_transaction_session_timeout` 86400000 ms. NF owns client keepalives (about 30 s idle, 10 s interval, count 3) plus connect and statement timeouts. | live `describe-db-instances` and parameters |
+| 4c | Bounded SG-rule removal demonstration | Acceptable: at most five minutes, NF's own ingress rule only, operator-run, restored by `terraform apply`, outside Core hours, owner's go at the time. Affects NF alone (rules are per source group). | same |
+| 5 | Task size 1 vCPU / 2 GB | Valid Fargate pair; module takes plain numbers. Start there and measure. | `terraform/modules/ecs-service-fargate/variables.tf:53-63` |
+
+Gate order on Overcast's side is unchanged: D-series amendment lifting the Nerfherder deployment deferral, then NF's wiring change, then the owner's apply.
+
