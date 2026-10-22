@@ -73,6 +73,11 @@ for key, var in (("app", "BACKSTAGE_APP_DIGEST"), ("portal", "BACKSTAGE_PORTAL_D
 PY
 /usr/local/sbin/backstage-render-env "$stage"
 
+# Secrets before any compose command: the services' env_file entries (/etc/backstage/app.env,
+# engine.env) are required, so compose cannot even load the project for a pull without them.
+# Re-reading them here also makes a rotated value take effect.
+/usr/local/sbin/backstage-render-secrets
+
 # 3. Pull the pinned images (root's Docker client only; logged out on exit).
 registry=$(param ecr-registry)
 "$AWS" ecr get-login-password | docker login --username AWS --password-stdin "$registry" >/dev/null
@@ -91,12 +96,11 @@ mv "$stage" "$rel"
 stage=""
 if [ -n "$old" ]; then rm -rf "$old"; fi
 
-# 4. Switch the current release and start it. Secrets are re-read so a rotated value takes
-# effect; app and Engine are recreated explicitly because env_file contents are not part of
-# the container configuration compose compares.
+# 4. Switch the current release and start it. App and Engine are recreated explicitly because
+# env_file contents (the secrets rendered above) are not part of the container configuration
+# compose compares.
 ln -sfn "releases/$sha" "$DEPLOY_DIR/current.next"
 mv -T "$DEPLOY_DIR/current.next" "$DEPLOY_DIR/current"
-/usr/local/sbin/backstage-render-secrets
 if [ "$mode" = --stage-only ]; then
   touch "$DEPLOY_DIR/no-autostart"
   log "staged $sha as the current release; nothing started, and boot autostart is off (--stage-only)"
