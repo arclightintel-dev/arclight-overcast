@@ -8,12 +8,19 @@
 
 iid=$(imds instance-id)
 
+# Docker state. If Docker cannot be queried, containers may still be running a job or a
+# Portal session, so the unknown state counts as busy.
 containers=0
 app=0
-if docker info >/dev/null 2>&1; then
-  containers=$(docker ps -q --filter network=backstage-portal | wc -l)
-  app=$(docker ps -q --filter label=com.docker.compose.project=backstage \
-    --filter label=com.docker.compose.service=app | wc -l)
+docker_unknown=0
+if timeout 15 docker info >/dev/null 2>&1 &&
+  portal=$(timeout 15 docker ps -q --filter network=backstage-portal) &&
+  apps=$(timeout 15 docker ps -q --filter label=com.docker.compose.project=backstage \
+    --filter label=com.docker.compose.service=app); then
+  containers=$(printf '%s' "$portal" | grep -c . || true)
+  app=$(printf '%s' "$apps" | grep -c . || true)
+else
+  docker_unknown=1
 fi
 
 # Running jobs and Portal runtimes, from the app on the raw loopback peer (Backstage H10).
@@ -52,7 +59,7 @@ requests=$("$AWS" cloudwatch get-metric-statistics --namespace AWS/ApplicationEL
 requests=${requests%.*}
 [[ "$requests" =~ ^[0-9]+$ ]] || requests=1
 
-busy=$((containers + jobs + sessions + hold + requests + grace))
+busy=$((containers + docker_unknown + jobs + sessions + hold + requests + grace))
 "$AWS" cloudwatch put-metric-data --namespace Arclight/Backstage \
   --metric-data "MetricName=Busy,Dimensions=[{Name=InstanceId,Value=$iid}],Value=$busy,Unit=Count"
-echo "busy=$busy containers=$containers jobs=$jobs sessions=$sessions hold=$hold requests=$requests grace=$grace"
+echo "busy=$busy containers=$containers docker_unknown=$docker_unknown jobs=$jobs sessions=$sessions hold=$hold requests=$requests grace=$grace"

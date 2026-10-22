@@ -50,6 +50,27 @@ resource "aws_cloudwatch_metric_alarm" "status_check" {
   ok_actions          = [data.aws_sns_topic.alarms.arn]
 }
 
+# Target health (hosting response F15). A stopped instance's target is "unused", not
+# "unhealthy", so this stays quiet overnight; the 15-minute window covers the app's start-up
+# after the morning start. Before the first deploy there is no app on 8430, so it is in ALARM
+# until then (one notification on entry, one on recovery).
+resource "aws_cloudwatch_metric_alarm" "target_unhealthy" {
+  alarm_name          = "${local.name}-target-unhealthy"
+  alarm_description   = "Backstage target unhealthy on the prod ALB for 15 minutes while the host is running"
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "UnHealthyHostCount"
+  statistic           = "Maximum"
+  dimensions          = { TargetGroup = aws_lb_target_group.host.arn_suffix, LoadBalancer = data.aws_lb.prod.arn_suffix }
+  period              = 300
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [data.aws_sns_topic.alarms.arn]
+  ok_actions          = [data.aws_sns_topic.alarms.arn]
+}
+
 # Root (OS, Docker images and layers) and data (/srv/backstage) filesystems, above 80 percent
 # (hosting response F15). The CloudWatch agent publishes both with drop_device, so the
 # dimensions are InstanceId, path and fstype.

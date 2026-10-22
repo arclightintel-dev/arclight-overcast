@@ -53,7 +53,8 @@ the deploy re-renders the secret files and recreates the app and Engine.
 ## Idle-stop
 
 The host publishes `Busy` every minute: running jobs and Portal runtimes (from the app's
-loopback-only `/api/admin/busy`; any failure counts as busy), Portal containers, Session Manager
+loopback-only `/api/admin/busy`; any failure counts as busy), Portal containers (a Docker that
+cannot be queried counts as busy), Session Manager
 and Run Command sessions, the hold file `/run/backstage/hold` (honoured six hours), ALB requests
 in the last four minutes, and the first hour after boot. Thirty zero minutes stop the instance;
 the weekday 07:00 America/New_York schedule or the next deploy starts it.
