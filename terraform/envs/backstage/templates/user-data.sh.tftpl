@@ -7,18 +7,28 @@
 set -euo pipefail
 echo "backstage bootstrap: start"
 
-# 1. Fixed uid/gid 997 (the Portal image's user), before any package can take it.
-if getent group 997 >/dev/null && [ "$(getent group 997 | cut -d: -f1)" != backstage ]; then
-  echo "backstage bootstrap: FATAL: gid 997 is already taken"
+# 1. The containers run as uid/gid 997 (the Portal image's user). The host needs no named
+#    account for that, only numeric ownership. uid 997 must be unused; gid 997 may exist (on
+#    the Ubuntu 24.04 image it is "crontab", no members) but must not be a privileged group or
+#    have members, because container-created files carry that group.
+if getent passwd 997 >/dev/null; then
+  echo "backstage bootstrap: FATAL: uid 997 is already taken ($(getent passwd 997 | cut -d: -f1))"
   exit 1
 fi
-if getent passwd 997 >/dev/null && [ "$(getent passwd 997 | cut -d: -f1)" != backstage ]; then
-  echo "backstage bootstrap: FATAL: uid 997 is already taken"
-  exit 1
+if getent group 997 >/dev/null; then
+  g997=$(getent group 997 | cut -d: -f1)
+  case "$g997" in
+    root | sudo | adm | shadow | disk | docker | lxd | systemd-journal)
+      echo "backstage bootstrap: FATAL: gid 997 is the privileged group $g997"
+      exit 1
+      ;;
+  esac
+  if [ -n "$(getent group 997 | cut -d: -f4)" ]; then
+    echo "backstage bootstrap: FATAL: gid 997 ($g997) has members"
+    exit 1
+  fi
+  echo "backstage bootstrap: gid 997 is $g997 (no members): accepted"
 fi
-getent group backstage >/dev/null || groupadd --system --gid 997 backstage
-getent passwd backstage >/dev/null || useradd --system --uid 997 --gid 997 --no-create-home --shell /usr/sbin/nologin backstage
-[ "$(id -u backstage)" = 997 ] && [ "$(id -g backstage)" = 997 ]
 
 # 2. Docker must not start until its data volume and firewall exist (the package would
 #    otherwise start it during installation).

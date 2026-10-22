@@ -1,6 +1,7 @@
 #!/bin/bash
-# backstage-render-secrets: the four Backstage secrets into root-owned files the compose
-# project reads (app.env, engine.env) or bind-mounts (categorization.capability). Run before
+# backstage-render-secrets: the four Backstage secrets into files the compose project reads
+# (app.env, engine.env: root 0600) or bind-mounts (categorization.capability: owner uid 997,
+# 0400, so the app and Engine containers read it as owner, not through group 997). Run before
 # every start and every deploy, so a rotated value takes effect on the next deploy.
 # Values are never printed, logged or passed as command arguments (printf is a builtin).
 . /usr/local/lib/backstage/common.sh
@@ -42,5 +43,5 @@ capability=$(secret categorization-capability)
 install -d -m 0700 /etc/backstage
 printf 'PODBAY_COOKIE_KEY=%s\nPODBAY_OIDC_CLIENT_SECRET=%s\n' "$cookie" "$oidc" | write /etc/backstage/app.env 0600 root:root
 printf 'PODBAY_ANTHROPIC_API_KEY=%s\n' "$anthropic" | write /etc/backstage/engine.env 0600 root:root
-printf '%s' "$capability" | write /etc/backstage/categorization.capability 0640 "root:$APP_UID"
+printf '%s' "$capability" | write /etc/backstage/categorization.capability 0400 "$APP_UID:root"
 log "rendered app.env, engine.env and categorization.capability"
