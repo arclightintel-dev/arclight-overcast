@@ -21,7 +21,11 @@ aws rds wait db-snapshot-available \
 For a schema migration, take it after the consuming service is scaled to zero so the
 snapshot carries no in-flight writes. As of 2026-10-22 one manual snapshot exists:
 `arclight-staging-pre-core-p7-20261021` (Core P7 pre-migration, 2026-10-21T21:04Z, not shared).
-Otherwise only the 7-day automated backups do. This runbook has never been executed (R3).
+Otherwise only the 7-day automated backups do. No completed, verified run of this runbook exists (R3).
+One attempt is on record in CloudTrail only: 2026-07-02T21:22:39Z, snapshot
+`rds:arclight-staging-2026-07-02-08-20` restored as `arclight-staging-restore-drill` into the
+**default VPC** (no `--db-subnet-group-name`), deleted 21:28:41Z with `skipFinalSnapshot`, no
+verification recorded. A real drill names the staging subnet group and RDS security group.
 
 ### 1. Identify the snapshot
 
