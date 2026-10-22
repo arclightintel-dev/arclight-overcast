@@ -74,7 +74,14 @@ request with the owner's approval of the fix:
   0 requests to the path. Before 2026-09-22 is unknowable from logs; no user agent is logged anywhere.
 - **Hold**: no new ingress to staging Core:8000 (NF or SF wiring) until Core confirms the fixed release is live.
   Today Core's group admits only the staging ALB.
-- **When the fix is live**: delete the ALB 403 rule; move Core's rule back to priority 1 if wanted; the owner deletes or keeps the Cloudflare rule; lift the hold.
+- **Fix live 2026-10-22 (Core S-046, owner's go)**: revision 12 = revision 10 with only the image changed (asserted),
+  `arclight/core:v2-e3eb5c9`; rolling update 20:24:45Z, stable 20:27:23Z, rollout COMPLETED, target healthy. Identity proof:
+  the running task reports `sha256:9ad537c8e5a780167682f733c9a3427d81cfe43364af48b7eeaf33bcfd4edb50` (the image index) and
+  revision 12 sets `CORE_ENVIRONMENT=staging`. Canary `GET /auth/callback?code=s046canary&state=s046canary` through Access
+  (20:27:53Z, 400): Core logged `"GET /auth/callback HTTP/1.1" 400` with no query string; 0 log events contain the canary.
+  The ALB 403 rule was deleted at 20:29:10Z; Core's rule stays at priority 10. The Cloudflare rule stays as defence in
+  depth (Core's recommendation). The Core:8000 ingress hold is lifted. **Open**: until Core's S-047 ships and the owner
+  rotates and retires the staging signing key, ShuttleForge must not trust staging's JWKS (NF calling Core is unaffected).
 
 ## Applied 2026-10-21 — Podbay removal + Core deploy prerequisites (PR #18)
 
