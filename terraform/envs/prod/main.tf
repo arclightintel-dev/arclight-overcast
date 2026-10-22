@@ -68,6 +68,11 @@ module "vpc" {
   public_subnet_cidrs      = ["10.1.1.0/24", "10.1.2.0/24"]
   private_app_subnet_cidrs = ["10.1.10.0/24", "10.1.11.0/24"]
   private_db_subnet_cidrs  = ["10.1.20.0/24", "10.1.21.0/24"]
+
+  # O-012/OW-6 (owner, 2026-10-21): one AZ, the private app subnet the Backstage host
+  # uses. A second AZ is added when a prod workload needs it.
+  extra_interface_endpoints               = ["secretsmanager", "ssm", "ssmmessages", "ec2messages", "monitoring"]
+  extra_interface_endpoint_subnet_indexes = [0] # us-east-1a, private app 10.1.10.0/24
 }
 
 module "ecs_cluster" {
