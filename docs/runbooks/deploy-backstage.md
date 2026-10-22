@@ -46,6 +46,22 @@ Run the workflow with the previous commit. The five newest release directories s
 host, and ECR keeps the ten newest tagged images per repository. A rollback across a database
 migration needs Backstage's judgement first: the corpus and control store migrate forward only.
 
+## Adding or changing a proxy endpoint
+
+The host's security group and the Portal bridge firewall allow only the proxy endpoints in the
+root's `proxy_endpoints` variable (O-012, OW-1). When the owner adds a proxy in Backstage:
+
+1. List what Backstage has enabled (read-only, host:port pairs only, no credentials):
+   `sudo backstage-compose run --rm --no-deps app python -m podbay.proxy_egress --db /srv/backstage/corpus/podbay.db`
+2. Change `proxy_endpoints` in `terraform/envs/backstage/variables.tf` (a PR), then plan and apply.
+   This changes security-group rules and one SSM parameter; it never replaces the instance.
+3. On the host, `sudo backstage-firewall` applies the new list to the Portal bridge at once
+   (otherwise it applies at the next Docker start). Backstage's proxy test then confirms it.
+
+A rotating provider gateway (Oxylabs, Bright Data) resolves to changing addresses and cannot be
+expressed this way; that is the recorded trigger for ShuttleForge enforcement or a prefix-list
+refresh job (O-012, OW-1).
+
 ## Secret rotation
 
 Write the new value (`put-secret-value`, no trailing newline), then redeploy the current commit;
