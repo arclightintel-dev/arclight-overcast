@@ -54,13 +54,15 @@ All host commands below run in a Session Manager shell (user `ssm-user`), so the
 
 1. Run the workflow with the WP1 commit and `mode = stage-only`: images pulled, release
    selected, secrets rendered, nothing started (so Litestream never sees the smoke stores).
-2. S1-S2 as one-off containers, with the exact commands Backstage's spec gives (WP1 is final):
+2. S1-S2 as one-off containers (commands confirmed by Backstage at WP1, `aws/hosting` `3dc6bb6`;
+   claims go to a mounted path, never `/tmp`, which is tmpfs in the app service):
    ```
    sudo backstage-compose run --rm --no-deps app python -m podbay init-corpus --db /srv/backstage/corpus/podbay.db
-   sudo backstage-compose run --rm --no-deps app python -m podbay.identity --control-db /srv/backstage/control/control.sqlite recovery --output /srv/backstage/runtime/recovery.claim
-   sudo backstage-compose run --rm --no-deps app python -m podbay.identity --control-db /srv/backstage/control/control.sqlite bootstrap --output /srv/backstage/runtime/bootstrap.claim
+   sudo backstage-compose run --rm --no-deps app python -m podbay.identity --control-db /srv/backstage/control/control.sqlite recovery --output /srv/backstage/runtime/recovery.json
+   sudo backstage-compose run --rm --no-deps app python -m podbay.identity --control-db /srv/backstage/control/control.sqlite bootstrap --output /srv/backstage/runtime/bootstrap.json
    ```
    Read both claims with `sudo cat`, hand them over out of band, then `sudo rm` them.
+   `python -m podbay.identity ... status` prints non-secret facts only.
 3. S3 `sudo backstage-compose up -d app engine` (not Litestream); S4 the owner signs in with the
    bootstrap claim.
 4. S5 discard:

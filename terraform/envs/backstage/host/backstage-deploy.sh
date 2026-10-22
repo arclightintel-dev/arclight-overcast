@@ -117,10 +117,17 @@ until ready_ok; do
   [ "$SECONDS" -lt "$deadline" ] || die "/ready did not report ready within 15 minutes"
   sleep 10
 done
-revision=$(curl -fsS -m 5 -H "Host: $(param public-host)" -H "X-Forwarded-Proto: https" \
-  http://127.0.0.1:8430/api/identity/runtime |
-  python3 -c 'import json, sys; print(json.load(sys.stdin)["runtime_identity"]["revision"])')
-[ "$revision" = "$sha" ] || die "the app reports revision $revision, not $sha"
+# The running app container is the pinned image of this commit. Read from Docker, not from
+# the app over loopback: Backstage trusts forwarded headers only from the ALB subnets, so a
+# loopback request cannot present the public scheme (and needs no such trust).
+app_id=$(compose "$rel" ps -q app)
+[ -n "$app_id" ] || die "no running app container"
+app_image=$(docker inspect --format '{{.Image}}' "$app_id")
+want_digest=$(sed -n 's/^BACKSTAGE_APP_DIGEST=//p' "$rel/digests.env")
+docker image inspect --format '{{json .RepoDigests}}' "$app_image" | grep -q "sha256:$want_digest" ||
+  die "the app container does not run the pinned image sha256:$want_digest"
+revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$app_image")
+[ "$revision" = "$sha" ] || die "the app image carries revision $revision, not $sha"
 
 # 6. Keep the five newest releases as rollback targets (never the current one), and only the
 # images they reference: ECR's lifecycle policy prunes the registry, not this disk. Never a

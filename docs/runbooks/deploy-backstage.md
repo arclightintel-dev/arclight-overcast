@@ -27,7 +27,8 @@ Actions → **Deploy Backstage** → `sha` = the full 40-character commit. The w
    - pulls the images (root's Docker client, logged out afterwards), switches
      `/srv/backstage/deploy/current`, re-renders secrets, recreates the app and Engine,
    - waits up to 15 minutes for `/ready` (`ready:true`, `recovery_required:false`) and checks
-     `/api/identity/runtime` reports `runtime_identity.revision == <sha>`;
+     from Docker that the running app container uses the pinned digest and that its image's
+     `org.opencontainers.image.revision` label is `<sha>`;
 4. prints the command output and a summary.
 
 `mode`: `normal`; `accept-recovery-required` for cutover and disaster recovery, where the
