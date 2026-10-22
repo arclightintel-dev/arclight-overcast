@@ -50,6 +50,7 @@ Never implement a new infrastructure module from assumptions. Spec the following
 | TURN server design | D-062 | arclight-complex |
 | Terraform state (staging) | S3 backend | arclight-terraform-state/staging/ |
 | Terraform state (prod) | S3 backend | arclight-terraform-state/prod/ |
+| Backstage Terraform state | S3 backend | arclight-terraform-state; backstage/terraform.tfstate (O-012) |
 | Corporate Terraform state | Dedicated S3 backend | arclight-corporate-terraform-state-650880817826; state/terraform.tfstate, entra/bootstrap/terraform.tfstate and entra/applications/terraform.tfstate |
 | Secret values | AWS Secrets Manager | Never in git or Terraform state |
 | Provider inventory and connection evidence | docs/service_registry.md | Account boundaries, dated observations and pending connections; identifiers/references only |

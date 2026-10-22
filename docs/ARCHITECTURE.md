@@ -7,7 +7,7 @@
 | Module | Purpose | Status |
 |--------|---------|--------|
 | `vpc` | VPC, 6 subnets (public/app/db ×2 AZ), IGW, NAT GW, VPC endpoints (S3 gateway; ECR API/DKR and Logs interfaces), service SGs | Active |
-| `ecr` | 6 ECR repositories, lifecycle policies, immutable tags | Active |
+| `ecr` | ECR repositories (staging owns the four platform repositories; the Backstage root owns its three), lifecycle policies, immutable tags | Active |
 | `ecs-cluster` | ECS cluster, Cloud Map namespace | Active |
 | `ecs-service-fargate` | Generic Fargate service (task def, service, Cloud Map, SG rules); `lifecycle { ignore_changes = [task_definition] }` so out-of-band deploys aren't reverted | Active (Core) |
 | `ecs-service-ec2` | Generic EC2-backed service | Stub only |
@@ -25,22 +25,28 @@
 ```
 terraform/envs/
   staging/          — full environment: Core live (Podbay and coturn removed under O-011)
-    main.tf         — ~955 lines, 12 module calls + root resources
-    variables.tf    — 17 variables
-    outputs.tf      — 24 outputs
+    main.tf         — ~540 lines, 9 module calls + root resources
+    variables.tf    — 12 variables
+    outputs.tf      — 15 outputs
     backend.tf      — S3 backend at staging/terraform.tfstate
     terraform.tfvars — gitignored, real values
   prod/             — substrate only, no services
-    main.tf         — ~508 lines, 8 module calls (no ECR, no Core/Podbay service, no coturn)
+    main.tf         — ~490 lines, 7 module calls (no ECR, no Core/Podbay service, no coturn);
+                      the VPC module also carries five one-AZ interface endpoints (O-012, OW-6)
     variables.tf    — prod defaults (multi-AZ, larger instances)
     backend.tf      — S3 backend at prod/terraform.tfstate
+  backstage/        — Backstage host on the prod VPC and ALB (O-012); owner-applied, excluded from CI apply
+    *.tf            — one EC2 Docker host, its data volume, IAM, buckets, secrets shells, SSM
+                      parameters, target group and listener rule on the prod ALB, idle-stop
+    host/, templates/ — first-boot user data and the host's scripts and systemd units
+    backend.tf      — S3 backend at backstage/terraform.tfstate
 ```
 
 ## Shared vs per-environment resources
 
 | Resource | Owner | Prod access |
 |----------|-------|-------------|
-| ECR repositories | Staging state | Data source |
+| ECR repositories | Staging state (Backstage's three: Backstage state, O-012) | Data source |
 | GitHub OIDC provider | Staging state | Data source |
 | CloudTrail | Staging state | Skipped (`create_cloudtrail = false`) |
 | Budget alarm | Staging state | Skipped (`create_budget = false`) |
@@ -52,7 +58,7 @@ terraform/envs/
 - Backend: S3 (`arclight-terraform-state` bucket)
 - Locking: `use_lockfile = true` (native Terraform lockfile, not DynamoDB)
 - Encryption: SSE enabled
-- State keys: `staging/terraform.tfstate`, `prod/terraform.tfstate`
+- State keys: `staging/terraform.tfstate`, `prod/terraform.tfstate`, `backstage/terraform.tfstate`
 
 ## Service templates
 

@@ -1,0 +1,58 @@
+name: Terraform Backstage Validate
+# Credential-free checks for terraform/envs/backstage. The legacy staging plan/apply
+# workflows exclude this root; it is applied by the owner (O-012).
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/envs/backstage/**'
+      - 'terraform/modules/ecr/**'
+      - '.github/workflows/terraform-backstage-validate.yml'
+      - '.github/workflows/deploy-backstage.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/envs/backstage/**'
+      - 'terraform/modules/ecr/**'
+      - '.github/workflows/terraform-backstage-validate.yml'
+      - '.github/workflows/deploy-backstage.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate terraform/envs/backstage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/envs/backstage
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.15.6'
+
+      - name: Terraform Format
+        run: terraform fmt -check -recursive
+
+      - name: No secret versions and no double-encoded user data
+        run: |
+          ! grep -rEn 'aws_secretsmanager_secret_version|base64encode\(' --include=*.tf .
+
+      - name: Host files have LF line endings
+        run: |
+          ! grep -rlI $'\r' host templates
+
+      - name: Host scripts parse
+        run: |
+          for f in host/*.sh; do bash -n "$f"; done
+
+      - name: Terraform Init Without Backend
+        run: terraform init -backend=false -input=false -lockfile=readonly
+
+      - name: Terraform Validate
+        run: terraform validate

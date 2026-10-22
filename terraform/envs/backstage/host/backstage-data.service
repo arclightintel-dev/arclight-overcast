@@ -1,0 +1,13 @@
+[Unit]
+Description=Backstage data volume at /srv/backstage
+After=local-fs.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/backstage-mount-data
+TimeoutStartSec=360
+
+[Install]
+WantedBy=multi-user.target
