@@ -71,6 +71,25 @@ resource "aws_cloudwatch_metric_alarm" "target_unhealthy" {
   ok_actions          = [data.aws_sns_topic.alarms.arn]
 }
 
+# Portal container ceiling (hosting response F15): more Portal containers than Backstage's
+# concurrency cap (3, OW-2) for 15 minutes means leaked or orphaned sessions holding memory.
+resource "aws_cloudwatch_metric_alarm" "portal_containers" {
+  alarm_name          = "${local.name}-portal-containers"
+  alarm_description   = "More than 3 Portal containers on the Backstage host for 15 minutes (Backstage caps sessions at 3)"
+  namespace           = "Arclight/Backstage"
+  metric_name         = "PortalContainers"
+  statistic           = "Minimum"
+  dimensions          = { InstanceId = aws_instance.host.id }
+  period              = 300
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  comparison_operator = "GreaterThanThreshold"
+  threshold           = 3
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [data.aws_sns_topic.alarms.arn]
+  ok_actions          = [data.aws_sns_topic.alarms.arn]
+}
+
 # Root (OS, Docker images and layers) and data (/srv/backstage) filesystems, above 80 percent
 # (hosting response F15). The CloudWatch agent publishes both with drop_device, so the
 # dimensions are InstanceId, path and fstype.

@@ -60,6 +60,12 @@ requests=${requests%.*}
 [[ "$requests" =~ ^[0-9]+$ ]] || requests=1
 
 busy=$((containers + docker_unknown + jobs + sessions + hold + requests + grace))
-"$AWS" cloudwatch put-metric-data --namespace Arclight/Backstage \
-  --metric-data "MetricName=Busy,Dimensions=[{Name=InstanceId,Value=$iid}],Value=$busy,Unit=Count"
+# PortalContainers feeds the ceiling alarm (more containers than Backstage's cap of 3 means
+# leaked or orphaned sessions); published only when Docker answered.
+metrics="MetricName=Busy,Dimensions=[{Name=InstanceId,Value=$iid}],Value=$busy,Unit=Count"
+if [ "$docker_unknown" -eq 0 ]; then
+  metrics="$metrics MetricName=PortalContainers,Dimensions=[{Name=InstanceId,Value=$iid}],Value=$containers,Unit=Count"
+fi
+# shellcheck disable=SC2086
+"$AWS" cloudwatch put-metric-data --namespace Arclight/Backstage --metric-data $metrics
 echo "busy=$busy containers=$containers docker_unknown=$docker_unknown jobs=$jobs sessions=$sessions hold=$hold requests=$requests grace=$grace"
