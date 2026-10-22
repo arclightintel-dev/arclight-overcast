@@ -54,6 +54,27 @@ Open items that are known, bounded and deliberately not being worked. Each row n
 | DR-10 | ShuttleForge `SECURITY.md` §5.6 requires its JWKS fetch over TLS in production; Core's internal Cloud Map path is plain HTTP with no private CA. A production SF deployment needs Core-side TLS termination on the internal path or a private CA the SF image trusts. Staging accepts plain HTTP. | SF manifest rev 3 (`d031251`) | Overcast + Core | Before the first production SF deploy (SF.11 input) |
 | DR-11 | The prod HTTPS listener carries duplicate host rules: ShuttleForge at priorities 2 and 4, Core at 3 and 6 (live read 2026-10-21). Likely leftovers of hand-made or recreated rules (see DR-9). Harmless while prod serves nothing, ambiguous once it does. | `aws elbv2 describe-rules`, 2026-10-21 | Overcast | Before the first prod service deploy; audit which rules Terraform owns, remove the rest |
 
+## Core staging test-token mitigation — 2026-10-22 (temporary, outside Terraform)
+
+Core reported that staging Core's `POST /api/admin/test-token` (enabled when `CORE_ENVIRONMENT=staging`) mints
+tokens signed with the staging key without authentication; Core is removing it in a release. Overcast, at Core's
+request with the owner's approval of the fix:
+
+- **Staging ALB rule** (hand-made, not in Terraform): HTTPS listener priority 1, host `core.staging.arclight-complex.net`
+  and path `/api/admin/test-token` or `/api/admin/test-token/*` → fixed 403, created 06:14:40Z, tagged
+  `Name=core-test-token-block`, `Remove=after-core-fix-live`. Core's forward rule moved from priority 1 to 10 to sit
+  behind it (the ALB module leaves priority unset, so Terraform does not revert it). ALB path patterns cannot contain
+  `%`, so percent-encoded variants are not blocked here.
+- **Cloudflare**: Overcast's token has no WAF permission; the owner adds the custom rule
+  `(http.host eq "core.staging.arclight-complex.net" and starts_with(lower(http.request.uri.path), "/api/admin/test-token"))`
+  → Block, which Cloudflare evaluates on the normalized path. The Access application on `*.staging` (Team emails,
+  Cloudflare login, `staging-automation` service token) already stops unauthenticated internet requests.
+- **Usage**: `/arclight/staging/core` keeps 30 days (oldest event 2026-09-22T06:21:38Z); 249,028 records scanned,
+  0 requests to the path. Before 2026-09-22 is unknowable from logs; no user agent is logged anywhere.
+- **Hold**: no new ingress to staging Core:8000 (NF or SF wiring) until Core confirms the fixed release is live.
+  Today Core's group admits only the staging ALB.
+- **When the fix is live**: delete the 403 rule; move Core's rule back to priority 1 if wanted; lift the hold.
+
 ## Applied 2026-10-21 — Podbay removal + Core deploy prerequisites (PR #18)
 
 Applied by claude-main with the owner's "go" (john-admin, local), from the branch before merge.
