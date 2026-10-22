@@ -19,8 +19,9 @@ aws rds wait db-snapshot-available \
 ```
 
 For a schema migration, take it after the consuming service is scaled to zero so the
-snapshot carries no in-flight writes. As of 2026-10-21 no manual snapshot exists;
-only the 7-day automated backups do.
+snapshot carries no in-flight writes. As of 2026-10-22 one manual snapshot exists:
+`arclight-staging-pre-core-p7-20261021` (Core P7 pre-migration, 2026-10-21T21:04Z, not shared).
+Otherwise only the 7-day automated backups do. This runbook has never been executed (R3).
 
 ### 1. Identify the snapshot
 
