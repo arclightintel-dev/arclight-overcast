@@ -33,3 +33,14 @@ variable "private_db_subnet_cidrs" {
   default     = ["10.0.20.0/24", "10.0.21.0/24"]
 }
 
+variable "extra_interface_endpoints" {
+  description = "Additional interface endpoint service suffixes (for example \"ssm\"), created in the existing pattern: private DNS, the vpce security group"
+  type        = list(string)
+  default     = []
+}
+
+variable "extra_interface_endpoint_subnet_indexes" {
+  description = "Indexes into the private app subnets (and var.azs) for the additional interface endpoints; null places them in every private app subnet like the existing endpoints"
+  type        = list(number)
+  default     = null
+}
