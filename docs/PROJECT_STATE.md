@@ -65,15 +65,16 @@ request with the owner's approval of the fix:
   `Name=core-test-token-block`, `Remove=after-core-fix-live`. Core's forward rule moved from priority 1 to 10 to sit
   behind it (the ALB module leaves priority unset, so Terraform does not revert it). ALB path patterns cannot contain
   `%`, so percent-encoded variants are not blocked here.
-- **Cloudflare**: Overcast's token has no WAF permission; the owner adds the custom rule
+- **Cloudflare**: deployed by the owner 2026-10-22 (Overcast's token has no WAF permission). Custom rule
+  "Block Core staging test-token"
   `(http.host eq "core.staging.arclight-complex.net" and starts_with(lower(http.request.uri.path), "/api/admin/test-token"))`
-  → Block, which Cloudflare evaluates on the normalized path. The Access application on `*.staging` (Team emails,
+  → Block, evaluated on the normalized path, so it also covers the percent-encoded variants the ALB rule cannot match. The Access application on `*.staging` (Team emails,
   Cloudflare login, `staging-automation` service token) already stops unauthenticated internet requests.
 - **Usage**: `/arclight/staging/core` keeps 30 days (oldest event 2026-09-22T06:21:38Z); 249,028 records scanned,
   0 requests to the path. Before 2026-09-22 is unknowable from logs; no user agent is logged anywhere.
 - **Hold**: no new ingress to staging Core:8000 (NF or SF wiring) until Core confirms the fixed release is live.
   Today Core's group admits only the staging ALB.
-- **When the fix is live**: delete the 403 rule; move Core's rule back to priority 1 if wanted; lift the hold.
+- **When the fix is live**: delete the ALB 403 rule; move Core's rule back to priority 1 if wanted; the owner deletes or keeps the Cloudflare rule; lift the hold.
 
 ## Applied 2026-10-21 — Podbay removal + Core deploy prerequisites (PR #18)
 
