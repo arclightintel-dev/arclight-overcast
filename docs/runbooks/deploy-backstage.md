@@ -34,7 +34,8 @@ Actions → **Deploy Backstage** → `sha` = the full 40-character commit. The w
 `mode`: `normal`; `accept-recovery-required` for cutover and disaster recovery, where the
 operator completes recovery with Backstage's tools afterwards; `stage-only` pulls the images and
 selects the release but starts nothing, for the smoke deploy and cutover, where one-off commands
-must run before the app starts.
+must run before the app starts. Stage-only also turns boot autostart off
+(`/srv/backstage/deploy/no-autostart`); the next `normal` deploy turns it back on.
 
 The same command can be run by an operator in a Session Manager shell:
 `sudo /usr/local/sbin/backstage-deploy <sha>`.

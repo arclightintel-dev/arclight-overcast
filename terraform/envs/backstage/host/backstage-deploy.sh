@@ -9,7 +9,9 @@
 #   where the operator completes recovery afterwards).
 # --stage-only: stop after selecting the release and rendering secrets; start nothing. For
 #   the smoke deploy and cutover, where one-off commands (init-corpus, control-store
-#   restore) must run before the app starts (docs/runbooks/migrate-backstage.md).
+#   restore) must run before the app starts (docs/runbooks/migrate-backstage.md). It also
+#   sets /srv/backstage/deploy/no-autostart, so a reboot does not start the stack either;
+#   the next normal deploy (or the operator, once cutover is verified) removes it.
 . /usr/local/lib/backstage/common.sh
 
 sha="${1:-}"
@@ -96,9 +98,11 @@ ln -sfn "releases/$sha" "$DEPLOY_DIR/current.next"
 mv -T "$DEPLOY_DIR/current.next" "$DEPLOY_DIR/current"
 /usr/local/sbin/backstage-render-secrets
 if [ "$mode" = --stage-only ]; then
-  log "staged $sha as the current release; nothing started (--stage-only)"
+  touch "$DEPLOY_DIR/no-autostart"
+  log "staged $sha as the current release; nothing started, and boot autostart is off (--stage-only)"
   exit 0
 fi
+rm -f "$DEPLOY_DIR/no-autostart"
 compose "$rel" up -d --force-recreate --no-deps app engine
 compose "$rel" up -d --remove-orphans
 
