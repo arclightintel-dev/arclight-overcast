@@ -69,6 +69,10 @@ the deploy re-renders the secret files and recreates the app and Engine.
 
 ## Idle-stop
 
+**Off since 2026-10-23 (owner: always on).** `idle_stop_enabled` defaults to `false`; the rest of
+this section applies only if it is turned back on. The weekday 07:00 schedule stays enabled and
+restarts the host after a manual or maintenance stop.
+
 The host publishes `Busy` every minute: running jobs and Portal runtimes (from the app's
 loopback-only `/api/admin/busy`; any failure counts as busy), Portal containers (a Docker that
 cannot be queried counts as busy), Session Manager

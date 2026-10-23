@@ -55,7 +55,10 @@ apply. The data volume survives replacement (`prevent_destroy`); the new instanc
 
 ## Idle-stop
 
-The host publishes `Arclight/Backstage Busy` every minute; the `idle-stop` alarm stops it after
-30 zero minutes; the 07:00 America/New_York weekday schedule starts it. It never stops with a
-running job, an open Portal, an operator session or a fresh deploy (owner decision D16). Set
-`idle_stop_enabled = false` to keep it up, for example during migration.
+**Off since 2026-10-23: the host is always on (owner decision, O-012 note).** `idle_stop_enabled`
+defaults to `false`, so the `idle-stop` alarm keeps evaluating but takes no action. The busy
+publisher and the 07:00 America/New_York weekday start stay in place: the schedule is a no-op on a
+running host and brings it back after a manual or maintenance stop.
+
+With `idle_stop_enabled = true` the alarm stops the host after 30 zero minutes. It never stops with
+a running job, an open Portal, an operator session or a fresh deploy (owner decision D16).
