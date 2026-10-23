@@ -25,10 +25,16 @@ variable "log_retention_days" {
   default     = 30
 }
 
-variable "cloudtrail_retention_days" {
-  description = "CloudTrail S3 log retention in days"
+variable "cloudtrail_archive_days" {
+  description = "Days before CloudTrail log objects of at least 128 KB move to Glacier Deep Archive (D-075; logs never expire)"
   type        = number
   default     = 90
+}
+
+variable "cloudtrail_lock_days" {
+  description = "Object Lock governance default retention for new CloudTrail log versions, in days (D-075)"
+  type        = number
+  default     = 365
 }
 
 variable "budget_limit_monthly" {

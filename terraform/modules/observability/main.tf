@@ -92,19 +92,45 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail" {
   count  = var.create_cloudtrail ? 1 : 0
   bucket = aws_s3_bucket.cloudtrail[0].id
 
+  # D-075 / O-015: logs are never expired. Objects at least 128 KB move to Glacier Deep Archive
+  # after var.cloudtrail_archive_days; smaller ones (nearly every CloudTrail file) stay in
+  # Standard, the S3 default, because Deep Archive bills each object as at least 40 KB and adds a
+  # 12-48 hour restore to every investigation.
+  transition_default_minimum_object_size = "all_storage_classes_128K"
+
   rule {
-    id     = "expire-old-logs"
+    id     = "archive-logs"
     status = "Enabled"
     filter {}
 
-    expiration {
-      days = var.cloudtrail_retention_days
+    transition {
+      days          = var.cloudtrail_archive_days
+      storage_class = "DEEP_ARCHIVE"
     }
 
-    noncurrent_version_expiration {
-      noncurrent_days = var.cloudtrail_retention_days
+    noncurrent_version_transition {
+      noncurrent_days = var.cloudtrail_archive_days
+      storage_class   = "DEEP_ARCHIVE"
     }
   }
+}
+
+# D-075 / O-015: governance-mode Object Lock. Every new log version is locked for
+# var.cloudtrail_lock_days; existing versions get an explicit retention (runbook). Only an
+# administrator with s3:BypassGovernanceRetention can delete a locked version; no CI, routine or
+# task role holds it. Object Lock cannot be turned off on a bucket once enabled.
+resource "aws_s3_bucket_object_lock_configuration" "cloudtrail" {
+  count  = var.create_cloudtrail ? 1 : 0
+  bucket = aws_s3_bucket.cloudtrail[0].id
+
+  rule {
+    default_retention {
+      mode = "GOVERNANCE"
+      days = var.cloudtrail_lock_days
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.cloudtrail]
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
@@ -186,7 +212,8 @@ resource "aws_cloudtrail" "this" {
   name                          = "arclight-${var.environment}"
   s3_bucket_name                = aws_s3_bucket.cloudtrail[0].id
   include_global_service_events = true
-  is_multi_region_trail         = false
+  is_multi_region_trail         = true
+  enable_log_file_validation    = true
   enable_logging                = true
 
   tags = { Name = "arclight-${var.environment}" }

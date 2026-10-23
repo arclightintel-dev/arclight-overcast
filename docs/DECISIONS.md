@@ -197,6 +197,20 @@ Outside the root, by the administrator: client secrets straight into Secrets Man
 
 **Applied 2026-10-21 21:24:11Z to 21:24:26Z** on the owner's go: 14 resources created, post-apply plan clean, Graph read-back matched the declared shapes; IDs in the [service registry](service_registry.md).
 
+## O-015: CloudTrail log protection under D-075
+
+**Authority**: platform decision D-075, ratified by the owner 2026-10-23 (recorded on arclight-complex PR #14), closing Overcast debt DR-13. | **Recorded**: 2026-10-23.
+
+The staging-owned account trail (O-006) and its bucket implement D-075 in `terraform/modules/observability`:
+
+1. **No expiry.** The lifecycle rule `archive-logs` replaces `expire-old-logs`: nothing is expired, current or noncurrent. Objects of at least 128 KB move to Glacier Deep Archive after `cloudtrail_archive_days` (90). Smaller objects, which is nearly every CloudTrail file (July 2026 averaged about 3.5 KB), stay in Standard. That is the S3 default (`transition_default_minimum_object_size = "all_storage_classes_128K"`), kept deliberately: Deep Archive bills each object as at least 40 KB and adds a 12-48 hour restore to every investigation. Complex was asked to align D-075 item 1's wording.
+2. **Log file validation on** (digest files under `AWSLogs/<account>/CloudTrail-Digest/`).
+3. **Multi-region trail**, management events.
+4. **Object Lock, governance mode, 365-day default retention** (`cloudtrail_lock_days`). Enabled on the existing versioned bucket; it cannot be disabled afterwards. The default applies to new versions only, so existing versions get an explicit governance retention (runbook `cloudtrail-log-protection.md`). Lock survives storage-class transitions, and lifecycle cannot delete a locked version. On 2026-10-23 only `john-admin`, through the `Administrators` group's `AdministratorAccess`, holds `s3:BypassGovernanceRetention`; no CI, routine or task role does. No separate `PutBucketPolicy` or `PutLifecycleConfiguration` deny is added: D-075 does not require one, and governance lock covers locked versions.
+5. **Staging gate.** The D-059 §6 CloudTrail no-deletion posture holds once items 1-4 are applied on staging and recorded here. V-1 gates staging independently.
+
+The apply is targeted at `module.observability`, so the unrelated task-definition churn on the Terraform-tracked Core task definition is not applied with it.
+
 ## Core coordination disposition — not a new mechanism decision
 
 **Review date**: 2026-10-01 | **Recorded here**: 2026-10-03.
