@@ -86,7 +86,7 @@ All host commands below run in a Session Manager shell (user `ssm-user`), so the
 | C6 | `sudo backstage-compose up -d litestream` alone; wait for the first snapshot of both databases (`sudo backstage-compose logs litestream`, `aws s3 ls --recursive s3://arclight-backstage-prod-litestream/backstage/prod/`) | Overcast |
 | C7 | `sudo backstage-compose up -d app engine`; `curl -s http://127.0.0.1:8430/ready` shows `recovery_required:true` | Overcast |
 | C8-C10 | Reconcile and complete recovery, link-claim before the owner's first sign-in, analysts by role | Backstage, owner, administrator |
-| After | Once C8-C10 are done, run the workflow in `normal` mode for the cutover commit: it clears `no-autostart` and verifies the stack. Remove the hold, re-enable idle-stop; the PC stays stopped and intact for 14 days as warm standby (D15) | Overcast, owner |
+| After | Once C8-C10 are done, run the workflow in `normal` mode for the cutover commit: it clears `no-autostart` and verifies the stack. Remove the hold (idle-stop stays off: always on since 2026-10-23); the PC stays stopped and intact for 14 days as warm standby (D15) | Overcast, owner |
 
 ## Restore drill (before cutover; verdict condition 4)
 

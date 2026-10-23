@@ -121,9 +121,9 @@ variable "busy_grace_seconds" {
 }
 
 variable "idle_stop_enabled" {
-  description = "Whether the idle alarm stops the instance (false keeps it running, for example during migration week)"
+  description = "Whether the idle alarm stops the instance. Off since 2026-10-23: the owner chose always-on (O-012 note)"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "idle_stop_minutes" {
