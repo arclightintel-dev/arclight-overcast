@@ -107,11 +107,19 @@ CF=(-H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: 
 # Readiness via ALB (through Cloudflare)
 curl -f "${CF[@]}" https://core.staging.arclight-complex.net/ready
 
-# Detailed readiness
-curl -s "${CF[@]}" https://core.staging.arclight-complex.net/ready/detail | jq .
+# Build identity: the running task's image digest, from ECS (not /ready/detail, which
+# requires a human, MFA-gated admin from Core S-049 on)
+aws ecs describe-tasks --cluster arclight-staging \
+  --tasks $(aws ecs list-tasks --cluster arclight-staging --service-name arclight-core-staging \
+            --desired-status RUNNING --query 'taskArns' --output text) \
+  --query 'tasks[].[taskDefinitionArn,containers[0].imageDigest]' --output text
+aws ecr describe-images --repository-name arclight/core --image-ids imageTag=<tag> \
+  --query 'imageDetails[0].imageDigest' --output text
 ```
 
-Expected: `{"module": "core", "status": "ready", ...}`
+Expected: `/ready` returns 200 with `"status": "ready"`, and every running task is on the new
+revision with the tag's digest (or, for a multi-arch index, its linux/amd64 child). The
+`deploy-service.yml` workflow checks both.
 
 ### 5. Populate secrets (first deployment only)
 
@@ -138,3 +146,6 @@ aws ecs update-service \
   --task-definition arclight-core-staging:<previous-revision> \
   --force-new-deployment
 ```
+
+Verify the rollback the same way as a deploy: `/ready` 200 with `"status": "ready"`, and the
+running tasks on `<previous-revision>` with its image digest. Do not use `/ready/detail`.

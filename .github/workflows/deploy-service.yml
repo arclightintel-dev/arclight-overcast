@@ -146,6 +146,57 @@ jobs:
 
           echo "Service is stable."
 
+      # Build identity comes from ECS, not from Core's /ready/detail, which requires a human,
+      # MFA-gated admin from S-049 on (TESTING_PROTOCOLS §3, Complex PR #13).
+      - name: Verify running image digest
+        run: |
+          SERVICE_NAME="arclight-${{ env.DEPLOY_MODULE }}-${{ env.DEPLOY_ENVIRONMENT }}"
+          CLUSTER="arclight-${{ env.DEPLOY_ENVIRONMENT }}"
+          NEW_ARN="${{ steps.new-task-def.outputs.new_arn }}"
+          REPO="arclight/${{ env.DEPLOY_MODULE }}"
+
+          read -r EXPECTED MEDIA < <(aws ecr describe-images --repository-name "$REPO" \
+            --image-ids imageTag="${{ env.DEPLOY_IMAGE_TAG }}" \
+            --query 'imageDetails[0].[imageDigest,imageManifestMediaType]' --output text)
+          ACCEPT="$EXPECTED"
+          # A multi-arch index may be reported as itself or as its linux/amd64 child.
+          case "$MEDIA" in
+            *index*|*manifest.list*)
+              CHILD=$(aws ecr batch-get-image --repository-name "$REPO" --image-ids imageDigest="$EXPECTED" \
+                --accepted-media-types "$MEDIA" --query 'images[0].imageManifest' --output text |
+                jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest')
+              ACCEPT="$ACCEPT $CHILD"
+              ;;
+          esac
+
+          TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE_NAME" \
+            --desired-status RUNNING --query 'taskArns' --output text)
+          if [ -z "$TASKS" ] || [ "$TASKS" = "None" ]; then
+            echo "::error::$SERVICE_NAME has no running tasks"
+            exit 1
+          fi
+          aws ecs describe-tasks --cluster "$CLUSTER" --tasks $TASKS --output json > running-tasks.json
+
+          FAIL=0
+          while IFS=$'\t' read -r TASK TD DIGEST; do
+            echo "task ${TASK##*/}: ${TD##*/} digest=${DIGEST:-none}"
+            if [ "$TD" != "$NEW_ARN" ]; then
+              echo "::error::task ${TASK##*/} runs ${TD##*/}, not ${NEW_ARN##*/}"
+              FAIL=1
+            fi
+            case " $ACCEPT " in
+              *" $DIGEST "*) ;;
+              *) echo "::error::task ${TASK##*/} digest ${DIGEST:-none} is neither $EXPECTED nor its linux/amd64 child"; FAIL=1 ;;
+            esac
+          done < <(jq -r --arg repo "$REPO" '.tasks[] | [.taskArn, .taskDefinitionArn,
+            ([.containers[] | select(.image | test("/\($repo)[:@]")) | .imageDigest] | first // "")] | @tsv' running-tasks.json)
+
+          if [ "$FAIL" = 0 ]; then
+            echo "Running image verified: $EXPECTED (${{ env.DEPLOY_IMAGE_TAG }})"
+            echo "image_digest=$EXPECTED" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$FAIL"
+
       - name: Verify health
         env:
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
