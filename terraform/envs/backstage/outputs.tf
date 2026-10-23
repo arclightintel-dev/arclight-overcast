@@ -62,3 +62,23 @@ output "deploy_role_arn" {
   description = "Role the deploy-backstage workflow assumes (GitHub environment backstage)"
   value       = aws_iam_role.deploy.arn
 }
+
+output "downloads_host" {
+  description = "Desktop downloads hostname (DNS-only Cloudflare CNAME to downloads_distribution_domain)"
+  value       = local.downloads_host
+}
+
+output "downloads_distribution_domain" {
+  description = "CloudFront domain for the downloads CNAME"
+  value       = aws_cloudfront_distribution.downloads.domain_name
+}
+
+output "downloads_bucket" {
+  description = "DESKTOP_DOWNLOADS_BUCKET for the desktop-release environment"
+  value       = aws_s3_bucket.downloads.bucket
+}
+
+output "downloads_upload_role_arn" {
+  description = "DESKTOP_DOWNLOADS_ROLE_ARN for the desktop-release environment"
+  value       = aws_iam_role.downloads_upload.arn
+}
