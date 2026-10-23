@@ -26,6 +26,18 @@ variable "hostname" {
   default     = "backstage"
 }
 
+variable "downloads_hostname" {
+  description = "Desktop downloads host label under domain_name (CloudFront alias, DNS-only Cloudflare CNAME)"
+  type        = string
+  default     = "backstage-downloads"
+}
+
+variable "desktop_release_environment" {
+  description = "GitHub environment of Backstage's desktop-release workflow; the upload role trusts exactly this subject"
+  type        = string
+  default     = "desktop-release"
+}
+
 variable "github_org" {
   description = "GitHub owner of the Overcast and Backstage repositories"
   type        = string
