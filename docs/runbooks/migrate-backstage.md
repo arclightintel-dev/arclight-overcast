@@ -71,10 +71,13 @@ All host commands below run in a Session Manager shell (user `ssm-user`), so the
 4. S5 discard:
    ```
    sudo backstage-compose stop
-   sudo rm -f /srv/backstage/corpus/podbay.db* /srv/backstage/control/control.sqlite* /srv/backstage/categorization/.owner*
+   sudo rm -f /srv/backstage/corpus/podbay.db* /srv/backstage/control/control.sqlite* /srv/backstage/logs/podbay.log
+   sudo rm -rf /srv/backstage/categorization/.owner   # a directory; survives an unclean stop
    aws s3 rm --recursive s3://arclight-backstage-prod-litestream/backstage/   # only if Litestream ran
    ```
    A smoke control store must not survive (restore refuses a different `installation_id`).
+   Run 2026-10-23 02:31:54Z (smoke on `501f575`, S4 on hotfix `ed8443e`): stores, `.owner` and the smoke log removed;
+   the Litestream bucket was empty.
 
 ## Cutover
 
