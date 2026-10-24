@@ -5,8 +5,9 @@ variable "aws_region" {
 }
 
 variable "domain_name" {
-  description = "Platform domain name (e.g., arclight.example.com)"
+  description = "Platform domain name"
   type        = string
+  default     = "arclight-complex.net"
 }
 
 variable "environment" {
@@ -46,13 +47,21 @@ variable "shuttleforge_desired_count" {
 }
 
 variable "alarm_email" {
-  description = "Email for CloudWatch alarm notifications"
+  description = "Email for CloudWatch alarm notifications (CI: repository secret ALARM_EMAIL)"
   type        = string
+  sensitive   = true
+
+  # A missing CI secret would otherwise plan a replacement shown only as "(sensitive value)".
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.alarm_email))
+    error_message = "alarm_email must be an email address (CI: set the ALARM_EMAIL repository secret)."
+  }
 }
 
 variable "github_org" {
-  description = "GitHub organization name"
+  description = "GitHub owner of the repositories (a missing default caused DR-8)"
   type        = string
+  default     = "arclightintel-dev"
 }
 
 variable "github_repos" {
@@ -62,7 +71,12 @@ variable "github_repos" {
 }
 
 variable "core_image_tag" {
-  description = "Core container image tag (e.g., v1-abc1234)"
+  description = "Core container image tag, e.g. v1-abc1234 (CI: repository variable CORE_IMAGE_TAG, updated after each Core deploy)"
   type        = string
+
+  validation {
+    condition     = can(regex("^v[0-9]+-[0-9a-f]{7,40}$", var.core_image_tag))
+    error_message = "core_image_tag must look like v<n>-<git sha> (CI: set the CORE_IMAGE_TAG repository variable)."
+  }
 }
 

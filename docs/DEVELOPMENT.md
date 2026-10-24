@@ -64,6 +64,17 @@ C:\Tools\terraform.exe apply
 C:\Tools\terraform.exe fmt -recursive terraform/
 ```
 
+**Before every staging apply** run the plan to a file and check it. Never apply from a branch that is
+missing an applied-but-unmerged change to the same root. On 2026-10-24 a stale branch's plan would
+have reverted D-075.
+
+```bash
+C:\Tools\terraform.exe plan -out=change.tfplan
+C:\Tools\terraform.exe show -json change.tfplan > change.json
+python ../../../scripts/plan_guard.py change.json   # fails if CloudTrail protection would weaken (O-015)
+C:\Tools\terraform.exe apply change.tfplan
+```
+
 **Staging**: the working path is **manual apply with admin credentials** from `terraform/envs/staging`. The intended CI auto-apply (`terraform-apply.yml` on merge to main) is **currently broken** — see [CI status](#ci-status) below. Every apply this session was run manually.
 **Prod**: manual operator apply only. OIDC role lacks infra provisioning permissions.
 **Backstage** (`terraform/envs/backstage`): manual operator apply, excluded from the CI plan and
@@ -118,8 +129,24 @@ tag (never `latest` — ECR tags are immutable and lifecycle policies only rotat
 
 ## CI status
 
-**As of 2026-07-11, `terraform-plan.yml` and `terraform-apply.yml` are broken.** Do not rely on CI
-auto-apply — apply manually with admin credentials. Two independent causes:
+**Plan on pull requests works again (2026-10-23, DR-1b plan side).** `terraform-plan.yml` assumes
+the read-only role `arclight-overcast-terraform-plan-staging`, which trusts only
+`repo:arclightintel-dev/arclight-overcast:pull_request`. The role has AWS `ReadOnlyAccess`
+plus explicit denies on reading object contents (except the staging state object), ECR image
+layers, log events, KMS decrypt and secret values. Its only write is the backend lock file.
+
+- The workflow pins Terraform 1.15.6.
+- The repository is public, so it prints and posts only the plan summary, plus `Error:` lines on
+  failure. Run the detailed plan locally.
+- CI cannot read the gitignored `terraform.tfvars`. It gets its inputs from repository settings:
+  - **variable `CORE_IMAGE_TAG`**: set it to the running Core tag after every Core deploy
+    (`gh variable set CORE_IMAGE_TAG --body <tag>`), or CI plans show task-definition churn;
+  - **secret `ALARM_EMAIL`**.
+- `domain_name` and `github_org` now have committed defaults.
+
+**`terraform-apply.yml` is still broken** (DR-1): it uses the old role, an old Terraform pin and no
+variables. Do not rely on CI auto-apply; apply manually with admin credentials. The original
+causes, kept for the apply side:
 
 1. **Terraform version.** CI pins `terraform_version: '~> 1.5'`. `terraform/modules/iam-github-oidc/variables.tf`
    uses a cross-variable `validation` block (`oidc_provider_arn`'s validation references

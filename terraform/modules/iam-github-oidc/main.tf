@@ -147,6 +147,142 @@ resource "aws_iam_role_policy" "overcast_terraform_deploy" {
 }
 
 ################################################################################
+# Read-only plan role for pull requests (DR-1b)
+################################################################################
+
+# Pull-request runs present the subject repo:<org>/arclight-overcast:pull_request, which the
+# Terraform role above must never trust: anyone who can open a pull request can change the
+# workflow in it. This role writes nothing (CI plans with -lock=false) and cannot read data:
+# object contents other than the state, image layers, logs, command output, queue/stream/table
+# records, function code or secret values. Fork pull requests receive no OIDC token. Never add
+# a pull_request_target workflow with id-token: write, and never give a plan job an
+# `environment:` (it changes the subject).
+locals {
+  state_object_arn = "${var.terraform_state_bucket_arn}/${var.environment}/terraform.tfstate"
+}
+
+data "aws_iam_policy_document" "overcast_plan_trust" {
+  count = var.create_plan_role ? 1 : 0
+
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [local.oidc_provider_arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${var.github_org}/arclight-overcast:pull_request"]
+    }
+  }
+}
+
+resource "aws_iam_role" "overcast_plan" {
+  count = var.create_plan_role ? 1 : 0
+
+  name               = "arclight-overcast-terraform-plan-${var.environment}"
+  assume_role_policy = data.aws_iam_policy_document.overcast_plan_trust[0].json
+
+  tags = { Name = "arclight-overcast-terraform-plan-${var.environment}" }
+}
+
+resource "aws_iam_role_policy_attachment" "overcast_plan_read" {
+  count = var.create_plan_role ? 1 : 0
+
+  role       = aws_iam_role.overcast_plan[0].name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+
+resource "aws_iam_role_policy" "overcast_plan_guardrails" {
+  count = var.create_plan_role ? 1 : 0
+
+  name = "plan-guardrails"
+  role = aws_iam_role.overcast_plan[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid         = "NoObjectContentsButState"
+        Effect      = "Deny"
+        Action      = ["s3:GetObject", "s3:GetObjectVersion"]
+        NotResource = [local.state_object_arn]
+      },
+      {
+        Sid      = "NoImageLayers"
+        Effect   = "Deny"
+        Action   = ["ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
+        Resource = ["*"]
+      },
+      {
+        Sid    = "NoLogContents"
+        Effect = "Deny"
+        Action = [
+          "logs:GetLogEvents",
+          "logs:FilterLogEvents",
+          "logs:StartQuery",
+          "logs:GetQueryResults",
+          "logs:StartLiveTail",
+          "logs:GetLogRecord",
+          "logs:GetLogObject",
+          "logs:GetLogGroupFields",
+          "logs:ListAnomalies",
+          "rds:DownloadDBLogFilePortion",
+          "rds:DownloadCompleteDBLogFile",
+          "ssm:GetCommandInvocation",
+          "ec2:GetConsoleOutput",
+          "ec2:GetConsoleScreenshot",
+          "states:GetExecutionHistory",
+        ]
+        Resource = ["*"]
+      },
+      {
+        Sid    = "NoRecordsOrCode"
+        Effect = "Deny"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:BatchGetItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:PartiQLSelect",
+          "sqs:ReceiveMessage",
+          "kinesis:GetRecords",
+          "kinesis:GetShardIterator",
+          "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration",
+          "lambda:GetLayerVersion",
+          "ec2:GetLaunchTemplateData",
+          "ec2:GetPasswordData",
+          "athena:GetQueryResults",
+          "athena:GetQueryResultsStream",
+          "cloudformation:GetTemplate",
+          "codebuild:BatchGetBuilds",
+        ]
+        Resource = ["*"]
+      },
+      {
+        # Required, not belt and braces: the AWS-managed aws/ssm key lets any account principal
+        # decrypt through SSM, so GetParameter alone would read a SecureString.
+        Sid    = "NoSecretValues"
+        Effect = "Deny"
+        Action = [
+          "kms:Decrypt",
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:BatchGetSecretValue",
+        ]
+        Resource = ["*"]
+      },
+    ]
+  })
+}
+
+################################################################################
 # Per-service ECR push roles
 ################################################################################
 

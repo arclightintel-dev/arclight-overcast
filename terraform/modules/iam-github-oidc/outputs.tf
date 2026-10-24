@@ -12,3 +12,8 @@ output "ecr_push_role_arns" {
   description = "Map of service name to ECR push role ARN"
   value       = { for k, v in aws_iam_role.ecr_push : k => v.arn }
 }
+
+output "overcast_plan_role_arn" {
+  description = "Read-only pull-request plan role ARN (null when create_plan_role is false)"
+  value       = var.create_plan_role ? aws_iam_role.overcast_plan[0].arn : null
+}
