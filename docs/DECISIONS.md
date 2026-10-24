@@ -177,7 +177,7 @@ Overcast will provision Nerfherder on **staging only**, exactly D-072's list and
 
 **Out of scope (D-072 paragraph 3)**: production; any new seam or contract; more than one replica; Podbay integration (Podbay withdrawn, O-011).
 
-**Preconditions carried (D-072 paragraph 4)**: D-059 section 9 in full (no real source registration, provider credential or live collection plugin on staging until the section 6 postures hold; the staging restore drill, R3, remains the open posture); Nerfherder's own constraints (one secret-bearing `role=all` task; ShuttleForge as the required egress route, which means NF's egress is fail-closed only once SF is deployed); the platform `/ready` status-code convention for the task health check; TLS to RDS is already enforced (`rds.force_ssl` = 1).
+**Preconditions carried (D-072 paragraph 4)**: D-059 section 9 in full (no real source registration, provider credential or live collection plugin on staging until the section 6 postures hold; the staging restore drill, R3, remains the open posture; **completed 2026-10-24 as V-1**, see `docs/runbooks/restore-rds.md`); Nerfherder's own constraints (one secret-bearing `role=all` task; ShuttleForge as the required egress route, which means NF's egress is fail-closed only once SF is deployed); the platform `/ready` status-code convention for the task health check; TLS to RDS is already enforced (`rds.force_ssl` = 1).
 
 **Sequencing (D-072 paragraph 5)**: Nerfherder's P3.5 plans are awaiting the owner's GO; NF's wiring change in this repository follows that GO; the apply is owner-authorized (DR-1). Nothing is scheduled by this record.
 
