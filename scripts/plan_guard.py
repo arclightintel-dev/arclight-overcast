@@ -9,13 +9,17 @@ and exits 1 if any of them would:
     trail;
   - give the trail bucket's lifecycle an expiration (current or noncurrent);
   - drop the bucket policy's DenyLogDeletion statement;
-  - turn off the trail's multi-region logging or log file validation.
+  - remove or weaken the bucket's default Object Lock retention (shorter period, or COMPLIANCE
+    to GOVERNANCE);
+  - stop the trail's logging, or turn off its multi-region logging or log file validation.
 
 It prints resource addresses and reasons only, never attribute values (the repository is
 public). Run it in CI (terraform-plan.yml) and before every staging apply (DEVELOPMENT.md).
 """
 import json
 import sys
+
+MODE_STRENGTH = {"GOVERNANCE": 1, "COMPLIANCE": 2}
 
 PROTECTED = {
     ("aws_s3_bucket", "cloudtrail"),
@@ -25,11 +29,21 @@ PROTECTED = {
 }
 
 
+def default_retention(config):
+    """(mode strength, days) of an Object Lock configuration's default retention, or None."""
+    for rule in (config or {}).get("rule") or []:
+        for dr in rule.get("default_retention") or []:
+            days = (dr.get("days") or 0) + 365 * (dr.get("years") or 0)
+            return MODE_STRENGTH.get(dr.get("mode"), 0), days
+    return None
+
+
 def violations(plan):
     out = []
     for rc in plan.get("resource_changes", []):
         key = (rc.get("type"), rc.get("name"))
         actions = rc.get("change", {}).get("actions", [])
+        before = rc.get("change", {}).get("before") or {}
         after = rc.get("change", {}).get("after") or {}
         addr = rc.get("address", "?")
         if key in PROTECTED and "delete" in actions:
@@ -42,7 +56,15 @@ def violations(plan):
             sids = [s.get("Sid") for s in json.loads(after["policy"]).get("Statement", [])]
             if "DenyLogDeletion" not in sids:
                 out.append(f"{addr}: bucket policy would drop DenyLogDeletion")
+        if key == ("aws_s3_bucket_object_lock_configuration", "cloudtrail") and "delete" not in actions and after:
+            old, new = default_retention(before), default_retention(after)
+            if new is None:
+                out.append(f"{addr}: default Object Lock retention would be removed")
+            elif new[1] <= 0 or (old and (new[0] < old[0] or new[1] < old[1])):
+                out.append(f"{addr}: default Object Lock retention would be shortened or weakened")
         if key == ("aws_cloudtrail", "this") and "delete" not in actions and after:
+            if after.get("enable_logging") is False:
+                out.append(f"{addr}: trail would stop logging")
             if after.get("is_multi_region_trail") is False:
                 out.append(f"{addr}: trail would stop being multi-region")
             if after.get("enable_log_file_validation") is False:
