@@ -22,7 +22,10 @@ Objects of 128 KB or more move to Glacier Deep Archive after 90 days and need
 `aws s3api restore-object` (12-48 hours) before they can be read. Nearly every CloudTrail file
 is smaller and stays in Standard.
 
-## Retention on versions that existed before Object Lock (one-time, 2026-10-23)
+## Retention on versions that existed before Object Lock (one-time; done 2026-10-24)
+
+Run 2026-10-24 01:00-04:39Z: 120,294 versions, 2 refused (written after enablement, already locked later).
+In a bash function the arguments are `$1` and `$2` (not `$0`); test on three versions and read them back first.
 
 The bucket's default retention applies only to versions written after Object Lock was enabled.
 Older versions, including the 2026-07-02 V-1 restore evidence
