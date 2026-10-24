@@ -28,3 +28,7 @@ Thumbs.db
 *.swp
 *.swo
 
+
+# Terraform plan JSON (holds state values; never commit)
+terraform/envs/*/change.json
+terraform/envs/*/plan.json

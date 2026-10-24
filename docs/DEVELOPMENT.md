@@ -64,6 +64,17 @@ C:\Tools\terraform.exe apply
 C:\Tools\terraform.exe fmt -recursive terraform/
 ```
 
+**Before every staging apply** run the plan to a file and check it. Never apply from a branch that is
+missing an applied-but-unmerged change to the same root. On 2026-10-24 a stale branch's plan would
+have reverted D-075.
+
+```bash
+C:\Tools\terraform.exe plan -out=change.tfplan
+C:\Tools\terraform.exe show -json change.tfplan > change.json
+python ../../../scripts/plan_guard.py change.json   # fails if CloudTrail protection would weaken (O-015)
+C:\Tools\terraform.exe apply change.tfplan
+```
+
 **Staging**: the working path is **manual apply with admin credentials** from `terraform/envs/staging`. The intended CI auto-apply (`terraform-apply.yml` on merge to main) is **currently broken** — see [CI status](#ci-status) below. Every apply this session was run manually.
 **Prod**: manual operator apply only. OIDC role lacks infra provisioning permissions.
 **Backstage** (`terraform/envs/backstage`): manual operator apply, excluded from the CI plan and

@@ -5,6 +5,7 @@ name: Terraform Plan
 # with -lock=false. The repository is public: only the plan summary and the list of
 # action/address pairs (never attribute values) are printed or posted, plus Terraform's Error
 # lines on failure; run the detailed plan locally. Never set TF_LOG and never upload the plan.
+# scripts/plan_guard.py fails the job if the plan would weaken CloudTrail protection (D-075).
 # Inputs CI cannot read from the gitignored terraform.tfvars come from repository settings:
 # variable CORE_IMAGE_TAG (update after each Core deploy) and secret ALARM_EMAIL.
 
@@ -65,16 +66,19 @@ jobs:
           set +e
           terraform plan -input=false -no-color -lock=false -out=plan.tfplan > plan-output.txt 2>&1
           code=$?
-          echo "plan_exit_code=$code" >> "$GITHUB_OUTPUT"
           { grep -E '^(Plan:|No changes)' plan-output.txt || true; } > plan-summary.txt
           if [ "$code" -eq 0 ]; then
+            terraform show -json plan.tfplan > plan.json
             # Action/address pairs only; never attribute values.
-            terraform show -json plan.tfplan \
-              | jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | "\(.change.actions | join("/")) \(.address)"' \
-              >> plan-summary.txt
+            jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | "\(.change.actions | join("/")) \(.address)"' \
+              plan.json >> plan-summary.txt
+            # D-075 / O-015: refuse plans that weaken CloudTrail log protection.
+            python3 "$GITHUB_WORKSPACE/scripts/plan_guard.py" plan.json >> plan-summary.txt || code=3
+            rm -f plan.json
           else
             grep -E '^(Error|│ Error)' plan-output.txt >> plan-summary.txt || echo "Plan failed (exit $code); run it locally for details." >> plan-summary.txt
           fi
+          echo "plan_exit_code=$code" >> "$GITHUB_OUTPUT"
           cat plan-summary.txt
           rm -f plan-output.txt plan.tfplan
 
