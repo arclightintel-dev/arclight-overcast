@@ -211,6 +211,8 @@ The staging-owned account trail (O-006) and its bucket implement D-075 in `terra
 
 The apply is targeted at `module.observability`, so the unrelated task-definition churn on the Terraform-tracked Core task definition is not applied with it.
 
+**Applied on staging 2026-10-23 23:59:12Z to 2026-10-24 00:00:27Z** on the owner's go (relayed by Complex, confirmed first-hand in Overcast's session): 1 added (Object Lock configuration), 2 changed (trail, lifecycle), 0 destroyed; post-apply plan of the module: no changes. Verified live: `ObjectLockEnabled: Enabled`, default `GOVERNANCE` 365 days; lifecycle `archive-logs` with no expiration and `all_storage_classes_128K`; trail `IsMultiRegionTrail` and `LogFileValidationEnabled` true; first digest 00:26:56Z with no delivery error; a new log (00:57Z) carries `GOVERNANCE` until 2027-10-24T00:57Z; `us-east-2` and `ap-southeast-2` log prefixes appeared. Existing versions (120,294 listed at 00:01:31Z): explicit `GOVERNANCE` retention until 2027-10-24T00:00:00Z in progress; both 2026-07-02T2125Z V-1 files were locked first and read back.
+
 ## Core coordination disposition — not a new mechanism decision
 
 **Review date**: 2026-10-01 | **Recorded here**: 2026-10-03.
