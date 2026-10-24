@@ -118,8 +118,24 @@ tag (never `latest` — ECR tags are immutable and lifecycle policies only rotat
 
 ## CI status
 
-**As of 2026-07-11, `terraform-plan.yml` and `terraform-apply.yml` are broken.** Do not rely on CI
-auto-apply — apply manually with admin credentials. Two independent causes:
+**Plan on pull requests works again (2026-10-23, DR-1b plan side).** `terraform-plan.yml` assumes
+the read-only role `arclight-overcast-terraform-plan-staging`, which trusts only
+`repo:arclightintel-dev/arclight-overcast:pull_request`. The role has AWS `ReadOnlyAccess`
+plus explicit denies on reading object contents (except the staging state object), ECR image
+layers, log events, KMS decrypt and secret values. Its only write is the backend lock file.
+
+- The workflow pins Terraform 1.15.6.
+- The repository is public, so it prints and posts only the plan summary, plus `Error:` lines on
+  failure. Run the detailed plan locally.
+- CI cannot read the gitignored `terraform.tfvars`. It gets its inputs from repository settings:
+  - **variable `CORE_IMAGE_TAG`**: set it to the running Core tag after every Core deploy
+    (`gh variable set CORE_IMAGE_TAG --body <tag>`), or CI plans show task-definition churn;
+  - **secret `ALARM_EMAIL`**.
+- `domain_name` and `github_org` now have committed defaults.
+
+**`terraform-apply.yml` is still broken** (DR-1): it uses the old role, an old Terraform pin and no
+variables. Do not rely on CI auto-apply; apply manually with admin credentials. The original
+causes, kept for the apply side:
 
 1. **Terraform version.** CI pins `terraform_version: '~> 1.5'`. `terraform/modules/iam-github-oidc/variables.tf`
    uses a cross-variable `validation` block (`oidc_provider_arn`'s validation references

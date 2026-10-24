@@ -165,6 +165,7 @@ module "iam_github_oidc" {
   terraform_state_bucket_arn = "arn:aws:s3:::arclight-terraform-state"
   aws_region                 = var.aws_region
   aws_account_id             = data.aws_caller_identity.current.account_id
+  create_plan_role           = true
 }
 
 ################################################################################

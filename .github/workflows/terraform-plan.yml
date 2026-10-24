@@ -1,5 +1,11 @@
 name: Terraform Plan
 
+# Plans the staging root on pull requests with the read-only role
+# arclight-overcast-terraform-plan-staging (DR-1b). The repository is public, so only the plan
+# summary (and Terraform's Error lines on failure) is printed or posted; run the detailed plan
+# locally. Inputs CI cannot read from the gitignored terraform.tfvars come from repository
+# settings: variable CORE_IMAGE_TAG (update after each Core deploy) and secret ALARM_EMAIL.
+
 on:
   pull_request:
     paths:
@@ -15,7 +21,6 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  TF_DIR: terraform/envs/staging
 
 jobs:
   plan:
@@ -24,6 +29,9 @@ jobs:
     strategy:
       matrix:
         environment: [staging]
+    env:
+      TF_VAR_core_image_tag: ${{ vars.CORE_IMAGE_TAG }}
+      TF_VAR_alarm_email: ${{ secrets.ALARM_EMAIL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,56 +39,62 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '~> 1.5'
+          terraform_version: '1.15.6'
+          terraform_wrapper: false
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::650880817826:role/arclight-overcast-terraform-${{ matrix.environment }}
+          role-to-assume: arn:aws:iam::650880817826:role/arclight-overcast-terraform-plan-${{ matrix.environment }}
           aws-region: us-east-1
 
       - name: Terraform Init
         working-directory: terraform/envs/${{ matrix.environment }}
-        run: terraform init -input=false
+        run: terraform init -input=false -no-color > init-output.txt 2>&1 || { grep -E '^(Error|│ Error)' init-output.txt; exit 1; }
 
       - name: Terraform Validate
         working-directory: terraform/envs/${{ matrix.environment }}
-        run: terraform validate
+        run: terraform validate -no-color
 
       - name: Terraform Plan
         id: plan
         working-directory: terraform/envs/${{ matrix.environment }}
         run: |
-          set -o pipefail
-          terraform plan -input=false -no-color -out=plan.tfplan 2>&1 | tee plan-output.txt
-          echo "plan_exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
-        continue-on-error: true
+          set +e
+          terraform plan -input=false -no-color -lock-timeout=120s > plan-output.txt 2>&1
+          code=$?
+          echo "plan_exit_code=$code" >> "$GITHUB_OUTPUT"
+          { grep -E '^(Plan:|No changes)' plan-output.txt || true; } > plan-summary.txt
+          if [ "$code" -ne 0 ]; then
+            grep -E '^(Error|│ Error)' plan-output.txt >> plan-summary.txt || echo "Plan failed (exit $code); run it locally for details." >> plan-summary.txt
+          fi
+          cat plan-summary.txt
+          rm -f plan-output.txt
 
-      - name: Post plan to PR
+      - name: Post plan summary to PR
+        if: always() && steps.plan.outcome != 'skipped'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const plan = fs.readFileSync('terraform/envs/${{ matrix.environment }}/plan-output.txt', 'utf8');
-            const planSummary = plan.split('\n').filter(l => l.match(/Plan:|No changes/)).join('\n') || 'See details below.';
-
+            const path = 'terraform/envs/${{ matrix.environment }}/plan-summary.txt';
+            const summary = fs.existsSync(path) ? fs.readFileSync(path, 'utf8').trim() : 'No plan summary was produced.';
             const body = `### Terraform Plan — ${{ matrix.environment }}
 
             \`\`\`
-            ${planSummary}
+            ${summary || 'No plan summary was produced.'}
             \`\`\`
 
-            <details><summary>Full plan output</summary>
-
-            \`\`\`
-            ${plan.substring(0, 60000)}
-            \`\`\`
-
-            </details>`;
-
-            github.rest.issues.createComment({
+            Summary only (public repository); run the detailed plan locally.`;
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: body
             });
+
+      - name: Fail on plan error
+        if: steps.plan.outputs.plan_exit_code != '0'
+        run: |
+          echo "terraform plan exited ${{ steps.plan.outputs.plan_exit_code }}"
+          exit 1

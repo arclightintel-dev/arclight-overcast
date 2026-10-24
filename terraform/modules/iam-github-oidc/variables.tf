@@ -55,3 +55,9 @@ variable "oidc_provider_arn" {
     error_message = "oidc_provider_arn is required when create_oidc_provider is false."
   }
 }
+
+variable "create_plan_role" {
+  description = "Create the read-only pull-request plan role (DR-1b). Staging only; CI plans the staging root."
+  type        = bool
+  default     = false
+}

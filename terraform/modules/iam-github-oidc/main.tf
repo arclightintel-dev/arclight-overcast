@@ -147,6 +147,126 @@ resource "aws_iam_role_policy" "overcast_terraform_deploy" {
 }
 
 ################################################################################
+# Read-only plan role for pull requests (DR-1b)
+################################################################################
+
+# Pull-request runs present the subject repo:<org>/arclight-overcast:pull_request, which the
+# Terraform role above must never trust: anyone who can open a pull request can change the
+# workflow in it. This role can read, not write, and cannot read object contents, image
+# layers, log events or secret values. Fork pull requests receive no OIDC token.
+locals {
+  state_object_arn = "${var.terraform_state_bucket_arn}/${var.environment}/terraform.tfstate"
+}
+
+data "aws_iam_policy_document" "overcast_plan_trust" {
+  count = var.create_plan_role ? 1 : 0
+
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [local.oidc_provider_arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${var.github_org}/arclight-overcast:pull_request"]
+    }
+  }
+}
+
+resource "aws_iam_role" "overcast_plan" {
+  count = var.create_plan_role ? 1 : 0
+
+  name               = "arclight-overcast-terraform-plan-${var.environment}"
+  assume_role_policy = data.aws_iam_policy_document.overcast_plan_trust[0].json
+
+  tags = { Name = "arclight-overcast-terraform-plan-${var.environment}" }
+}
+
+resource "aws_iam_role_policy_attachment" "overcast_plan_read" {
+  count = var.create_plan_role ? 1 : 0
+
+  role       = aws_iam_role.overcast_plan[0].name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+
+resource "aws_iam_role_policy" "overcast_plan_guardrails" {
+  count = var.create_plan_role ? 1 : 0
+
+  name = "plan-guardrails"
+  role = aws_iam_role.overcast_plan[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid         = "NoObjectContentsButState"
+        Effect      = "Deny"
+        Action      = ["s3:GetObject", "s3:GetObjectVersion"]
+        NotResource = [local.state_object_arn]
+      },
+      {
+        Sid      = "NoImageLayers"
+        Effect   = "Deny"
+        Action   = ["ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
+        Resource = ["*"]
+      },
+      {
+        Sid    = "NoLogEvents"
+        Effect = "Deny"
+        Action = [
+          "logs:GetLogEvents",
+          "logs:FilterLogEvents",
+          "logs:StartQuery",
+          "logs:GetQueryResults",
+          "logs:StartLiveTail",
+          "logs:GetLogRecord",
+        ]
+        Resource = ["*"]
+      },
+      {
+        Sid      = "NoSecretValues"
+        Effect   = "Deny"
+        Action   = ["kms:Decrypt", "secretsmanager:GetSecretValue"]
+        Resource = ["*"]
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "overcast_plan_state" {
+  count = var.create_plan_role ? 1 : 0
+
+  name = "plan-state"
+  role = aws_iam_role.overcast_plan[0].id
+
+  # Read the state; write only the backend's lock file (use_lockfile).
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "StateList"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [var.terraform_state_bucket_arn]
+      },
+      {
+        Sid      = "StateLock"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:DeleteObject"]
+        Resource = ["${local.state_object_arn}.tflock"]
+      },
+    ]
+  })
+}
+
+################################################################################
 # Per-service ECR push roles
 ################################################################################
 
