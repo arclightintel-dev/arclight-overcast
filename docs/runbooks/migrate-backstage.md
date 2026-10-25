@@ -96,3 +96,18 @@ All host commands below run in a Session Manager shell (user `ssm-user`), so the
 On a scratch volume or a stopped project: `litestream restore` both databases with **one**
 `-timestamp`, `tools/control_store.py mark-restored`, start, confirm `recovery_required:true`,
 time it. Record the RTO and the Litestream lag metric name here; the lag alarm waits for that.
+
+## Record: cutover 2026-10-24/25 (release `ed8443e`)
+
+| Step | Result |
+|---|---|
+| C1-C3 | Owner upload `cutover-20261023-234938/`: 9,871 objects, 14,074,949,528 B (Backstage's prefix message never arrived; found by status check) |
+| C4 | Sync 21:46-21:49Z; `podbay.db` 12,681,867,264 B (= PC); `quick_check ok`; `stubs 893922` (= PC). SSM runs `/bin/sh`: no bash-isms |
+| C5 | `control_store.py --control-db ... restore`: installation `1905df66-03ff-4fa4-83b2-052a448c97df`, `recovery-required` |
+| C6 | Litestream first snapshots 21:52Z (corpus 1,487,573,425 B lz4 in 28 s) |
+| Drill | One `T` inside both generations' windows (`litestream generations`; a later `T` gives "no matching backups found"): restore 104 s, full drill 535 s, `stubs 893922`, `recovery_required (1,)`. Verdict condition 4 met |
+| C7 | Migration 041 applied (007 applied by C5's restore, unlogged); `/ready` `recovery_required:true` |
+| C8 | App and Engine stopped first; review-identity, fresh `local-admin` recovery, `reconcile_proxy_routes` (corpus `8f0098f7312c6556b551e22bdc933cf5`, 16 stale routes released), `complete-recovery`; `recovery_required:false` |
+| C9 | 2026-10-25 03:32:05Z: link claim consumed, Entra identity linked to `local-operator`, role synced to `admin`; old Dex link disabled; both secret files deleted by the owner |
+| After | Normal-mode deploy (run 40158828612) cleared `no-autostart`; hold removed; public `/ready` 200, ALB target healthy, all alarms OK, Litestream 0 sync errors. PC warm standby until 2026-11-08 |
+
