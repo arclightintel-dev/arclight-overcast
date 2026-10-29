@@ -8,6 +8,11 @@ output "execution_role_arns" {
   value       = { for k, v in aws_iam_role.ecs_exec : k => v.arn }
 }
 
+output "execution_role_names" {
+  description = "Map of service name to execution role name"
+  value       = { for k, v in aws_iam_role.ecs_exec : k => v.name }
+}
+
 output "core_database_url_secret_arn" {
   description = "ARN of the Core database URL secret"
   value       = aws_secretsmanager_secret.service["arclight/${var.environment}/core/database-url"].arn

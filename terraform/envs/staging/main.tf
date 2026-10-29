@@ -240,6 +240,11 @@ resource "aws_secretsmanager_secret" "dbbootstrap_sf_pw" {
   description = "Temporary bootstrap password for shuttleforge_staging DB role"
 }
 
+resource "aws_secretsmanager_secret" "dbbootstrap_sf_app_pw" {
+  name        = "arclight/${var.environment}/dbbootstrap/shuttleforge-app-db-password"
+  description = "Bootstrap password for the DML-only shuttleforge_app_staging role (sf-app-role mode)"
+}
+
 resource "aws_secretsmanager_secret" "dbbootstrap_nf_pw" {
   name        = "arclight/${var.environment}/dbbootstrap/nerfherder-db-password"
   description = "Temporary bootstrap password for nerfherder_staging DB role"
@@ -308,6 +313,13 @@ resource "aws_iam_role_policy" "dbbootstrap_secrets" {
         Resource = [
           "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:arclight/${var.environment}/dbbootstrap/*"
         ]
+      },
+      {
+        # sf-app-role connects as ShuttleForge's schema owner through SF's own URL.
+        Sid      = "ShuttleForgeOwnerUrl"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = [aws_secretsmanager_secret.sf_db_url_migration.arn]
       },
       {
         Sid      = "KMSDecrypt"
@@ -385,8 +397,10 @@ resource "aws_ecs_task_definition" "dbbootstrap" {
 
   container_definitions = jsonencode([
     {
-      name      = "dbbootstrap"
-      image     = "${module.ecr.repository_urls["arclight/dbbootstrap"]}:v5"
+      name = "dbbootstrap"
+      # v1-9264f1a = services/dbbootstrap at 9264f1a (adds sf-app-role). An administrator
+      # builds and pushes it before its first run: the fallback workflow's role cannot push.
+      image     = "${module.ecr.repository_urls["arclight/dbbootstrap"]}:v1-9264f1a"
       essential = true
 
       secrets = [
@@ -394,6 +408,8 @@ resource "aws_ecs_task_definition" "dbbootstrap" {
         { name = "PGPASSWORD", valueFrom = "${module.rds.master_user_secret_arn}:password::" },
         { name = "CORE_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_core_pw.arn },
         { name = "SF_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_sf_pw.arn },
+        { name = "SF_APP_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_sf_app_pw.arn },
+        { name = "SF_OWNER_URL", valueFrom = aws_secretsmanager_secret.sf_db_url_migration.arn },
         { name = "NF_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_nf_pw.arn },
       ]
 

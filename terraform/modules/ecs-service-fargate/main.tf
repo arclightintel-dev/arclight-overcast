@@ -92,8 +92,8 @@ resource "aws_ecs_service" "this" {
     assign_public_ip = false
   }
 
-  deployment_minimum_healthy_percent = 100
-  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = var.deployment_minimum_healthy_percent
+  deployment_maximum_percent         = var.deployment_maximum_percent
 
   health_check_grace_period_seconds = var.target_group_arn != null ? var.health_check_grace_period_seconds : null
 

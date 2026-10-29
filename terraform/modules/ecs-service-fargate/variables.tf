@@ -94,3 +94,17 @@ variable "health_check_grace_period_seconds" {
   type        = number
   default     = 120
 }
+
+# Rolling (100/200) suits stateless services. A singleton that must stop before its
+# replacement starts (ShuttleForge, O-2) sets 0/100.
+variable "deployment_minimum_healthy_percent" {
+  description = "Lower limit on running tasks during a deployment, as a percent of desired_count"
+  type        = number
+  default     = 100
+}
+
+variable "deployment_maximum_percent" {
+  description = "Upper limit on running tasks during a deployment, as a percent of desired_count"
+  type        = number
+  default     = 200
+}

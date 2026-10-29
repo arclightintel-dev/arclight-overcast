@@ -13,8 +13,9 @@ Deploy in this order. Each service must pass `/ready` before deploying the next.
 ## Canonical path: the deploy-service workflow
 
 Service deploys run through `.github/workflows/deploy-service.yml`. The workflow
-verifies the image exists in ECR, re-registers the task definition with the new
-image tag, calls `update-service --force-new-deployment`, waits for stability,
+verifies the image exists in ECR, resolves the tag to its digest and re-registers
+the latest task-definition revision with `repo@sha256:<digest>` (O-3; never by tag),
+calls `update-service --force-new-deployment`, waits for stability,
 and runs a health check against `https://<module>.staging.arclight-complex.net/ready`
 **with Cloudflare Access service-token headers** (`CF_ACCESS_CLIENT_ID` /
 `CF_ACCESS_CLIENT_SECRET` repo secrets). You do **not** hand-run `update-service`
@@ -53,6 +54,31 @@ triggers feed the same jobs (`verify-image` → `deploy`).
 The workflow does **not** run DB migrations. If a release needs a migration, run
 it as a one-off task **before** dispatching the deploy (see manual step 2 below),
 or have the service run migrations on boot.
+
+### ShuttleForge specifics
+
+- **Singleton, stop before start** (0/100): every deploy is a short outage, and
+  every restart voids all leases.
+- **Base revisions are not runnable.** Terraform registers
+  `arclight-shuttleforge-staging` and `arclight-shuttleforge-migrate-staging` with an
+  all-zero digest. Always deploy through the workflow, or register a copy with the
+  real digest. Never point the service at a Terraform revision.
+- **Migrations** run in their own family, not as a command override:
+  1. Register a copy of the latest `arclight-shuttleforge-migrate-staging` revision with
+     the release digest.
+  2. Run it with the **dbbootstrap** security group (443 and RDS only, no route to
+     Core). It binds only `db-url-migration` and runs `--migrate-only`.
+  3. Then re-run `dbbootstrap sf-app-role`, so `alembic_version` stays read-only for the
+     runtime role.
+  4. Only then deploy.
+- **Desired count is 0 until the first deploy.** The workflow cannot start a service
+  from zero.
+  1. Register the serving revision on the digest.
+  2. Run `update-service --task-definition <rev> --desired-count 1`.
+  3. Run the workflow's checks by hand: the running digest, and the `/ready` body
+     `ready`, since a degraded task also returns 200.
+  4. Set `shuttleforge_desired_count = 1` in Terraform before any later apply.
+     Otherwise the next apply scales it back to 0.
 
 ---
 

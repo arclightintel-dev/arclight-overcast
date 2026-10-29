@@ -85,7 +85,16 @@ jobs:
       - name: Update image in task definition
         id: new-task-def
         run: |
-          NEW_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/arclight/${{ env.DEPLOY_MODULE }}:${{ env.DEPLOY_IMAGE_TAG }}"
+          # Deploy by digest (O-3): resolve the tag once and register repo@sha256, so the
+          # revision names exactly the image that was verified, whatever happens to tags later.
+          DIGEST=$(aws ecr describe-images --repository-name "arclight/${{ env.DEPLOY_MODULE }}" \
+            --image-ids imageTag="${{ env.DEPLOY_IMAGE_TAG }}" --query 'imageDetails[0].imageDigest' --output text)
+          case "$DIGEST" in
+            sha256:*) ;;
+            *) echo "::error::could not resolve ${{ env.DEPLOY_IMAGE_TAG }} to a digest (got: $DIGEST)"; exit 1 ;;
+          esac
+          NEW_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/arclight/${{ env.DEPLOY_MODULE }}@${DIGEST}"
+          echo "Image: $NEW_IMAGE (${{ env.DEPLOY_IMAGE_TAG }})"
 
           # Replace the image in the container definition
           jq --arg img "$NEW_IMAGE" \
