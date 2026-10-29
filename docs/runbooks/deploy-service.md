@@ -66,8 +66,8 @@ or have the service run migrations on boot.
 - **Migrations** run in their own family, not as a command override:
   1. Register a copy of the latest `arclight-shuttleforge-migrate-staging` revision with
      the release digest.
-  2. Run it with the ShuttleForge security group. It binds only `db-url-migration` and
-     runs `--migrate-only`.
+  2. Run it with the **dbbootstrap** security group (443 and RDS only, no route to
+     Core). It binds only `db-url-migration` and runs `--migrate-only`.
   3. Then re-run `dbbootstrap sf-app-role`, so `alembic_version` stays read-only for the
      runtime role.
   4. Only then deploy.

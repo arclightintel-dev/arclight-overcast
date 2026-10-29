@@ -315,6 +315,13 @@ resource "aws_iam_role_policy" "dbbootstrap_secrets" {
         ]
       },
       {
+        # sf-app-role connects as ShuttleForge's schema owner through SF's own URL.
+        Sid      = "ShuttleForgeOwnerUrl"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = [aws_secretsmanager_secret.sf_db_url_migration.arn]
+      },
+      {
         Sid      = "KMSDecrypt"
         Effect   = "Allow"
         Action   = ["kms:Decrypt"]
@@ -391,9 +398,9 @@ resource "aws_ecs_task_definition" "dbbootstrap" {
   container_definitions = jsonencode([
     {
       name = "dbbootstrap"
-      # v1-d48f2c9 = services/dbbootstrap at d48f2c9 (adds sf-app-role); built by
-      # build-and-push-image.yml before its first run.
-      image     = "${module.ecr.repository_urls["arclight/dbbootstrap"]}:v1-d48f2c9"
+      # v1-9264f1a = services/dbbootstrap at 9264f1a (adds sf-app-role). An administrator
+      # builds and pushes it before its first run: the fallback workflow's role cannot push.
+      image     = "${module.ecr.repository_urls["arclight/dbbootstrap"]}:v1-9264f1a"
       essential = true
 
       secrets = [
@@ -402,6 +409,7 @@ resource "aws_ecs_task_definition" "dbbootstrap" {
         { name = "CORE_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_core_pw.arn },
         { name = "SF_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_sf_pw.arn },
         { name = "SF_APP_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_sf_app_pw.arn },
+        { name = "SF_OWNER_URL", valueFrom = aws_secretsmanager_secret.sf_db_url_migration.arn },
         { name = "NF_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_nf_pw.arn },
       ]
 

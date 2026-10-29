@@ -121,7 +121,7 @@ resource "aws_secretsmanager_secret" "sf_db_url_migration" {
 # the schema-owner URL. SF: never bind it to the serving task; this makes that structural.
 resource "aws_iam_role_policy" "sf_exec_no_migration_url" {
   name = "deny-migration-url"
-  role = element(split("/", module.secrets.execution_role_arns["shuttleforge"]), 1)
+  role = module.secrets.execution_role_names["shuttleforge"]
 
   policy = jsonencode({
     Version = "2012-10-17"
