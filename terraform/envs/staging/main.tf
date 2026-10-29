@@ -240,6 +240,11 @@ resource "aws_secretsmanager_secret" "dbbootstrap_sf_pw" {
   description = "Temporary bootstrap password for shuttleforge_staging DB role"
 }
 
+resource "aws_secretsmanager_secret" "dbbootstrap_sf_app_pw" {
+  name        = "arclight/${var.environment}/dbbootstrap/shuttleforge-app-db-password"
+  description = "Bootstrap password for the DML-only shuttleforge_app_staging role (sf-app-role mode)"
+}
+
 resource "aws_secretsmanager_secret" "dbbootstrap_nf_pw" {
   name        = "arclight/${var.environment}/dbbootstrap/nerfherder-db-password"
   description = "Temporary bootstrap password for nerfherder_staging DB role"
@@ -385,8 +390,10 @@ resource "aws_ecs_task_definition" "dbbootstrap" {
 
   container_definitions = jsonencode([
     {
-      name      = "dbbootstrap"
-      image     = "${module.ecr.repository_urls["arclight/dbbootstrap"]}:v5"
+      name = "dbbootstrap"
+      # v1-d48f2c9 = services/dbbootstrap at d48f2c9 (adds sf-app-role); built by
+      # build-and-push-image.yml before its first run.
+      image     = "${module.ecr.repository_urls["arclight/dbbootstrap"]}:v1-d48f2c9"
       essential = true
 
       secrets = [
@@ -394,6 +401,7 @@ resource "aws_ecs_task_definition" "dbbootstrap" {
         { name = "PGPASSWORD", valueFrom = "${module.rds.master_user_secret_arn}:password::" },
         { name = "CORE_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_core_pw.arn },
         { name = "SF_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_sf_pw.arn },
+        { name = "SF_APP_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_sf_app_pw.arn },
         { name = "NF_PW", valueFrom = aws_secretsmanager_secret.dbbootstrap_nf_pw.arn },
       ]
 

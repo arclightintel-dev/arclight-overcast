@@ -41,9 +41,14 @@ variable "core_desired_count" {
 }
 
 variable "shuttleforge_desired_count" {
-  description = "ShuttleForge ECS service desired task count"
+  description = "ShuttleForge ECS service desired task count (0 until the first digest deploy; a singleton, never above 1)"
   type        = number
-  default     = 1
+  default     = 0
+
+  validation {
+    condition     = contains([0, 1], var.shuttleforge_desired_count)
+    error_message = "ShuttleForge is a singleton (stop before start): desired count must be 0 or 1."
+  }
 }
 
 variable "alarm_email" {
