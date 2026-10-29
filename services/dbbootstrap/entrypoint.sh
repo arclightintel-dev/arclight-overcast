@@ -61,16 +61,26 @@ EOSQL
     db="shuttleforge_${ENV}"
     owner="$db"
     app="shuttleforge_app_${ENV}"
-    if [ -z "$SF_PW" ] || [ -z "$SF_APP_PW" ]; then
-      echo "FAIL: SF_PW and SF_APP_PW must both be set" >&2
+    # SF_OWNER_URL is ShuttleForge's own schema-owner URL (db-url-migration), the single
+    # source of the owner credential: the bootstrap temporary (SF_PW) was spent in July.
+    if [ -z "$SF_OWNER_URL" ] || [ -z "$SF_APP_PW" ]; then
+      echo "FAIL: SF_OWNER_URL and SF_APP_PW must both be set" >&2
+      exit 1
+    fi
+    # SF's URLs are postgresql+asyncpg://; libpq needs postgresql:// and no driver query.
+    owner_url=$(printf '%s' "$SF_OWNER_URL" | sed -e 's#^postgresql+asyncpg://#postgresql://#' -e 's#?.*$##')
+    who=$(PGSSLMODE=require psql "$owner_url" -tA -v ON_ERROR_STOP=1 -c 'SELECT current_user || chr(124) || current_database()')
+    if [ "$who" != "$owner|$db" ]; then
+      echo "FAIL: SF_OWNER_URL must connect as $owner to $db" >&2
       exit 1
     fi
 
-    echo "Creating or updating role $app (master)..."
+    # Created once with SF_APP_PW; a re-run never resets the password, so db-url stays valid.
+    echo "Creating role $app if absent (master)..."
     psql -v ON_ERROR_STOP=1 -v app="$app" -v app_pw="$SF_APP_PW" <<'EOSQL'
 SELECT CASE
   WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app')
-  THEN format('ALTER ROLE %I LOGIN NOCREATEDB NOCREATEROLE NOINHERIT CONNECTION LIMIT 16 PASSWORD %L', :'app', :'app_pw')
+  THEN format('ALTER ROLE %I LOGIN NOCREATEDB NOCREATEROLE NOINHERIT CONNECTION LIMIT 16', :'app')
   ELSE format('CREATE ROLE %I LOGIN NOCREATEDB NOCREATEROLE NOINHERIT CONNECTION LIMIT 16 PASSWORD %L', :'app', :'app_pw')
 END \gexec
 EOSQL
@@ -78,7 +88,7 @@ EOSQL
     # Database and schema grants, and default privileges FOR ROLE owner, must be issued by
     # the owner: the RDS master is not a superuser and does not own shuttleforge_<env>.
     echo "Granting $app on $db (as $owner)..."
-    PGUSER="$owner" PGPASSWORD="$SF_PW" psql -v ON_ERROR_STOP=1 -d "$db" \
+    PGSSLMODE=require psql "$owner_url" -v ON_ERROR_STOP=1 \
       -v db="$db" -v owner="$owner" -v app="$app" <<'EOSQL'
 SELECT format('REVOKE ALL ON DATABASE %I FROM PUBLIC', :'db') \gexec
 SELECT format('GRANT CONNECT ON DATABASE %I TO %I', :'db', :'app') \gexec
