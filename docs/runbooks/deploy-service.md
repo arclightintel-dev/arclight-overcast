@@ -75,8 +75,12 @@ or have the service run migrations on boot.
   from zero.
   1. Register the serving revision on the digest.
   2. Run `update-service --task-definition <rev> --desired-count 1`.
-  3. Run the workflow's checks by hand: the running digest, and the `/ready` body
-     `ready`, since a degraded task also returns 200.
+  3. Run the workflow's checks by hand:
+     - the running digest;
+     - `/ready` 200 with body `ready`. A degraded task also returns 200.
+     - Until provider inventory exists, an empty ShuttleForge reports `degraded` by design.
+       In that case `/ready/detail` must pass `jq -e -f scripts/sf-first-admission.jq`: only
+       the empty-inventory snapshot warning, the exact pinned check set, `jwks` ok (DR-18).
   4. Set `shuttleforge_desired_count = 1` in Terraform before any later apply.
      Otherwise the next apply scales it back to 0.
 

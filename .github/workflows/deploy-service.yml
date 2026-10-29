@@ -231,6 +231,20 @@ jobs:
                 echo "Health check passed: $URL returned 200 with status=ready"
                 exit 0
               fi
+              # ShuttleForge-only, temporary first-admission allowance (DR-18): an empty-inventory
+              # SF reports "degraded" by design. Pass only if /ready/detail matches
+              # scripts/sf-first-admission.jq exactly. Logs carry check names and statuses only
+              # (public repository).
+              if [ "$READY" = "degraded" ] && [ "${{ env.DEPLOY_MODULE }}" = "shuttleforge" ]; then
+                if DETAIL=$(curl -sf $CF_HEADERS "${URL}/detail"); then
+                  echo "$DETAIL" | jq -r '.checks[]? | "  \(.name)=\(.status)"' || true
+                  if echo "$DETAIL" | jq -e -f scripts/sf-first-admission.jq > /dev/null; then
+                    echo "Health check passed: degraded with only the empty-inventory snapshot warning (SF first-admission allowance, DR-18)"
+                    exit 0
+                  fi
+                fi
+                echo "Attempt $i: degraded, and /ready/detail does not match the SF first-admission allowance"
+              fi
               echo "Attempt $i: HTTP 200 but body status=${READY:-missing}, retrying in 10s..."
               sleep 10
               continue
