@@ -16,7 +16,7 @@ remaining gates; every apply needs the owner's go first-hand. Inputs: NF's accep
   nothing else can reach NF.
 - Not behind the ALB.
 
-**Service.** 1 vCPU / 2 GB, port 8100, Cloud Map `nerfherder`, 0/100 (**O-2**), stopTimeout 35.
+**Service.** 1 vCPU / 2 GB, port 8100, Cloud Map `nerfherder`, 0/100 (**O-2**), stopTimeout 60 (NF annex 0dc3357; was 35).
 - The python health check follows NF's compose precedent; the image has no curl.
 - The manifest's staging environment: `NERFHERDER_EGRESS_MODE=sf_required`, and the three S3
   values as empty strings.
