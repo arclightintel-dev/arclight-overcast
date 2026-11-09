@@ -40,6 +40,12 @@ variable "core_desired_count" {
   default     = 1
 }
 
+variable "shuttleforge_policy_enabled" {
+  description = "Bind the reviewed policy secret to ShuttleForge (true only once the shell holds a value, DR-16)"
+  type        = bool
+  default     = false
+}
+
 variable "shuttleforge_desired_count" {
   description = "ShuttleForge ECS service desired task count (0 until the first digest deploy; a singleton, never above 1)"
   type        = number

@@ -62,6 +62,9 @@ module "shuttleforge_service" {
     secret_arn_listener_hmac  = module.secrets.secret_arns["arclight/${var.environment}/shuttleforge/listener-auth-hmac-key"]
     secret_arn_lease_hmac     = module.secrets.secret_arns["arclight/${var.environment}/shuttleforge/lease-hmac-key"]
     secret_arn_operator_token = module.secrets.secret_arns["arclight/${var.environment}/shuttleforge/operator-token"]
+    # Bound only once the owner has put the reviewed policy in the shell: ECS refuses to start a
+    # task whose secret has no value (DR-16).
+    secret_arn_policy = var.shuttleforge_policy_enabled ? aws_secretsmanager_secret.sf_policy.arn : ""
   })
 }
 
@@ -161,6 +164,42 @@ resource "aws_security_group_rule" "sf_to_core" {
   security_group_id        = module.vpc.sg_shuttleforge_id
   source_security_group_id = module.vpc.sg_core_id
   description              = "ShuttleForge to Core JWKS"
+}
+
+################################################################################
+# DR-15: dataplane egress to proxy providers (owner, 2026-11-09: open egress on staging)
+#
+# SF dials provider gateways and per-account endpoints on arbitrary TCP ports (Bright Data
+# brd.superproxy.io:44445, Oxylabs pr.oxylabs.io:7777, Proxy-Cheap endpoints from its API) and
+# health-checks every endpoint. Addresses and ports change with provider accounts, so an
+# allowlist would break silently; this group's outbound TCP goes through the NAT instead. Only
+# the ShuttleForge group gets it.
+################################################################################
+
+resource "aws_security_group_rule" "sf_provider_egress" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 65535
+  protocol          = "tcp"
+  security_group_id = module.vpc.sg_shuttleforge_id
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "ShuttleForge to proxy providers (DR-15)"
+}
+
+################################################################################
+# DR-16: the reviewed staging policy, delivered out of band
+#
+# The YAML lives in SF's private repository and names principals, pools and lanes, so this public
+# repository carries only the shell. The owner writes base64(YAML) as its value, then sets
+# shuttleforge_policy_enabled = true and the next deploy binds it. The serving execution role
+# already reads arclight/<env>/shuttleforge/*.
+################################################################################
+
+resource "aws_secretsmanager_secret" "sf_policy" {
+  name        = "arclight/${var.environment}/shuttleforge/policy-yaml-b64"
+  description = "ShuttleForge reviewed lease policy, base64 of the YAML (SHUTTLEFORGE_POLICY_YAML_B64)"
+
+  tags = { Name = "arclight/${var.environment}/shuttleforge/policy-yaml-b64" }
 }
 
 ################################################################################
