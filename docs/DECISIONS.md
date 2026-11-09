@@ -213,6 +213,40 @@ The apply is targeted at `module.observability`, so the unrelated task-definitio
 
 **Applied on staging 2026-10-23 23:59:12Z to 2026-10-24 00:00:27Z** on the owner's go (relayed by Complex, confirmed first-hand in Overcast's session): 1 added (Object Lock configuration), 2 changed (trail, lifecycle), 0 destroyed; post-apply plan of the module: no changes. Verified live: `ObjectLockEnabled: Enabled`, default `GOVERNANCE` 365 days; lifecycle `archive-logs` with no expiration and `all_storage_classes_128K`; trail `IsMultiRegionTrail` and `LogFileValidationEnabled` true; first digest 00:26:56Z with no delivery error; a new log (00:57Z) carries `GOVERNANCE` until 2027-10-24T00:57Z; `us-east-2` and `ap-southeast-2` log prefixes appeared. Existing versions (120,294 listed at 00:01:31Z): explicit `GOVERNANCE` retention until 2027-10-24T00:00:00Z applied 2026-10-24 01:00:28Z to 04:39:18Z (one `PutObjectRetention` per version); 2 refused, both logs written after enablement (10-24 00:00Z and 00:05Z) whose default retention is already later (S3 refuses to shorten it); spot-checked June, both V-1 files, July, August, September, October and the digest prefix, all `GOVERNANCE` until 2027-10-24. **D-075 is complete on staging.**
 
+## O-016: Prod substrate reduced to what Backstage runs on
+
+**Authority**: the owner's v1 decision (no production environment in v1), and the owner's go on 2026-11-09 ("if it's needlessly costing me money then let's remove prod"; "yes. go ahead. hit it"). Closes DR-19 and DR-11. | **Recorded**: 2026-11-09. Plan: [prod-substrate-reduction.md](proposals/prod-substrate-reduction.md), PR #62.
+
+`terraform/envs/prod` (applied 2026-07-02 under D-056/D-058) now keeps only what `terraform/envs/backstage` reads:
+- the VPC with its NAT and endpoints;
+- the ALB with both listeners and its security group;
+- the alarm topic, plus the ALB 5xx alarm.
+
+Removed:
+- the unused RDS instance, with a final snapshot;
+- the empty ECS cluster and its Cloud Map namespace;
+- 18 service and dbbootstrap secret shells (30-day recovery window);
+- six SSM parameters, seven never-used or July-only IAM roles, the dbbootstrap/dbverify tasks;
+- the core and shuttleforge target groups and their rules;
+- the three RDS alarms.
+
+Saving about $72/month. A production deployment after v1 starts from D-056, not from this root's history.
+
+**Applied 2026-11-09:**
+- **P0** (20:27:07Z, manual): deleted the hand-made duplicate listener rules at priorities 2 and 3 by ARN (`…/0aabb9a3364a8721`, `…/9ff89e086a39ff68`), leaving 4, 6, 100 and the default.
+- **P1** (20:27:40-20:29:04Z, at `a537c0e`): `deletion_protection` off (1 changed), and the alarm-topic email subscription re-created (1 added). The July subscription had expired unconfirmed, so Backstage's alarms reached no one from the cutover until the owner confirms.
+- **P2** (20:29:34-20:40:10Z): 71 destroyed, 0 added, 0 changed, exactly the reviewed set. The RDS deletion took 10m32s.
+
+**Verified (P3):**
+- Final snapshot `arclight-prod-final-fcf44ee8` is available (50 GB, encrypted, `aws/rds`).
+- The instance is gone; the cluster is INACTIVE.
+- The ALB has only Backstage's rule 100 and the default.
+- The prod plan and the Backstage root plan both show no changes; Backstage `/ready` is `ready`.
+
+**Restore:**
+- `restore-db-instance-from-db-snapshot`, then `modify-db-instance --manage-master-user-password`.
+- Secret shells are restorable for 30 days.
+
 ## Core coordination disposition — not a new mechanism decision
 
 **Review date**: 2026-10-01 | **Recorded here**: 2026-10-03.

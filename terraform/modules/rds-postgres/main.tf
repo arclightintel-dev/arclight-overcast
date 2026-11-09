@@ -65,7 +65,7 @@ resource "aws_db_instance" "this" {
   skip_final_snapshot       = false
   final_snapshot_identifier = "arclight-${var.environment}-final-${random_id.rds_snapshot.hex}"
 
-  deletion_protection = true
+  deletion_protection = var.deletion_protection
   publicly_accessible = false
 
   tags = { Name = "arclight-${var.environment}" }

@@ -47,3 +47,11 @@ variable "backup_retention_period" {
   type        = number
   default     = 7
 }
+
+# Turned off only as the first, separate apply of a deliberate removal: a deletion fails while it
+# is on, and removing the module in the same apply cannot change it first.
+variable "deletion_protection" {
+  description = "RDS deletion protection"
+  type        = bool
+  default     = true
+}
