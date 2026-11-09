@@ -58,8 +58,18 @@ to the staging alarm topic, with actions enabled only while the desired count is
 ## Sequence (each step on the owner's go)
 
 1. **N-G1:** targeted staging apply of the above. Nothing runs.
+   - Targets: `module.nerfherder_service`, `module.iam_github_oidc`, `module.rds`,
+     `aws_iam_role_policy.dbbootstrap_secrets`, and every resource in `nerfherder.tf`.
+   - The targeted plan must read **38 to add, 1 to change, 0 to destroy**. The Core
+     task-definition churn stays out.
+   - **Exit check before N-G2:** `describe-task-definition` on `arclight-nerfherder-staging` and
+     `arclight-nerfherder-bootstrap-staging` shows all three `NERFHERDER_S3_*` keys present with
+     value `""`, and a full plan afterwards shows no diff on Nerfherder's task definitions.
+   - If ECS stripped them, stop: NF's defaults (`minioadmin`, `localhost`) would make the hosted
+     start refuse. The fix is on NF's side.
 2. **N-G2:**
    1. An administrator builds and pushes `dbbootstrap:v1-4a9ce79`.
+      Record `SHOW max_connections` while there (the RDS alarm is at more than 40).
    2. The owner runs `-Service nerfherder -Phase Prepare`, which copies the owner URL from
       `database-url` into `migration-database-url` and generates the app password.
    3. Run `nf-app-role`.
@@ -69,7 +79,12 @@ to the staging alarm topic, with actions enabled only while the desired count is
    dbbootstrap group, then re-run `nf-app-role`.
 4. **N-G4:**
    1. Register the service revision on the digest and run `update-service --desired-count 1`.
-   2. A one-off probe task in NF's group reads `/ready/detail`.
+   2. **Probe.** Register a copy of the latest `arclight-nerfherder-bootstrap-staging` revision
+      on the real digest, then run it once in NF's security group and the private-app subnets,
+      with no public IP. Override the command to
+      `python -c "import urllib.request; print(urllib.request.urlopen('http://nerfherder.staging.internal.arclight-complex.net:8100/ready/detail', timeout=5).read().decode())"`.
+      Run it only after ECS has registered the service task in Cloud Map. Its log stream is the
+      evidence. Check the body for `host_lease` held.
    3. Flip `nerfherder_desired_count` to 1.
    4. Record the 15-minute `DatabaseConnections` baseline before start, the TLS receipt
       (`rds.force_ssl = 1`, plaintext refused) and ECS CPU and memory, as NF asked.
@@ -80,9 +95,24 @@ refused at admission (`sf_required`). That is correct behaviour, not a fault.
 
 ## Notes for NF
 
-- **stopTimeout** is exactly NF's 35 s drain budget (3 + 25 + 5); Fargate allows up to 120 s if NF
-  wants a margin.
-- **Empty strings.** The three empty `NERFHERDER_S3_*` values must reach the container as `""`.
-  ECS passes empty values through; check after the first registration.
+- **stopTimeout** is exactly NF's 35 s drain budget (3 + 25 + 5). If a drain overruns and ECS
+  kills the task, the stale PostgreSQL session keeps the host lease until RDS reaps it, and the
+  new task waits in standby while reporting healthy. Fargate allows up to 120 s if NF wants a
+  margin.
+- **Empty strings.** The three empty `NERFHERDER_S3_*` values must reach the container as `""`:
+  this is the N-G1 exit check, unproven until then. Nothing in this repository used an empty
+  value before.
+- **Bootstrap pool.** The bootstrap family runs NF's default pool of 10 plus 20 overflow. The
+  service runs 5 plus 5. Should the family carry 5/5 as well? This departs from the manifest, so
+  it's NF's call.
+- **Narrower delete.** NF deletes objects only under `_uncommitted/`. Narrowing
+  `s3:DeleteObject` to `_uncommitted/*` would protect `evidence/`. This departs from manifest line
+  97, so it's NF's call.
+- **Sequences.** `event_chain_state.id` has an implicit sequence that is never used: the row is
+  seeded and inserts are blocked. No grant is needed.
 - **Merge order.** Merge this after PR #62 (O-016): the shared push-role map would otherwise also
-  add an NF role to prod, which no longer uses the module.
+  add an NF role to prod, which no longer uses the module. PR #64 is a draft until then.
+- **Changes from review (2026-11-09):**
+  - the alarm uses 60 s periods over 5 evaluations, so only five minutes with no running task
+    alarms (a stop-then-start deploy doesn't);
+  - the health check's startPeriod is 60 s, for a cold Fargate start.

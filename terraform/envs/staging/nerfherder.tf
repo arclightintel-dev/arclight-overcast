@@ -487,10 +487,10 @@ resource "aws_ecs_task_definition" "dbbootstrap_nf" {
 resource "aws_cloudwatch_metric_alarm" "nf_running_tasks" {
   alarm_name          = "arclight-${var.environment}-nerfherder-running-tasks"
   comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = 5
   metric_name         = "RunningTaskCount"
   namespace           = "ECS/ContainerInsights"
-  period              = 300
+  period              = 60
   statistic           = "Minimum"
   threshold           = 1
   treat_missing_data  = "breaching"

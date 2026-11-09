@@ -12,7 +12,7 @@
       "interval": 10,
       "timeout": 5,
       "retries": 6,
-      "startPeriod": 20
+      "startPeriod": 60
     },
     "environment": [
       { "name": "ENVIRONMENT", "value": "${environment}" },
