@@ -109,6 +109,7 @@ module "rds" {
     module.vpc.sg_core_id,
     module.vpc.sg_shuttleforge_id,
     module.vpc.sg_dbbootstrap_id,
+    aws_security_group.nerfherder.id, # appended: count-indexed rules, keep existing positions
   ]
 }
 
@@ -320,6 +321,13 @@ resource "aws_iam_role_policy" "dbbootstrap_secrets" {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
         Resource = [aws_secretsmanager_secret.sf_db_url_migration.arn]
+      },
+      {
+        # nf-app-role, the same for Nerfherder (its own family, nerfherder.tf).
+        Sid      = "NerfherderOwnerUrl"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = [aws_secretsmanager_secret.nf_migration_database_url.arn]
       },
       {
         Sid      = "KMSDecrypt"

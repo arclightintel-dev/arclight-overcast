@@ -300,6 +300,12 @@ locals {
       ecr_repos = ["arclight/shuttleforge"]
       refs      = ["main", "v1-operate"]
     }
+    # O-013 (staging only; the prod root no longer uses this module after O-016).
+    nerfherder = {
+      repo_name = "arclight-nerfherder"
+      ecr_repos = ["arclight/nerfherder"]
+      refs      = ["main"]
+    }
   }
 }
 
