@@ -62,26 +62,65 @@ to delete a target group a rule references.
 
 ## Sequence (each step needs the owner's go)
 
-1. **P0, manual:** delete the listener rules at priorities 2 and 3 (record their ARNs and
-   conditions first). Backstage (priority 100) is untouched.
-2. **P1, apply:** prod root with `rds_deletion_protection = false`: one in-place change on the DB
-   instance. Read the plan in full; nothing else may change.
-3. **P2, apply:** the removal. Expected plan: destroys only, every one in the list above;
-   `plan_guard.py` (CloudTrail is not in prod, so it is a formality). The DB deletion takes about
-   10 minutes; the final snapshot is created first.
-4. **P3, verify:** the final snapshot is `available`; the prod plan shows no changes; the
-   **Backstage root plan shows no changes** (its data sources still resolve); Backstage `/ready` is
-   `ready`; the ALB's rules are Backstage's 100 plus the default.
+1. **P0, manual:** delete the listener rules at priorities 2 and 3 **by ARN** (record each rule's
+   ARN, conditions and target first: `…/0aabb9a3364a8721` and `…/9ff89e086a39ff68`). Then
+   `describe-rules` must show only 4, 6, 100 and the default. Backstage (priority 100) is
+   untouched.
+2. **P1, apply:** the prod root at commit `a537c0e`, where `module "rds"` sets
+   `deletion_protection = false`. The plan is one in-place change on the DB instance plus
+   re-creating the alarm-topic email subscription (the July one expired unconfirmed). Apply the
+   saved plan, or restore the local `terraform.tfvars` backup first: `a537c0e` still declares
+   `github_org` without a default.
+3. **P2, apply:** the removal, **re-planned after P1**. Prior state must show
+   `deletion_protection = false`. Expected: 71 destroys and nothing else (one add only if the
+   subscription lapsed again), nothing in `module.vpc`, the ALB, its listeners or the topic.
+   `plan_guard.py` is a formality (no CloudTrail in prod). The DB deletion takes about 10
+   minutes; the final snapshot is created first.
+4. **P3, verify:**
+   - the final snapshot is `available`;
+   - the prod plan shows no changes;
+   - the **Backstage root plan shows no changes** (its data sources still resolve);
+   - Backstage `/ready` is `ready`;
+   - the ALB's rules are Backstage's 100 plus the default;
+   - the alarm topic shows `SubscriptionsConfirmed = 1`. The owner confirms the AWS email right
+     after P1; until then Backstage's alarms reach no one, as they have since the cutover.
 5. **P4, record:** DECISIONS O-016, PROJECT_STATE (DR-19 and DR-11 closed), and a note to Complex
    (D-056 production topology is parked, not deleted from the spec).
 
 ## Restore
 
-The final snapshot restores the database (`restore-db-instance-from-db-snapshot`); reverting this
-change and re-applying recreates everything else. Secret shells are recoverable for 30 days
-(`restore-secret`); after that they are recreated empty.
+**Database.** The final snapshot restores with `restore-db-instance-from-db-snapshot`; it is
+encrypted with the AWS-managed `aws/rds` key, so it restores in this account. A snapshot restore
+does not recreate the RDS-managed master secret: run
+`modify-db-instance --manage-master-user-password` afterwards. The service-role passwords live only
+in the `*/database-url` secrets.
+
+**Everything else.** Reverting this change and re-applying recreates the rest.
+
+**Secrets.** The 18 shells are recoverable for 30 days (`restore-secret`, then import). A rebuild
+inside that window fails on the reserved names until they are restored or force-deleted.
 
 ## Saving
 
-About $76/month: RDS ~$67, secrets ~$8 (about 21 shells), the hosted zone $0.50, three alarms.
-The rest of the bill (endpoints, NAT, ALBs, the Backstage host) is outside this plan.
+About **$72/month**:
+
+| Item | Monthly |
+|---|---:|
+| RDS Multi-AZ db.t3.small | ~$52.60 |
+| 50 GB gp3, Multi-AZ | $11.50 |
+| 19 secrets (18 shells + the RDS-managed master secret) | $7.60 |
+| Cloud Map hosted zone | $0.50 |
+| Three alarms | $0.30 |
+
+Secrets marked for deletion are not billed. The final snapshot costs cents.
+
+What remains in the prod network costs about twice that, and Backstage needs it:
+
+| Item | Monthly |
+|---|---:|
+| 11 endpoint-AZs | ~$80 |
+| NAT and its IP | ~$36.50 |
+| ALB and its IPs | ~$24 |
+
+A follow-up could pin the three base endpoints (`ecr.api`, `ecr.dkr`, `logs`) to the host's AZ, as
+the extra endpoints already are: about $22/month more. It needs a `modules/vpc` change.
