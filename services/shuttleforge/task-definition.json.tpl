@@ -40,6 +40,9 @@
       { "name": "SHUTTLEFORGE_PROVIDER_VALIDATION_COOLDOWN_SECONDS", "value": "300" }
     ],
     "secrets": [
+%{ if secret_arn_policy != "" ~}
+      { "name": "SHUTTLEFORGE_POLICY_YAML_B64", "valueFrom": "${secret_arn_policy}" },
+%{ endif ~}
       { "name": "SHUTTLEFORGE_DB_URL", "valueFrom": "${secret_arn_db_url}" },
       { "name": "SHUTTLEFORGE_KEK_RING_B64", "valueFrom": "${secret_arn_kek_ring}" },
       { "name": "SHUTTLEFORGE_LISTENER_AUTH_HMAC_KEY", "valueFrom": "${secret_arn_listener_hmac}" },
