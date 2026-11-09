@@ -1,6 +1,6 @@
 # Prod substrate reduction (DR-19, proposed O-016)
 
-Status: **plan, not applied.** Owner direction 2026-11-09: "if it's needlessly costing me money then
+Status: **APPLIED 2026-11-09 (O-016).** Owner direction 2026-11-09: "if it's needlessly costing me money then
 let's remove prod" and "go ahead" on this plan. Every apply below needs the owner's go first-hand.
 
 ## Why
