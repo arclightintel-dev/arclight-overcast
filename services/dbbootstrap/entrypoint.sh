@@ -104,9 +104,55 @@ EOSQL
     echo "sf-app-role complete."
     ;;
 
+  nf-app-role)
+    # Nerfherder's DML-only runtime role (O-013), the same shape as sf-app-role with NF's grants
+    # (2026-10-29): CONNECT, USAGE on public, table DML with default privileges FOR ROLE owner,
+    # alembic_version read-only; no sequence or function grants (NF uses no sequences, and its
+    # trigger functions keep PUBLIC's default EXECUTE); no connection limit (NF budgets 12 plus
+    # probes). Idempotent: run before the first migration and again after each one.
+    db="nerfherder_${ENV}"
+    owner="$db"
+    app="nerfherder_app_${ENV}"
+    # NF_OWNER_URL is NF's own schema-owner URL (migration-database-url).
+    if [ -z "$NF_OWNER_URL" ] || [ -z "$NF_APP_PW" ]; then
+      echo "FAIL: NF_OWNER_URL and NF_APP_PW must both be set" >&2
+      exit 1
+    fi
+    owner_url=$(printf '%s' "$NF_OWNER_URL" | sed -e 's#^postgresql+asyncpg://#postgresql://#' -e 's#?.*$##')
+    who=$(PGSSLMODE=require psql "$owner_url" -tA -v ON_ERROR_STOP=1 -c 'SELECT current_user || chr(124) || current_database()')
+    if [ "$who" != "$owner|$db" ]; then
+      echo "FAIL: NF_OWNER_URL must connect as $owner to $db" >&2
+      exit 1
+    fi
+
+    # Created once with NF_APP_PW; a re-run never resets the password, so database-url stays valid.
+    echo "Creating role $app if absent (master)..."
+    psql -v ON_ERROR_STOP=1 -v app="$app" -v app_pw="$NF_APP_PW" <<'EOSQL'
+SELECT CASE
+  WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app')
+  THEN format('ALTER ROLE %I LOGIN NOCREATEDB NOCREATEROLE NOINHERIT', :'app')
+  ELSE format('CREATE ROLE %I LOGIN NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', :'app', :'app_pw')
+END \gexec
+EOSQL
+
+    echo "Granting $app on $db (as $owner)..."
+    PGSSLMODE=require psql "$owner_url" -v ON_ERROR_STOP=1 \
+      -v db="$db" -v owner="$owner" -v app="$app" <<'EOSQL'
+SELECT format('REVOKE ALL ON DATABASE %I FROM PUBLIC', :'db') \gexec
+SELECT format('GRANT CONNECT ON DATABASE %I TO %I', :'db', :'app') \gexec
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'app') \gexec
+SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I', :'owner', :'app') \gexec
+SELECT format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', :'app') \gexec
+SELECT format('REVOKE INSERT, UPDATE, DELETE ON public.alembic_version FROM %I', :'app')
+  WHERE to_regclass('public.alembic_version') IS NOT NULL \gexec
+EOSQL
+    echo "nf-app-role complete."
+    ;;
+
   *)
     echo "Unknown mode: $MODE" >&2
-    echo "Usage: entrypoint.sh [bootstrap|verify|verify-service|sf-app-role]" >&2
+    echo "Usage: entrypoint.sh [bootstrap|verify|verify-service|sf-app-role|nf-app-role]" >&2
     exit 2
     ;;
 esac
