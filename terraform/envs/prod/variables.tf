@@ -21,56 +21,9 @@ variable "vpc_cidr" {
   default     = "10.1.0.0/16"
 }
 
-variable "rds_instance_class" {
-  description = "RDS instance class"
-  type        = string
-  default     = "db.t3.small"
-}
-
-variable "rds_allocated_storage" {
-  description = "RDS allocated storage in GB"
-  type        = number
-  default     = 50
-}
-
-variable "rds_multi_az" {
-  description = "Enable Multi-AZ for RDS"
-  type        = bool
-  default     = true
-}
-
-variable "core_desired_count" {
-  description = "Core ECS service desired task count"
-  type        = number
-  default     = 2
-}
-
-variable "shuttleforge_desired_count" {
-  description = "ShuttleForge ECS service desired task count"
-  type        = number
-  default     = 1
-}
-
 variable "alarm_email" {
-  description = "Email for CloudWatch alarm notifications"
+  description = "Email for CloudWatch alarm notifications (the topic Backstage's alarms use)"
   type        = string
-}
-
-variable "github_org" {
-  description = "GitHub organization name"
-  type        = string
-}
-
-variable "github_repos" {
-  description = "GitHub repos allowed to deploy via OIDC"
-  type        = list(string)
-  default     = []
-}
-
-variable "core_image_tag" {
-  description = "Core container image tag (optional for substrate-only)"
-  type        = string
-  default     = ""
 }
 
 variable "cloudflare_ipv4_cidrs" {

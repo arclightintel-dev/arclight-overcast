@@ -75,3 +75,9 @@ variable "create_service_alarms" {
   type        = bool
   default     = true
 }
+
+variable "create_rds_alarms" {
+  description = "Create the RDS CPU, connection and storage alarms. False where the root has no RDS instance."
+  type        = bool
+  default     = true
+}
