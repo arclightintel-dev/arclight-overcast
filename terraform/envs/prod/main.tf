@@ -93,6 +93,9 @@ module "rds" {
   instance_class        = var.rds_instance_class
   allocated_storage     = var.rds_allocated_storage
   multi_az              = var.rds_multi_az
+  # P1 of the prod substrate reduction (docs/proposals/prod-substrate-reduction.md): protection
+  # off, as its own apply, so the removal apply can delete the instance (final snapshot taken).
+  deletion_protection = false
   app_security_group_ids = [
     module.vpc.sg_core_id,
     module.vpc.sg_shuttleforge_id,
