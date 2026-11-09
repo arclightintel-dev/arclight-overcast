@@ -1,6 +1,6 @@
 # Nerfherder staging wiring (O-013)
 
-Status: **built, not applied.** Owner 2026-11-09: build NF's wiring now, in parallel with SF's
+Status: **N-G1 APPLIED 2026-11-09 21:05:34-21:06:35Z (owner's go): 38 added, 1 changed, 0 destroyed; exit check passed (the three NERFHERDER_S3_* keys are present as "" in both task definitions; full plan shows no NF diff). Push role `arn:aws:iam::650880817826:role/arclight-nerfherder-ecr-push-staging`.** Owner 2026-11-09: build NF's wiring now, in parallel with SF's
 remaining gates; every apply needs the owner's go first-hand. Inputs: NF's accepted manifest at
 `cf5b228` (final for every rendered value), O-013, and Overcast's nine confirmations of
 2026-10-29. Nothing contradicts them.
