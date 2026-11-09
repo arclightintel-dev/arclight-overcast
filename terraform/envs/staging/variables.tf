@@ -40,6 +40,17 @@ variable "core_desired_count" {
   default     = 1
 }
 
+variable "nerfherder_desired_count" {
+  description = "Nerfherder ECS service desired task count (0 until the first digest deploy; a singleton)"
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = contains([0, 1], var.nerfherder_desired_count)
+    error_message = "Nerfherder is a singleton (stop before start): desired count must be 0 or 1."
+  }
+}
+
 variable "shuttleforge_desired_count" {
   description = "ShuttleForge ECS service desired task count (0 until the first digest deploy; a singleton, never above 1)"
   type        = number

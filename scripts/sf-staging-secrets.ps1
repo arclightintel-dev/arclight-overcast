@@ -26,21 +26,33 @@ decrypted without the ring that wrote it.
 
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File scripts\sf-staging-secrets.ps1 -Phase Prepare
+
+.EXAMPLE
+powershell -ExecutionPolicy Bypass -File scripts\sf-staging-secrets.ps1 -Service nerfherder -Phase Prepare
+Nerfherder (O-013) uses the same Prepare and RuntimeUrl phases with its own names
+(nerfherder/database-url, nerfherder/migration-database-url, nf-app-role). SfValues is
+ShuttleForge's only.
 #>
 param(
   [Parameter(Mandatory = $true)] [ValidateSet('Prepare', 'RuntimeUrl', 'SfValues')] [string] $Phase,
+  [ValidateSet('shuttleforge', 'nerfherder')] [string] $Service = 'shuttleforge',
   [string] $Environment = 'staging'
 )
 $ErrorActionPreference = 'Stop'
 $aws = 'C:\Program Files\Amazon\AWSCLIV2\aws.exe'
 $region = 'us-east-1'
-$db = "shuttleforge_$Environment"
+if ($Service -eq 'nerfherder' -and $Phase -eq 'SfValues') { throw 'SfValues is ShuttleForge only' }
+$db = "${Service}_$Environment"
 $owner = $db
-$app = "shuttleforge_app_$Environment"
+$app = "${Service}_app_$Environment"
+$names = @{
+  shuttleforge = @{ DbUrl = 'db-url'; DbUrlMigration = 'db-url-migration' }
+  nerfherder   = @{ DbUrl = 'database-url'; DbUrlMigration = 'migration-database-url' }
+}
 $id = @{
-  DbUrl          = "arclight/$Environment/shuttleforge/db-url"
-  DbUrlMigration = "arclight/$Environment/shuttleforge/db-url-migration"
-  AppPw          = "arclight/$Environment/dbbootstrap/shuttleforge-app-db-password"
+  DbUrl          = "arclight/$Environment/$Service/$($names[$Service].DbUrl)"
+  DbUrlMigration = "arclight/$Environment/$Service/$($names[$Service].DbUrlMigration)"
+  AppPw          = "arclight/$Environment/dbbootstrap/$Service-app-db-password"
   Kek            = "arclight/$Environment/shuttleforge/kek-ring-b64"
   ListenerHmac   = "arclight/$Environment/shuttleforge/listener-auth-hmac-key"
   LeaseHmac      = "arclight/$Environment/shuttleforge/lease-hmac-key"
@@ -107,7 +119,7 @@ switch ($Phase) {
     $mig = ($cur -replace '^postgres(?:ql)?(?:\+asyncpg)?://', 'postgresql+asyncpg://') -replace '\?.*$', ''
     Write-Secret $id.DbUrlMigration $mig
     Write-Secret $id.AppPw (ConvertTo-Hex (Get-RandomBytes 32))
-    Write-Host "Prepare done: owner URL for $owner@$($p.Host):$($p.Port)/$db. Next: run dbbootstrap sf-app-role, then -Phase RuntimeUrl."
+    Write-Host "Prepare done: owner URL for $owner@$($p.Host):$($p.Port)/$db. Next: run dbbootstrap $(if ($Service -eq 'nerfherder') { 'nf-app-role' } else { 'sf-app-role' }), then -Phase RuntimeUrl."
   }
   'RuntimeUrl' {
     $p = Split-PgUrl (Read-Secret $id.DbUrlMigration)
