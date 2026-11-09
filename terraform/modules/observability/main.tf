@@ -244,7 +244,24 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
   treat_missing_data = "notBreaching"
 }
 
+# Addresses gained an index when the RDS alarms became optional; keep existing alarms in place.
+moved {
+  from = aws_cloudwatch_metric_alarm.rds_cpu
+  to   = aws_cloudwatch_metric_alarm.rds_cpu[0]
+}
+
+moved {
+  from = aws_cloudwatch_metric_alarm.rds_connections
+  to   = aws_cloudwatch_metric_alarm.rds_connections[0]
+}
+
+moved {
+  from = aws_cloudwatch_metric_alarm.rds_storage
+  to   = aws_cloudwatch_metric_alarm.rds_storage[0]
+}
+
 resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
+  count               = var.create_rds_alarms ? 1 : 0
   alarm_name          = "arclight-${var.environment}-rds-cpu"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
@@ -262,6 +279,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "rds_connections" {
+  count               = var.create_rds_alarms ? 1 : 0
   alarm_name          = "arclight-${var.environment}-rds-connections"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
@@ -279,6 +297,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_connections" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "rds_storage" {
+  count               = var.create_rds_alarms ? 1 : 0
   alarm_name          = "arclight-${var.environment}-rds-free-storage"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 2
