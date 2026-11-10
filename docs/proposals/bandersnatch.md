@@ -379,7 +379,7 @@ does not quote it.
 - **Validity:** the token's hash exists; the token is not revoked, not expired and its account
   not suspended; it is bound to the submitted address; it has an activation and a link email
   left; and its release is flagged accessible.
-- **If valid** (one DynamoDB transaction, with a condition check on the release): count the
+- **If valid** (one DynamoDB transaction, with condition checks on the grant and the release): count the
   link request, record a new link as the token's only current link (older unconsumed links
   are superseded), write the audit event. The mail is handed to an in-process queue and sent
   after the response.
@@ -404,7 +404,7 @@ does not quote it.
   nonce is still never stored: an unsent link is simply abandoned. (If the task died after
   SES accepted but before recording it, the recipient can receive one mail more than the
   budget. That is the safe direction.)
-- **Budget updates are conditional on the token's version number**, so two submissions
+- **Budget updates are conditional on the state record's version number**, so two submissions
   racing for the last permitted mail cannot both reserve it.
 
 #### Link and activation
@@ -431,7 +431,8 @@ does not quote it.
   32 random bytes, `__Host-` prefix, `Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age` set
   to the seconds remaining) and redirects (303) to `/v/`.
 - **Re-attaching, never restarting.** If the link is already consumed and its session is
-  still inside its hour, a `POST` that passes the binding check gets that same session back
+  still inside its hour **and has not been revoked**, a `POST` that passes the binding check
+  gets that same session back
   (the activation budget is not checked again, since no new activation happens):
   a new session identifier, the old one retired ten seconds later, **the same end time**.
   The ten seconds are for races: after a double click or two requests in flight, whichever
@@ -462,12 +463,15 @@ origin, and ALB access logs are off; if they are ever turned on, `/a/` must be e
 #### Session
 
 - Every `/v/*` and `/d/*` request needs a session whose hash exists, whose end time (start +
-  3600 s, fixed) is in the future, which was not replaced more than ten seconds ago, whose
-  token is not revoked, whose account is not suspended and whose release is flagged
-  accessible. (The token's own expiry and budgets are checked at
+  3600 s, fixed) is in the future, which has not been revoked, which was not replaced more
+  than ten seconds ago, whose token is not revoked, whose account is not suspended and whose
+  release is flagged accessible. (The token's own expiry and budgets are checked at
   submission and activation, not during the hour.) Token and release are read consistently on
   every request, so revoking a token or flagging a release takes effect at the next request. Suspending an account reaches each of its tokens within
   seconds (see Data model).
+- **Revoking a session** (the operator's `session revoke`) marks every identifier that
+  session has had, and its link. The serving check reads the first; the re-attach check
+  reads the second, so a revoked session cannot be picked up again under a new identifier.
 - No sliding expiry, no refresh, no second session from the same link. A1: extension means a
   new token.
 - No valid session: the neutral 404 for every path, so the asset tree cannot be probed.
@@ -519,26 +523,36 @@ the releases involved.
 
 ### Data model
 
-**D7: DynamoDB, recommended.** Seven on-demand tables, point-in-time recovery on, deletion
+**D7: DynamoDB, recommended.** Eight on-demand tables, point-in-time recovery on, deletion
 protection on, AWS-owned encryption.
 
 | Table | Key | Attributes | Kept |
 |---|---|---|---|
 | `accounts` | `account_id` + `item` (`META`, `ORG#…`, `DOMAIN#…`, `PERSON#<address>`) | label, state (`active`, `suspended`), notes; per assignment: who added it and when | Until the owner removes the account |
 | `releases` | `release_id` | `manifest_sha256`, **`access`** (`accessible`, `inaccessible`), source repository and commit, published at and by, access changes (at, by, why) | **Always** (A4) |
-| `tokens` | `token_hash`; index on `account_id` | `token_id`, `account_id`, `email`, `release_id`, `manifest_sha256`, `issued_at`, `issued_by`, `expires_at`, `max_activations`, `activations_used`, `max_link_requests`, `link_requests_used`, `pending_sends`, `version`, `current_link_hash`, `account_suspended`, `revoked_at`, `revoked_by`, `revoke_reason` | With the account (A3) |
-| `links` | `nonce_hash` | `token_hash`, `binding_hash`, `created_at`, `expires_at`, `consumed_at`, `session_hash`, `ses_message_id` | TTL: `expires_at` + 30 d |
+| `tokens` (the grant; **written only by operators**) | `token_hash`; index on `account_id` | `token_id`, `account_id`, `email`, `release_id`, `manifest_sha256`, `issued_at`, `issued_by`, `expires_at`, `max_activations`, `max_link_requests`, `account_suspended`, `revoked_at`, `revoked_by`, `revoke_reason` | With the account (A3) |
+| `token_state` (the counters; written by the task) | `token_hash` | `activations_used`, `link_requests_used`, `pending_sends`, `version`, `current_link_hash` | With the account (A3) |
+| `links` | `nonce_hash` | `token_hash`, `binding_hash`, `created_at`, `expires_at`, `consumed_at`, `session_hash`, `session_revoked_at`, `ses_message_id` | TTL: `expires_at` + 30 d |
 | `sessions` | `session_hash` | `token_hash`, `nonce_hash`, `started_at`, `expires_at`, `ip`, `user_agent`, `revoked_at`, `replaced_by`, `replaced_at` | TTL: `expires_at` + 30 d |
 | `limits` | `key` (`ip#…`, `email#…`, `global#…` with the window) | `count` | TTL: window end + 1 h |
 | `audit` | `event_id` (128 random bits); index on `account_id` | `at`, `event`, `outcome`, `account_id`, `token_id`, `session_id`, `release_id`, `manifest_sha256`, `ip`, `forwarded_for`, `cf_ray`, `user_agent`, `submitted_email`, `submitted_name`, `path`, `bytes`, `sha256`, `distribution_id`, `ses_message_id` | TTL per event class (D10) |
 
+- **A token is two records, so the task can count without being able to change what was
+  granted.** `tokens` holds who, what, until when, how many times, and whether it is revoked
+  or suspended; only operators write it. `token_state` holds the counters, which the task
+  updates. Every submission and activation is one transaction: a **condition check** on the
+  grant (not revoked, not expired, account not suspended), a condition check on the release,
+  and a conditional update of the state. A revocation that lands mid-click therefore wins.
+  (An attribute-level allowlist on a single record cannot do this: DynamoDB applies such a
+  list to the attributes a condition reads as well as those it writes, and requires the key
+  in it, so the guards and the protection would exclude each other.)
 - **The serving task reads `releases` and cannot write it; it has no access to `accounts`.**
   Suspending an account is the operator tool stamping `account_suspended` on each of the
   account's tokens and repeating until a consistent check finds none unstamped.
 - **A release's `access` flag is a condition of every submission and activation, and is read
   on every request.** Flagging a release inaccessible stops every session on it at the next
   request and changes no object's bytes.
-- Supersession costs no extra write: activation requires `nonce_hash == tokens.current_link_hash`.
+- Supersession costs no extra write: activation requires `nonce_hash == token_state.current_link_hash`.
 - Single use and counts are `ConditionExpression`s inside `TransactWriteItems`, so two
   concurrent clicks cannot both start a session.
 - **The audit table is write-only for the task:** it may only `PutItem` there (no get, query,
@@ -873,8 +887,9 @@ The service's security group, complete:
 
 - **Task role** `arclight-bandersnatch-task-staging`, every statement conditioned on the
   relevant VPC endpoint (`aws:SourceVpce`), so its credentials are useless elsewhere:
-  - `tokens`: `GetItem`, and `UpdateItem` limited to the counters, `pending_sends`, `version`
-    and `current_link_hash` (`dynamodb:Attributes`). **No `PutItem`: the task cannot mint a token.**
+  - `tokens`: `GetItem` and `ConditionCheckItem` only. **The task cannot mint a token, or
+    change one's address, release, expiry, limits or revocation.**
+  - `token_state`: `GetItem`, `UpdateItem`.
   - `links`, `sessions`: `GetItem`, `PutItem`, `UpdateItem`. `limits`: `UpdateItem`.
   - `releases`: `GetItem`, `Scan`, `ConditionCheckItem`. `audit`: `PutItem` only.
     **Nothing on `accounts`.** No `Query` or `DeleteItem` anywhere.
@@ -1076,6 +1091,8 @@ against the text and accepted):
 | (on `50b96cf`) A task killed with mail queued keeps the budget spent, and nothing durable records the pending send | **Accepted:** reservations are durable and one unconfirmed after two minutes no longer counts. The nonce is still never stored |
 | (on `f9a9567`) A reservation superseded by a later submission before either mail went out could not be found again | **Accepted:** reservations moved from the link record to the token (`pending_sends`), so one read sees them all; budget updates are versioned |
 | (on `f9a9567`) AT-9 required a 404 for another release's session on every path, which fails when two releases share a path | **Accepted:** the test asserts that another release's session never receives this release's bytes |
+| (on `cd6b508`) The serving and re-attach checks ignored a session's own revocation | **Accepted:** both check it; `session revoke` marks every identifier and the link; AT-21 tests it |
+| (on `cd6b508`) An attribute allowlist on `tokens` would deny the conditional writes it was meant to permit (DynamoDB applies it to attributes a condition reads, and requires the key) | **Accepted:** the token is split into an operator-written grant and a task-written state record; guards are condition checks on the grant inside the transaction |
 | (on `50b96cf`) AT-4 required 49 of 50 concurrent clicks to be refused, but the re-attach rule lets bound requests succeed | **Accepted:** AT-4 asserts one activation and one end time; and re-attach now retires the old identifier after ten seconds, so racing responses cannot leave the browser with a dead one |
 
 **External reviews** (codex-1 correctness, codex-2 architecture, hotpants domain): prompts are
