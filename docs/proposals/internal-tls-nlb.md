@@ -13,6 +13,13 @@ Revision history:
   - **two NLBs**, one per service: Core in P1, ShuttleForge in P2;
   - **disable the "Terraform Apply" workflow** from before the P1 merge until DR-1 is repaired.
     Done 12:48Z, and it reads `disabled_manually`.
+- **Amendment 3a** (owner, 2026-11-10): cross-zone on for Core's target group, after P1's
+  measurement.
+  - codex-1 reviewed it at `6c754df`: GO-WITH-CHANGES, documentation only.
+  - Its corrections are folded in: per-node acceptance, the unmeasured collision rate, the DNS
+    qualifier and the blip wording.
+  - One point was rejected: NF and SF are both 0/0 (live `describe-services`), so "SF and NF are
+    0/0" stays.
 
 ## Why
 
@@ -122,12 +129,17 @@ connections to the stale node fail.
 - Either node now forwards to the single task, so both node addresses answer.
 - Both stay in DNS. With cross-zone on, DNS-failover thresholds apply to the targets in all
   enabled zones, not per zone (*Target groups for your Network Load Balancers → Requirements
-  and considerations*), so both zones count the one task. This is Inferred from the docs until
-  the 3a verification measures it.
+  and considerations*), so both zones count the one task. This holds while both zones' NLB
+  infrastructure is itself healthy; AWS lists other DNS-failover causes, such as a zonal shift.
+  It is Inferred from the docs until the 3a verification measures it.
 - Core's NLB carries only Core's group, so the shared-NLB coupling that gave SF its own NLB does
   not apply.
-- **Residual risk:** the collision class above, at a low rate. Our consumers are not behind NAT,
-  and NF opens one fresh connection per request.
+- **Residual risk:** the collision class above, at an **unmeasured** rate.
+  - Not being behind NAT does not prevent source-port reuse. Linux can give two concurrent
+    connections to different destinations the same local port.
+  - NF's Happy Eyeballs can overlap attempts to both node IPs when the first TCP connect is
+    still pending after 0.25 s. That is a plausible path to a duplicate tuple at Core's task
+    (Inferred; codex-1, 2026-11-10).
   - NF reports it would surface as a sporadic `core_auth.unreachable`, healed by the next 30 s
     probe.
   - It shows in `TCP_Target_Reset_Count` on Core's NLB, which is now the watch item (see
@@ -521,11 +533,12 @@ alarm.
    - `GET /.well-known/jwks.json` returns 200 with one active key;
    - `GET /ready` returns 200 `ready`.
 3. **Per-node check.** The probe also connects with SNI `core-internal` to **each** NLB node IP
-   explicitly (from `describe-network-interfaces`). It records the symptom on the node without
-   a local target: timeout, RST, or a handshake that then fails. That symptom is Unverified
-   today, and it decides whether clients fall through to the other address.
-   - A refusal or reset at TCP connect is absorbed by NF's Happy Eyeballs.
-   - A completed handshake that then fails surfaces as a failed NF attempt (NF, 2026-11-10).
+   explicitly (from `describe-network-interfaces`).
+   - **Since 3a:** each node IP must complete a verified TLS handshake and answer `/ready` 200.
+   - **Measured before 3a (P1, 2026-11-10):** the node without a local target accepted TCP and
+     then failed. From SF's group it was a TLS handshake timeout; from NF's, the handshake
+     completed and HTTP came back empty after 5 s. That is the after-connect case NF's Happy
+     Eyeballs cannot absorb, and it is why 3a was made.
 4. **Client IP preserved.** Core's access-log line for the probe's request shows the probe
    task's own IP. Uvicorn runs `--no-proxy-headers`, so it logs the transport peer.
 5. **Public path unchanged.** `/ready` through Cloudflare and Access returns 200, and ELB 5XX
@@ -664,8 +677,10 @@ AWS list prices for us-east-1, read 2026-11-10:
     unhealthy, so the NLB fails open. About half of new connections land on the node with no
     target and fail, during the blip and for up to the TTL after it.
   - **With cross-zone on (Core, since 3a):** a blip leaves the group with only unhealthy
-    targets. The NLB then routes to them anyway (target fail-open), and either node can reach
-    the task. A blip costs only what Core itself fails to serve.
+    targets. AWS documents that the NLB then routes to them anyway (target fail-open), and
+    either node can reach the task. So a blip is no longer compounded by a node with no target.
+    What a client sees then depends on Core's own state. This is Inferred for this listener
+    until a blip is observed.
 - **Consumer behaviour on a dead or stale node** (NF-reported from its code at main
   `0f755ea3`, 2026-11-10; not re-verified by Overcast):
   - NF has **no per-request retry**.
@@ -680,7 +695,9 @@ AWS list prices for us-east-1, read 2026-11-10:
   - So NF absorbs a connect-time failure and recovers from a stale-DNS window within about
     one 30 s probe past the TTL. An attempt that lands on an accepted-then-failed connection
     fails and is recorded.
-  - **P1 acceptance item 3 decides which case applies.**
+  - P1 acceptance item 3 measured the after-connect case on Core's empty-AZ node before 3a.
+    Since 3a both of Core's nodes reach the task. The case still applies to SF's NLB until P2
+    decides.
   - SF's JWKS retry inside its 1 h cache is SF-reported and unverified. Whether SF or NF read
     the SSM parameters at runtime is also unverified.
 - **Wiring mistakes** reopen known defects:
