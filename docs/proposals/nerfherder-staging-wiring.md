@@ -89,7 +89,7 @@ to the staging alarm topic, with actions enabled only while the desired count is
    4. Record the 15-minute `DatabaseConnections` baseline before start, the TLS receipt
       (`rds.force_ssl = 1`, plaintext refused) and ECS CPU and memory, as NF asked.
 
-**N-G4 is useful only after ShuttleForge serves leases:** SF r5 and G3/G4, provider enrollment,
+**N-G4 is useful only after ShuttleForge serves leases:** SF's first staging release (r6 at present) and G3/G4, provider enrollment,
 the reviewed policy (DR-16) and SF egress (DR-15). Until then NF starts but every source route is
 refused at admission (`sf_required`). That is correct behaviour, not a fault.
 

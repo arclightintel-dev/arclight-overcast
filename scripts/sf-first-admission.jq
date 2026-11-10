@@ -15,10 +15,11 @@
 # Remove this file and its use in deploy-service.yml once provider inventory exists: plain
 # /ready "ready" is the gate after that.
 
-# Pinned check set: SF's r5 set (13 checks), confirmed 2026-11-10 against SF's r5 code
-# (v1-operate 5c6d617, shuttleforge/api/ready.py) and its verbatim empty-database capture
-# (sha256 f154fff2...a41d36e), which passes. Identical to the r4 set relayed by Complex on
-# 2026-10-29. A later release that changes the set fails closed until this list is updated.
+# Pinned check set: SF's r6 set (13 checks), confirmed 2026-11-10 against SF's r6 code
+# (v1-operate 55a2d20; shuttleforge/api/ready.py byte-identical to r5's 5c6d617) and its
+# verbatim empty-database capture (sha256 a06d324b...488d6dda), which passes. Identical to the
+# r5 set (capture f154fff2...a41d36e) and the r4 set relayed by Complex on 2026-10-29. A later
+# release that changes the set fails closed until this list is updated.
 def expected:
   ["background_workers", "database", "dataplane_auth", "health_checker", "hmac_key", "jwks",
    "kek_ring", "lease_recording", "lease_store", "policy_engine", "provider_validation",
