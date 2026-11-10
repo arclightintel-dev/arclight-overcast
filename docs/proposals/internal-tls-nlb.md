@@ -388,6 +388,8 @@ alarm.
    explicitly (from `describe-network-interfaces`). It records the symptom on the node without
    a local target: timeout, RST, or a handshake that then fails. That symptom is Unverified
    today, and it decides whether clients fall through to the other address.
+   - A refusal or reset at TCP connect is absorbed by NF's Happy Eyeballs.
+   - A completed handshake that then fails surfaces as a failed NF attempt (NF, 2026-11-10).
 4. **Client IP preserved.** Core's access-log line for the probe's request shows the probe
    task's own IP. Uvicorn runs `--no-proxy-headers`, so it logs the transport peer.
 5. **Public path unchanged.** `/ready` through Cloudflare and Access returns 200, and ELB 5XX
@@ -493,9 +495,23 @@ AWS list prices for us-east-1, read 2026-11-10:
 - **Core `/ready` blips.** A blip marks Core's only zone unhealthy, so its NLB fails open.
   About half of new connections fail during the blip and for up to the TTL after it. This
   is inherent to cross-zone off with a singleton.
-- **Unverified consumer behaviour.** SF's JWKS retry inside its 1 h cache, NF's token and
-  lease retry, and in-flight tunnels are relayed claims. Whether SF or NF read the SSM
-  parameters at runtime is also unverified.
+- **Consumer behaviour on a dead or stale node** (NF-reported from its code at main
+  `0f755ea3`, 2026-11-10; not re-verified by Overcast):
+  - NF has **no per-request retry**.
+  - Its httpx clients (Core token, SF lease API) connect with Happy Eyeballs across every
+    resolved address. An address that refuses or resets at TCP connect is skipped, and one
+    that times out is overtaken after 0.25 s.
+  - A connection that completes TCP and TLS and then fails **fails the request**:
+    `core_auth.unreachable` for the token, and the intent is left open for reconciliation on
+    a lease.
+  - NF's proxy client (curl_cffi, `retry=0`) tries each address on connect failure.
+  - Tokens are cached for 600 s, and pooled connections idle out after 5 s.
+  - So NF absorbs a connect-time failure and recovers from a stale-DNS window within about
+    one 30 s probe past the TTL. An attempt that lands on an accepted-then-failed connection
+    fails and is recorded.
+  - **P1 acceptance item 3 decides which case applies.**
+  - SF's JWKS retry inside its 1 h cache is SF-reported and unverified. Whether SF or NF read
+    the SSM parameters at runtime is also unverified.
 - **Wiring mistakes** reopen known defects:
   - an SF group on Core's NLB brings back F1;
   - one target on both NLBs, or a cross-zone `"true"` group, brings back collisions;
