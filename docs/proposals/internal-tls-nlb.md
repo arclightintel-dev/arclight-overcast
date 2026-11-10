@@ -373,11 +373,17 @@ alarm.
 
 **P1:**
 1. **Steady within 15 min, or abort.** Core's service has no deployment circuit breaker.
-   - Abort means removing `additional_load_balancers`, which is an in-place update.
-   - Then confirm:
+   - **On success:**
      - `:18` 1/1 with digest `sha256:2393682f…a777`;
      - `stg-int-core-8000` healthy;
      - the public target group healthy.
+   - **On abort:** remove `additional_load_balancers` (an in-place update). Then confirm:
+     - `:18` 1/1 with that digest;
+     - the public target group healthy;
+     - Core's service `loadBalancers` lists only the public target group;
+     - `stg-int-core-8000` has no registered targets. ECS deregisters them when the
+       load-balancer configuration changes, so "healthy" is not expected here (Codex review,
+       PR #74).
 2. **In-VPC probe**, from SF's security group and from NF's, in the private app subnets with no
    public IP:
    - `core-internal` resolves only to Core's NLB node in Core's AZ;
