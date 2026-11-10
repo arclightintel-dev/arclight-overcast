@@ -54,9 +54,11 @@ module "shuttleforge_service" {
   health_check_grace_period_seconds = 150
 
   container_definitions = templatefile("${path.module}/../../../services/shuttleforge/task-definition.json.tpl", {
-    environment               = var.environment
-    image                     = local.sf_image_unset
-    namespace                 = local.sf_namespace
+    environment = var.environment
+    image       = local.sf_image_unset
+    namespace   = local.sf_namespace
+    # HTTPS-first (internal-TLS amendment 3b; owner, 2026-11-10): Core's internal NLB name.
+    core_jwks_url             = "https://${local.core_internal_fqdn}/.well-known/jwks.json"
     region                    = var.aws_region
     log_group                 = "/arclight/${var.environment}/shuttleforge"
     secret_arn_db_url         = module.secrets.shuttleforge_db_url_secret_arn

@@ -26,7 +26,7 @@
       { "name": "SHUTTLEFORGE_PROXY_PORT", "value": "9050" },
       { "name": "SHUTTLEFORGE_MITM_PORT", "value": "9100" },
       { "name": "SHUTTLEFORGE_TRANSPORT_ENDPOINT", "value": "http://shuttleforge.${namespace}:9050" },
-      { "name": "SHUTTLEFORGE_CORE_JWKS_URL", "value": "http://core.${namespace}:8000/.well-known/jwks.json" },
+      { "name": "SHUTTLEFORGE_CORE_JWKS_URL", "value": "${core_jwks_url}" },
       { "name": "SHUTTLEFORGE_REQUIRE_PG", "value": "true" },
       { "name": "SHUTTLEFORGE_DB_EXPECTED_NAME", "value": "shuttleforge_${environment}" },
       { "name": "SHUTTLEFORGE_DB_TLS_MODE", "value": "require" },

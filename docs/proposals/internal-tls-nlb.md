@@ -3,6 +3,8 @@
 Status: **Revision 3, approved (merged `a9979c6`); P1 applied 2026-11-10 (PR #76).**
 - **Amendment 3a (2026-11-10):** cross-zone is **ON for Core's target group**, by owner decision,
   after P1 measured the stale-node window.
+- **Amendment 3b (2026-11-10):** SF's JWKS URL moves to `https://core-internal…` **before SF's
+  first run** (HTTPS-first), ahead of the rest of P3. Owner's ruling.
 - Each phase is applied only on the owner's go, given first-hand.
 
 Revision history:
@@ -20,6 +22,8 @@ Revision history:
     qualifier and the blip wording.
   - One point was rejected: NF and SF are both 0/0 (live `describe-services`), so "SF and NF are
     0/0" stays.
+- **Amendment 3b** (owner, 2026-11-10, "yes" to HTTPS-first): SF's JWKS URL to `https` before
+  SF's first run. See "Amendment 3b" under P3.
 
 ## Why
 
@@ -307,8 +311,9 @@ your Network Load Balancer*)
 - Record the time from stop to first successful lease on the first controlled redeploy.
 
 **P3: consumers to `https://`, then close the plain paths.**
-- **SF template:** `SHUTTLEFORGE_CORE_JWKS_URL` → `https://core-internal…/.well-known/jwks.json`;
-  `SHUTTLEFORGE_TRANSPORT_ENDPOINT` → `https://shuttleforge-internal…:9050`.
+- **SF template:** `SHUTTLEFORGE_CORE_JWKS_URL` → `https://core-internal…/.well-known/jwks.json`
+  (**done early by amendment 3b**); `SHUTTLEFORGE_TRANSPORT_ENDPOINT` →
+  `https://shuttleforge-internal…:9050`.
 - **NF template:**
   - `CORE_URL`, `NERFHERDER_JWKS_URL` and `SHUTTLEFORGE_URL` → the `https://` names;
   - remove `NERFHERDER_ALLOW_PLAINTEXT_INTERNAL_HTTP=true`
@@ -316,6 +321,43 @@ your Network Load Balancer*)
 - **SSM** (`terraform/modules/secrets/main.tf:48-53`): `core/internal-url`, `core/jwks-url`,
   `core/token-url` and `shuttleforge/internal-url` → `https://`.
 - **Removed:** the ten direct rule instances.
+
+**Amendment 3b: SF's JWKS URL to `https` before SF's first run (owner, 2026-11-10).**
+
+ShuttleForge's SF.11 plan (§5.1 C-G2, row A5, at SF `appliance/main` `1b291af`) offers two
+orderings for SF's first run:
+- (i) **HTTPS-first**, available because P1 is live;
+- (ii) the plain-HTTP value accepted for Stages A and B.
+
+The owner ruled (i). This spec had no JWKS-only step ahead of P3, which bundles the JWKS URL with
+SF's transport endpoint (which needs P2) and with removing the direct rules. So:
+- **What changes now:** only `SHUTTLEFORGE_CORE_JWKS_URL` in SF's template. It becomes
+  `https://${local.core_internal_fqdn}/.well-known/jwks.json`, passed in from `shuttleforge.tf`, so
+  the name has one source (`internal-tls.tf`).
+- **Unchanged until P3:**
+  - SF's transport endpoint (`http://shuttleforge.<namespace>:9050`, the Stage A/B value);
+  - the SSM `core/jwks-url` parameter;
+  - the SF→Core `:8000` pair (`shuttleforge.tf`). It is not needed for JWKS once 3b runs, but
+    it stays until P3 removes the direct rules together.
+- **Network path, already in place:**
+  - SF's group reaches 443 through `internet_egress` (O-017) and DR-15's all-TCP rule;
+  - Core's NLB group admits SF on 443 (`core_nlb_from_sf_443`);
+  - the private zone resolves `core-internal` inside the VPC;
+  - P1's acceptance, and the 3a re-probe, verified TLS and JWKS 200 from SF's group.
+- **Trust:** the certificate is the public ACM `*.staging` wildcard, so SF verifies it against
+  public roots. SF needs no CA bundle and no `SHUTTLEFORGE_ALLOW_PLAINTEXT_JWKS`.
+- **Plan:** exactly `module.shuttleforge_service.aws_ecs_task_definition.this` replaced. That is
+  a new base revision; the service ignores `task_definition`, and SF is at 0/0. No other change.
+- **Acceptance:**
+  - `describe-task-definition` of the new base revision shows the `https` URL, and every other
+    environment value and secret is unchanged (field walk against the old base revision);
+  - at A5, SF's `/ready/detail` reports `jwks` `ok`, and Core's log shows the JWKS GET from SF's
+    task IP (client IP preserved).
+- **Effect on P3:** SF has now run, so SF's P3 takes **path B** (deploy, verify, deregister,
+  remove the rules), never path A. P3 for SF reduces to the transport endpoint and the rule
+  removals.
+- **Rollback:** revert the template line (the Stage A/B plain-HTTP value is owner-accepted),
+  apply, and redeploy SF by digest. Before Stage C only.
 
 **Why the cutover gates on the running task (finding F2).**
 - The service module ignores `task_definition` (`ecs-service-fargate/main.tf:126-128`).
