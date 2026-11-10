@@ -93,6 +93,14 @@ variable "additional_load_balancers" {
   default = []
 }
 
+# O-017: consumer services get no permitted direct internet egress by default. Core and
+# ShuttleForge set this explicitly; every other service gets explicit destinations in the root.
+variable "internet_egress" {
+  description = "Allow TCP 443 to any address (O-017 opt-in). When false, the root grants explicit destinations."
+  type        = bool
+  default     = false
+}
+
 variable "container_definitions" {
   description = "Rendered containerDefinitions JSON string"
   type        = string
