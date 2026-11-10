@@ -1,7 +1,9 @@
 # Internal TLS for Core and ShuttleForge: two internal NLBs (D-077, DR-10)
 
-Status: **DRAFT revision 3, for approval. Nothing built or applied.** Each phase is applied only
-on the owner's go, given first-hand.
+Status: **Revision 3, approved (merged `a9979c6`); P1 applied 2026-11-10 (PR #76).**
+- **Amendment 3a (2026-11-10):** cross-zone is **ON for Core's target group**, by owner decision,
+  after P1 measured the stale-node window.
+- Each phase is applied only on the owner's go, given first-hand.
 
 Revision history:
 - **Revision 2** folded in the internal adversarial review.
@@ -11,6 +13,13 @@ Revision history:
   - **two NLBs**, one per service: Core in P1, ShuttleForge in P2;
   - **disable the "Terraform Apply" workflow** from before the P1 merge until DR-1 is repaired.
     Done 12:48Z, and it reads `disabled_manually`.
+- **Amendment 3a** (owner, 2026-11-10): cross-zone on for Core's target group, after P1's
+  measurement.
+  - codex-1 reviewed it at `6c754df`: GO-WITH-CHANGES, documentation only.
+  - Its corrections are folded in: per-node acceptance, the unmeasured collision rate, the DNS
+    qualifier and the blip wording.
+  - One point was rejected: NF and SF are both 0/0 (live `describe-services`), so "SF and NF are
+    0/0" stays.
 
 ## Why
 
@@ -87,22 +96,62 @@ Separate Route 53 names cannot isolate the two services, because both aliases re
 same load balancer's node set.
 
 **Under two NLBs, DNS failover is scoped per service.**
-- Core's NLB carries only Core's group, so it publishes only the node in Core's AZ.
+- Core's NLB carries only Core's group. Before amendment 3a it published only the node in Core's
+  AZ. Since 3a both node addresses stay in DNS (see the cross-zone section below).
 - SF's three groups all front one task and share one health check (`/ready` on 9000), so they
   always agree on its AZ.
 - While SF is at 0/0, only SF's own name fails open, which is expected. Core is unaffected.
 
-**Cross-zone stays OFF on both NLBs and all four target groups.** With client IP preservation,
-AWS documents intermittent resets from 5-tuple collisions when:
+**Cross-zone: ON for Core's target group (amendment 3a, owner 2026-11-10); OFF on SF's NLB
+until P2 decides.**
+
+With client IP preservation, AWS documents intermittent resets from 5-tuple collisions when:
 - cross-zone is on and the target count is small (ours are singletons); or
 - several NLBs register the same target IP:port.
 
-Neither condition arises here. Source: re:Post *Troubleshoot connections that drop or
-intermittently fail with my NLB*, and the NLB troubleshooting guide, *Intermittent TCP
-connection establishment failure*.
+Sources: re:Post *Troubleshoot connections that drop or intermittently fail with my NLB*, and
+the NLB troubleshooting guide, *Intermittent TCP connection establishment failure*. Revision 3
+kept cross-zone off everywhere to avoid that, assuming the stale-node gap after an AZ move
+would be about one TTL (60 s).
+
+**P1 measured otherwise:**
+- After the NLB was created, `core-internal` kept returning the empty AZ's node for **about 4-6
+  minutes**.
+- That node **accepts TCP and then fails**, either by TLS timeout or with an empty response.
+  NF's Happy Eyeballs cannot absorb that.
+- Core runs one task, and any rollout can move it to the other AZ; P1's own rollout did.
+
+So with cross-zone off, every Core deploy would open a window of minutes in which new
+connections to the stale node fail.
+
+**The owner turned cross-zone ON for `stg-int-core-8000`.**
+- The target-group attribute overrides the NLB-level `false`.
+- Either node now forwards to the single task, so both node addresses answer.
+- Both stay in DNS. With cross-zone on, DNS-failover thresholds apply to the targets in all
+  enabled zones, not per zone (*Target groups for your Network Load Balancers → Requirements
+  and considerations*), so both zones count the one task. This holds while both zones' NLB
+  infrastructure is itself healthy; AWS lists other DNS-failover causes, such as a zonal shift.
+  It is Inferred from the docs until the 3a verification measures it.
+- Core's NLB carries only Core's group, so the shared-NLB coupling that gave SF its own NLB does
+  not apply.
+- **Residual risk:** the collision class above, at an **unmeasured** rate.
+  - Not being behind NAT does not prevent source-port reuse. Linux can give two concurrent
+    connections to different destinations the same local port.
+  - NF's Happy Eyeballs can overlap attempts to both node IPs when the first TCP connect is
+    still pending after 0.25 s. That is a plausible path to a duplicate tuple at Core's task
+    (Inferred; codex-1, 2026-11-10).
+  - NF reports it would surface as a sporadic `core_auth.unreachable`, healed by the next 30 s
+    probe.
+  - It shows in `TCP_Target_Reset_Count` on Core's NLB, which is now the watch item (see
+    Monitoring).
+
+**SF's NLB stays cross-zone OFF until P2 decides.** SF is also a singleton, so the same
+measurement applies. P2 decides with its own plan.
 
 **Explicit attributes, so defaults cannot drift:**
-- Every target group sets `load_balancing_cross_zone_enabled = "false"`, never `"true"`.
+- Core's target group sets `load_balancing_cross_zone_enabled = "true"` (amendment 3a).
+- SF's target groups set `"false"` unless P2 decides otherwise.
+- Every target group sets the value **explicitly**.
 - **No `target_group_health` block anywhere.**
   - An empty `dns_failover {}` block makes provider 5.100.0 default its count to `"off"`
     (`internal/service/elbv2/target_group.go:332-336`).
@@ -236,10 +285,11 @@ your Network Load Balancer*)
     SF's `/ready` and `/ready/detail` at `https://shuttleforge.<domain>` through Cloudflare and
     Access to the public ALB. SF stays attached to the ALB target group on 9000
     (`shuttleforge.tf:42`), and the ALB's security group stays admitted on 9000.
-  - *How the manifest's YAML names the NLB listeners.* **Agreed with SF on 2026-11-10, pending
-    SF's manifest change:** each port keeps its current `exposure` string (the Stages A/B
-    registration) and gains `internal_tls: nlb`. At `63f4492` the YAML is unchanged, and
-    l.165-166 leave the naming to this spec.
+  - *How the manifest's YAML names the NLB listeners.* **Landed 2026-11-10:** SF PR #43,
+    `de8c8df` on `appliance/main`, carried to `v1-operate` as `4c50b3e`. Each port keeps its
+    `exposure` string and gains `internal_tls: nlb` (manifest l.103-112 at `4c50b3e`). The
+    prose names `arclight-stg-int-sf` and `shuttleforge-internal` (l.170-175). Overcast
+    verified it read-only.
     - No Overcast tooling parses SF's manifest; the only references are prose and Terraform
       comments (checked 2026-11-10).
     - A list-typed `exposure` would break SF's `tests/test_deployment_5a.py`, which pins each
@@ -442,15 +492,16 @@ else must be named (codex-1):
     values carry it even when the HCL omits it;
   - no `target_group_health` block anywhere;
   - `enable_cross_zone_load_balancing = false` on both NLBs;
-  - `load_balancing_cross_zone_enabled = "false"` on every NLB target group;
+  - `load_balancing_cross_zone_enabled` set explicitly on every NLB target group: `"true"` on
+    Core's (3a), `"false"` on SF's unless P2 decides otherwise;
   - each listener's `load_balancer_arn` and `default_action` reference its own service's NLB
     and target group, by root resource reference. An unresolved reference is a stop, not a
     pass.
 - **Plan JSON:** the resource change list matches the phase's expected list exactly.
 - **Live, after the apply:**
   - `describe-load-balancer-attributes` shows cross-zone false on both NLBs;
-  - `describe-target-group-attributes` shows cross-zone false and the AWS-default DNS
-    failover on every target group;
+  - `describe-target-group-attributes` shows the intended cross-zone value and the
+    AWS-default DNS failover on every target group;
   - `describe-target-health` on each group lists only that service's task IP:port. ECS owns
     registration, so the shared-IP:port check can only be made at runtime.
 
@@ -476,16 +527,18 @@ alarm.
        PR #74).
 2. **In-VPC probe**, from SF's security group and from NF's, in the private app subnets with no
    public IP:
-   - `core-internal` resolves only to Core's NLB node in Core's AZ;
+   - every address `core-internal` resolves to completes a TLS handshake and answers `/ready`
+     200. Since 3a that is both node addresses; before 3a it was only Core's AZ node;
    - the TLS handshake verifies against public roots;
    - `GET /.well-known/jwks.json` returns 200 with one active key;
    - `GET /ready` returns 200 `ready`.
 3. **Per-node check.** The probe also connects with SNI `core-internal` to **each** NLB node IP
-   explicitly (from `describe-network-interfaces`). It records the symptom on the node without
-   a local target: timeout, RST, or a handshake that then fails. That symptom is Unverified
-   today, and it decides whether clients fall through to the other address.
-   - A refusal or reset at TCP connect is absorbed by NF's Happy Eyeballs.
-   - A completed handshake that then fails surfaces as a failed NF attempt (NF, 2026-11-10).
+   explicitly (from `describe-network-interfaces`).
+   - **Since 3a:** each node IP must complete a verified TLS handshake and answer `/ready` 200.
+   - **Measured before 3a (P1, 2026-11-10):** the node without a local target accepted TCP and
+     then failed. From SF's group it was a TLS handshake timeout; from NF's, the handshake
+     completed and HTTP came back empty after 5 s. That is the after-connect case NF's Happy
+     Eyeballs cannot absorb, and it is why 3a was made.
 4. **Client IP preserved.** Core's access-log line for the probe's request shows the probe
    task's own IP. Uvicorn runs `--no-proxy-headers`, so it logs the transport peer.
 5. **Public path unchanged.** `/ready` through Cloudflare and Access returns 200, and ELB 5XX
@@ -514,8 +567,8 @@ alarm.
 - **Command:** a `python -c` that resolves, connects and prints the results.
 
 **P2:**
-- With SF at 0/0 and SF's NLB in place, `core-internal` still resolves only to Core's AZ node,
-  and the Core probe still passes. This proves the isolation.
+- With SF at 0/0 and SF's NLB in place, every `core-internal` address still answers and the
+  Core probe still passes. This proves the isolation.
 - `shuttleforge-internal` returning both node IPs at 0/0 is expected (fail-open).
 - After G4:
   - all three SF groups are healthy, and SF's public ALB group too;
@@ -546,15 +599,27 @@ alarm.
   - G4's operator readiness gate owns that failure.
   - When G4 adopts `shuttleforge_desired_count = 1`, apply the alarm updates and confirm
     `ActionsEnabled = true` and `StateValue = OK` on all three before closing G4.
-- **Never alarm on `ZonalHealthStatus`.** A cross-zone-off singleton always reports 0 in the AZ
-  without its task.
+- **Never alarm on `ZonalHealthStatus`.** A cross-zone-off singleton, as on SF's NLB, always
+  reports 0 in the AZ without its task.
+- **`TCP_Target_Reset_Count` on Core's NLB is the watch item for amendment 3a's residual
+  collision risk.** It stays non-paging until a baseline exists.
+  - **Observed after the 3a apply (2026-11-10):** two probes left 25 target resets, all on
+    the cross-zone (1a) node, decaying over four minutes after the probe tasks had stopped.
+    Every request succeeded, and Core logged no error.
+  - So the metric alone cannot separate collisions from teardown noise. A collision shows as a
+    failed connect or request, such as NF's `core_auth.unreachable`, and that is the
+    discriminating signal.
+  - The cause is Unverified (see `PROJECT_STATE.md`, DR-10).
 
 **Diagnostic metrics** (dashboard or non-paging until a baseline exists):
 - **Per NLB:**
   - `TCP_Target_Reset_Count`, `TCP_ELB_Reset_Count`, `TCP_Client_Reset_Count`;
   - `ClientTLSNegotiationErrorCount`;
   - `SecurityGroupBlockedFlowCount_Inbound_TCP` and `_Outbound_TCP`, which catch rule gaps;
-  - `ZonalHealthStatus` summed across AZs: 1 is normal, 0 means fail-open.
+  - `ZonalHealthStatus` summed across AZs:
+    - on SF's NLB (cross-zone off), 1 is normal and 0 means fail-open;
+    - on Core's NLB since 3a, 2 is the expected normal (Inferred). The 3a verification records
+      the baseline.
 - **Per target group:** `UnHealthyHostCount`, `NewFlowCount_TLS` and `ActiveFlowCount_TLS`.
   The last two are P3's adoption evidence.
 - `UnhealthyRoutingFlowCount` is not available for TLS listeners.
@@ -611,9 +676,18 @@ AWS list prices for us-east-1, read 2026-11-10:
   - The reviewer's CloudTrail read suggests that happens on about two-thirds of Core
     replacements (Inferred).
   - Removing the gap needs cross-zone on (collision class) or AZ pinning (loses AZ fallback).
-- **Core `/ready` blips.** A blip marks Core's only zone unhealthy, so its NLB fails open.
-  About half of new connections fail during the blip and for up to the TTL after it. This
-  is inherent to cross-zone off with a singleton.
+  - **Amendment 3a turned cross-zone on for Core**, which removes this gap for Core. P1 had
+    measured it at 4-6 minutes with an after-connect failure. It remains for SF's NLB until P2
+    decides.
+- **`/ready` blips.**
+  - **With cross-zone off (SF's NLB until P2 decides):** a blip marks the singleton's only zone
+    unhealthy, so the NLB fails open. About half of new connections land on the node with no
+    target and fail, during the blip and for up to the TTL after it.
+  - **With cross-zone on (Core, since 3a):** a blip leaves the group with only unhealthy
+    targets. AWS documents that the NLB then routes to them anyway (target fail-open), and
+    either node can reach the task. So a blip is no longer compounded by a node with no target.
+    What a client sees then depends on Core's own state. This is Inferred for this listener
+    until a blip is observed.
 - **Consumer behaviour on a dead or stale node** (NF-reported from its code at main
   `0f755ea3`, 2026-11-10; not re-verified by Overcast):
   - NF has **no per-request retry**.
@@ -628,12 +702,16 @@ AWS list prices for us-east-1, read 2026-11-10:
   - So NF absorbs a connect-time failure and recovers from a stale-DNS window within about
     one 30 s probe past the TTL. An attempt that lands on an accepted-then-failed connection
     fails and is recorded.
-  - **P1 acceptance item 3 decides which case applies.**
+  - P1 acceptance item 3 measured the after-connect case on Core's empty-AZ node before 3a.
+    Since 3a both of Core's nodes reach the task. The case still applies to SF's NLB until P2
+    decides.
   - SF's JWKS retry inside its 1 h cache is SF-reported and unverified. Whether SF or NF read
     the SSM parameters at runtime is also unverified.
 - **Wiring mistakes** reopen known defects:
   - an SF group on Core's NLB brings back F1;
-  - one target on both NLBs, or a cross-zone `"true"` group, brings back collisions;
+  - one target on both NLBs brings back the shared-target collision class;
+  - a cross-zone `"true"` group accepts the singleton collision class. Only Core's group does,
+    deliberately (3a); on any other group it is a mistake until P2 decides;
   - an empty `dns_failover {}` block turns the count off.
 
   The plan guard is the control.

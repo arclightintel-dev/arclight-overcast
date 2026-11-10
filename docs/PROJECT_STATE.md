@@ -55,7 +55,7 @@ A version-stage IAM condition was not added. The serving task has no task role, 
 5. The owner rewrites `db-url` as the runtime URL (`shuttleforge_app_staging`).
 
 G3:
-1. SF pushes its first staging image: the line release current when SF's SF.11 execution plan is reviewed (owner addendum to SF-D-0261, 2026-11-10). That is r6 at present (`local-20261110-v1-operate-r6`, v1-operate `55a2d20`), replacing r5. **SF's ECR push role fixed 2026-11-10 13:24Z (PR #75; owner's go):** it trusted the non-existent repository `arclightintel-dev/arclight-shuttleforge`, so a push could never assume it. It now trusts `repo:arclightintel-dev/shuttleforge:ref:refs/heads/{main,v1-operate}` (verified with `get-role`). The trust is branch-scoped, so a push job with `environment:` would not match. The push record gives the tag, ECR `imageDigest` and media type, and the `linux/amd64` child digest if it is an index.
+1. SF pushes its first staging image: the line release current when SF's SF.11 execution plan is reviewed (owner addendum to SF-D-0261, 2026-11-10). That is r6 at present (`local-20261110-v1-operate-r6`, v1-operate `55a2d20`), replacing r5. **SF's ECR push role fixed 2026-11-10 13:24Z (PR #75; owner's go):** it trusted the non-existent repository `arclightintel-dev/arclight-shuttleforge`, so a push could never assume it. It now trusts `repo:arclightintel-dev/shuttleforge:ref:refs/heads/{main,v1-operate}` (verified with `get-role`). The trust is branch-scoped, so a push job with `environment:` would not match. **`ecr:DescribeImages` added 2026-11-10 15:54Z** (PR #77; owner's go) to all three push roles, each scoped to its own repository, for SF's A1 preflight (SF plan item 20). Verified with `get-role-policy`. The push record gives the tag, ECR `imageDigest` and media type, and the `linux/amd64` child digest if it is an index.
 2. Register the migrate family on its digest.
 3. Run `--migrate-only` in the dbbootstrap security group, which has no route to Core.
 4. Re-run `sf-app-role`.
@@ -124,6 +124,20 @@ Open items that are known, bounded and deliberately not being worked. Each row n
   - (a) After creation, `core-internal` returned both node IPs for about 4-6 minutes before it converged to Core's AZ only. The NLB's own name had already converged. That is longer than the 60 s TTL the spec assumed.
   - (b) On the node with no target, TCP connects, then the TLS handshake times out or the response is empty. That is a failure after connect, so NF's Happy Eyeballs does not absorb it.
 - **Receipt:** scratchpad `nlb/p1/ev`.
+- **Amendment 3a APPLIED 2026-11-10 15:54:40-15:54:43Z** (owner's go; PR #77): cross-zone **on** for Core's target group `stg-int-core-8000`. The NLB-level attribute stays off, and SF's NLB decides at P2.
+  - The plan was 0 added, 4 changed, 0 destroyed, together with the push-role change below. Core's deployment and task were untouched.
+  - codex-1: GO-WITH-CHANGES, documentation only; folded in at `cc4d5d4`.
+  - **Before** (15:52Z, NF's group): DNS published only the 1b node. The 1a node completed TLS and then returned an empty response after 5 s.
+  - **After** (15:55-15:57Z, NF's and SF's groups): DNS returns both node IPs, and each node completes verified TLS and answers `/ready` 200 in about 48 ms. JWKS returns 200 with one key. The alarm is OK.
+  - `ZonalHealthStatus`: 1a turned 1 at 15:56Z (0 before), and 1b stayed 1. The sum is 2, as the spec inferred.
+  - **`TCP_Target_Reset_Count`: open observation.**
+    - Before the apply: 3 on the day, each at 1b with a probe (15:08, 15:10 and 15:52Z).
+    - After the apply: **25, all on the 1a (cross-zone) node**, decaying 8/10/5/2/0 over 15:55-15:59Z after the two probes. 1b showed 0.
+    - Two TLS flows stayed active on 1a for about two minutes after both probe tasks had stopped.
+    - Every request returned 200, and Core logged no error or warning.
+    - Cause Unverified. Teardown on the cross-zone path is Inferred; no failed request points to the collision class.
+    - Consequence: this metric alone cannot separate collisions from teardown noise on Core's NLB. A collision shows as a failed connect or request.
+  - **Receipt:** scratchpad `nlb/pa`.
 | SF manifest rev 3 (`d031251`); SF `DEPLOYMENT_MANIFEST.md` at `0c13c90` l.250-266; owner choice 2026-11-10; spec revision 3; P1 receipt | Overcast | P2 when SF needs it; P3 before SF.11 Stage C entry and NF N-G4 |
 | DR-11 | **CLOSED 2026-11-09 (O-016)**: the hand-made duplicate prod listener rules (ShuttleForge 2, Core 3) were deleted by ARN, and Terraform's own core/shuttleforge rules and target groups went with the prod reduction. The prod HTTPS listener holds only Backstage's rule 100 and the default. | `aws elbv2 describe-rules`, 2026-11-09 | Overcast | Closed |
 | DR-12 | Backstage routes source traffic through its own proxy setting to three fixed endpoints (O-012 item 2, launch). Moving it to ShuttleForge leases and narrowing the host's egress to ShuttleForge needs ShuttleForge in the **prod** VPC, where Backstage runs; ShuttleForge is planned for staging only. That needs prod Core and DR-10, and the staging-JWKS condition is met (key rotated and retired 2026-10-23; containment complete). Also recorded: the owner accepted shipping Backstage's migration-002 proxy credentials in the first private ECR images and rotating later ("accepted, we will rotate later", 2026-10-22; Backstage register B14). | Owner, 2026-10-22 | Overcast + ShuttleForge + Core | When ShuttleForge's prod deployment is planned |
