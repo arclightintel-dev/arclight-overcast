@@ -159,11 +159,18 @@ application starts, so it can be proven with an inert task (codex-2).
 - **Shell:** `aws_secretsmanager_secret.probe_canary`, named `arclight/<env>/probe/canary`. Its
   value is a fixed, non-sensitive string, set out of band with `put-secret-value` at L1, so it
   never enters state (INV-004).
-- **Role:** the probe's execution role, `probe_exec`, gains `secretsmanager:GetSecretValue` on
-  that one ARN, plus `kms:Decrypt` conditioned on `kms:ViaService = secretsmanager.<region>`.
-  That is the same pattern as NF's execution role.
-- **Probe:** `run_probe.py --canary` binds it as `PROBE_CANARY`. `probe.py` reports only
-  `canary: present` and the value's length, never the value.
+- **Role:** the canary uses the default `aws/secretsmanager` key, as every staging shell does
+  (`modules/secrets` sets no `kms_key_id`). `probe_exec` gains only
+  `secretsmanager:GetSecretValue` on `aws_secretsmanager_secret.probe_canary.arn`.
+  - No KMS statement is needed (codex-1's delta review). Revision 2's
+    `kms:ViaService = secretsmanager.<region>` was both unnecessary and wrong: the value ends in
+    `.amazonaws.com`.
+- **Probe:** `run_probe.py --canary` adds the binding `PROBE_CANARY` to the registered revision
+  **only when the flag is given**. Injection happens before Python starts, so an unconditional
+  binding would change ordinary runs.
+  - `probe.py` reports only `canary: present` and the value's length.
+  - The value never enters the `PROBE` dictionary, an assertion message, exception text or an
+    environment dump.
 - **Why not a Core secret** (codex-2's proposal)? That would place a module's secret in an
   Overcast test task. The canary keeps custody with the modules, and it is reusable for the next
   consumer lockdown.
@@ -209,10 +216,17 @@ in the private app subnets with no public IP.
 **L1:**
 1. From NF's group, `secretsmanager.us-east-1.amazonaws.com` resolves only to addresses in
    `10.0.10.0/24` and `10.0.11.0/24`, and a TLS handshake to it verifies against public roots.
-2. **Canary injection** (`--canary`) succeeds from NF's group. The task reaches RUNNING, and the
-   probe reports `canary: present`. Private DNS sends that retrieval through the endpoint.
-3. **Positive control for L2's negative.** The `blocked`-mode targets in L2 item 5 **connect on
-   443** from NF's group. Port 80 is already blocked and is recorded as blocked.
+2. **Canary injection** (`--canary`) succeeds from NF's group: the task reaches RUNNING, and the
+   probe reports `canary: present`.
+   - With item 1 confirming private resolution, that supports the documented endpoint path.
+   - **Attribution:** CloudTrail's `GetSecretValue` event for the canary at that time carries
+     the new endpoint's `vpcEndpointId` (codex-1). That makes item 2 discriminating at L1.
+   - L2 item 3 additionally proves injection with public HTTPS denied.
+3. **Positive control for L2's negative.** From NF's group, `1.1.1.1:443` and one IPv4 address
+   of `example.com` **connect on 443**.
+   - Record the exact IP:port pairs; L2 reuses them, not a fresh DNS answer. Each must be outside
+     the S3 prefix list's CIDRs.
+   - Port 80 to the same addresses is already blocked and is recorded as blocked.
 4. The next Core deploy (S-057) is the first module injection through the endpoint. It is
    watched, not forced.
 
@@ -230,8 +244,7 @@ in the private app subnets with no public IP.
    - also: `arclight-staging-nerfherder-artifacts.s3.us-east-1.amazonaws.com:443`, because NF
      pins only `boto3>=1.34` and a later default could change (codex-1).
 5. **Negative: no internet path.**
-   - The targets that connected in L1 item 3 now **time out** on 443: `1.1.1.1:443`, and the
-     resolved address of `example.com:443`.
+   - The exact IP:port pairs that connected in L1 item 3 now **time out** on 443.
    - Port 80 to the same addresses stays blocked.
 6. **Core and SF unaffected.** Both services are steady, and their groups' egress rules are
    identical before and after (`describe-security-groups`).
@@ -292,8 +305,11 @@ The existing checks do not change.
     - Entra: `login.microsoftonline.com` (discovery, token, JWKS);
     - Google: `accounts.google.com` and the endpoints it names;
     - GitHub OAuth: `github.com` and `api.github.com`.
-  - The hosts follow the bound identity brokers (`identity_provider_brokers` rows). Calls happen
-    only on `/auth/login` and `/auth/callback`, never on the service-token path.
+  - The hosts follow the bound identity brokers (`identity_provider_brokers` rows).
+  - Calls happen in **human identity-provider login and linking flows**, including
+    `/auth/link` and browser login when enabled. Service-token issuance makes no such calls.
+    codex-1's delta review found the linking path at Core `6645079`
+    (`api/routes/auth.py:1425` → `services/oidc_service.py:112`).
   - Core has no AWS SDK, webhook or mail traffic.
   - Core will add a `network.egress` declaration in NF's shape after S-057 (tracked by Core).
   - Overcast prescribes no schema, because governance is earned.
@@ -331,6 +347,16 @@ GO-WITH-CHANGES, no P1.
 | Placement of Core's migration run task is unverified | codex-1 | **Accepted:** a risk line; the fix belongs in DR-22's runbook pass |
 | The O-018 one-off pattern proves connectivity, not SF's live-provider behaviour | hotpants | **Noted:** SF's behavioural checks are SF's (its logs and `/ready/detail`) |
 | L1 creates no Route 53 resources; outputs don't change prod's plan | codex-1 | **Folded** into L1's expected plan |
+
+**Delta review of revision 2** (`b792de3..4286405`; codex-1; GO-WITH-CHANGES, no P1; every
+revision-1 finding mapped as resolved):
+
+| Finding | Disposition |
+|---|---|
+| P2: D5's KMS grant has the wrong `kms:ViaService` value and is unnecessary for the default key | **Accepted:** KMS statement deleted; `GetSecretValue` on the one ARN only |
+| P3: Core's outbound calls also occur on `/auth/link` and browser login | **Accepted:** wording fixed; Core told |
+| P3: reuse L1's exact IP:port pairs at L2; L1 injection alone does not attribute the path | **Accepted:** pinned pairs, and CloudTrail `vpcEndpointId` attribution at L1 |
+| Plans exact (L1: 2 create, 1 update; L2: 3 create, 1 destroy, 2 no-op moves); secret recovery window defaults to 30 days; no resource policy needed | **Confirmed** |
 
 **NF's answers (2026-11-10):**
 - `transport_endpoint` is SF's value, and is independent of 443 (D4).
