@@ -55,7 +55,7 @@ A version-stage IAM condition was not added. The serving task has no task role, 
 5. The owner rewrites `db-url` as the runtime URL (`shuttleforge_app_staging`).
 
 G3:
-1. SF pushes its first staging image: the line release current when SF's SF.11 execution plan is reviewed (owner addendum to SF-D-0261, 2026-11-10). That is r6 at present (`local-20261110-v1-operate-r6`, v1-operate `55a2d20`), replacing r5. The push record gives the tag, ECR `imageDigest` and media type, and the `linux/amd64` child digest if it is an index.
+1. SF pushes its first staging image: the line release current when SF's SF.11 execution plan is reviewed (owner addendum to SF-D-0261, 2026-11-10). That is r6 at present (`local-20261110-v1-operate-r6`, v1-operate `55a2d20`), replacing r5. **SF's ECR push role fixed 2026-11-10 13:24Z (PR #75; owner's go):** it trusted the non-existent repository `arclightintel-dev/arclight-shuttleforge`, so a push could never assume it. It now trusts `repo:arclightintel-dev/shuttleforge:ref:refs/heads/{main,v1-operate}` (verified with `get-role`). The trust is branch-scoped, so a push job with `environment:` would not match. The push record gives the tag, ECR `imageDigest` and media type, and the `linux/amd64` child digest if it is an index.
 2. Register the migrate family on its digest.
 3. Run `--migrate-only` in the dbbootstrap security group, which has no route to Core.
 4. Re-run `sf-app-role`.

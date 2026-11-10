@@ -296,7 +296,9 @@ locals {
       refs      = ["main"]
     }
     shuttleforge = {
-      repo_name = "arclight-shuttleforge"
+      # GitHub names the repository arclightintel-dev/shuttleforge; the OIDC sub carries
+      # the current name, so "arclight-shuttleforge" could never be assumed (2026-11-10).
+      repo_name = "shuttleforge"
       ecr_repos = ["arclight/shuttleforge"]
       refs      = ["main", "v1-operate"]
     }
