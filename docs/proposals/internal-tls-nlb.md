@@ -352,14 +352,28 @@ else must be named (codex-1):
   - the guard below fails.
 - **After the apply, an untargeted staging plan must read "No changes."**
 
-**Pre-apply `:19` field walk.**
-- Compare the planned `container_definitions` (`terraform show -json`) against `:18`.
-- Allowed differences:
-  - the image form, `:v2-08de4e6` against `@sha256:2393682f…a777`. The tag resolves to that
-    digest, and the repository is IMMUTABLE.
-  - AWS-normalised defaults.
-- Anything else is a stop. `:19` becomes `deploy-service.yml`'s base revision
+**Pre-apply field walk** of the revision Terraform will register (`:19` today).
+- Compare the planned `container_definitions` (`terraform show -json`) against **the revision
+  the Core service runs at apply time**: `:18` today, or later if S-057 lands first.
+  Hard-coding `:18` would be wrong after a later release.
+- **Precondition:** staging `core_image_tag` names the live image's tag exactly. That is
+  `v2-08de4e6` today, which resolves to `sha256:2393682f…a777`; `arclight/core` is IMMUTABLE
+  (Core verified it).
+  - If a Core release has rolled since, `core_image_tag` must already match it.
+  - Otherwise Terraform would register a newest-ACTIVE revision carrying an **older** image,
+    and `deploy-service.yml` would base the next deploy on it.
+- Allowed differences: the image form (tag against digest) and AWS-normalised defaults.
+- Anything else is a stop. The registered revision becomes `deploy-service.yml`'s base
   (`describe-task-definition --task-definition "$FAMILY"`).
+- **After the roll:** ECS's resolved `containers[0].imageDigest` on the running task equals the
+  live digest.
+
+**Coordination with Core's S-057** (image-only availability fix, in Astra review; Core,
+2026-11-10):
+- Either order works. The NLB attachment is service-level, and S-057 changes only the image.
+- **Never apply P1 during an S-057 rollout.**
+- Tell Core which revision is live before S-057's field walk. If P1 registers `:19` first,
+  S-057 becomes `:20`. Core's plan says "the next revision".
 
 **Guard, for every P1 and P2 plan.** Reject any of the following:
 - a target group attached to the other service's NLB;
@@ -485,7 +499,9 @@ AWS list prices for us-east-1, read 2026-11-10:
   `:18`.
 - Destroy Core's NLB resources. The public path is untouched.
 - If `:19` turns out wrong, deregister `:19` so `:18` is the latest ACTIVE revision again.
-- Image rollback stays "update the service to revision 17".
+- Image rollback stays "update the service to revision 17", or to the previous revision after
+  later releases. `loadBalancers` lives on the service, so a task-definition rollback keeps
+  the NLB attached. Removing the NLB is its own rollback (Core).
 
 **P2:** remove SF's `additional_load_balancers`, then SF's NLB resources. Core is unaffected.
 
