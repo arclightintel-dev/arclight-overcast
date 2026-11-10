@@ -80,6 +80,9 @@ module "vpc" {
 
   environment = var.environment
   vpc_cidr    = var.vpc_cidr
+  # Secrets Manager endpoint (spec nf-egress-lockdown.md, D1; owner: two AZs, 2026-11-10).
+  # Private DNS makes it the only Secrets Manager path for every staging task.
+  extra_interface_endpoints = ["secretsmanager"]
 }
 
 module "ecr" {
@@ -187,6 +190,8 @@ module "core_service" {
   cloud_map_namespace_id = module.ecs_cluster.cloud_map_namespace_id
   target_group_arn       = module.alb.target_group_arns["core"]
   container_port         = 8000
+  # O-017: Core keeps internet egress (identity-provider login and linking flows).
+  internet_egress = true
   # Internal TLS (D-077, P1). The ARN goes through the listener so the service attaches only
   # after the listener exists.
   additional_load_balancers = [{

@@ -106,9 +106,14 @@ aws ecs run-task \
   --cluster arclight-staging \
   --task-definition arclight-core-staging \
   --launch-type FARGATE \
-  --network-configuration '{...}' \
+  --network-configuration '{"awsvpcConfiguration": {"subnets": ["<private app subnet 1a>", "<private app subnet 1b>"], "securityGroups": ["<Core service group>"], "assignPublicIp": "DISABLED"}}' \
   --overrides '{"containerOverrides": [{"name": "core", "command": ["alembic", "upgrade", "head"]}]}'
 ```
+
+Use the **private app subnets** (`module.vpc.private_app_subnet_ids`, the subnets of the
+Core service) and Core's service group. The Secrets Manager interface endpoint admits only
+the private app subnets. With private DNS it is the only Secrets Manager path, so a task
+placed elsewhere fails at secret injection (docs/proposals/nf-egress-lockdown.md, D1).
 
 Wait for the task to complete (exit code 0) before proceeding.
 

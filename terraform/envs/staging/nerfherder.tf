@@ -41,8 +41,40 @@ resource "aws_security_group" "nerfherder" {
   tags = { Name = "sg-nerfherder-${var.environment}" }
 }
 
-# The Fargate module adds 443 egress (secrets, ECR, logs, S3) and 5432 to RDS for this group;
-# the RDS side admits it through module.rds app_security_group_ids.
+# NF has no internet egress (O-017; spec nf-egress-lockdown.md, D3). Its 443 goes only to the
+# interface endpoints (Secrets Manager, ECR, Logs), the S3 gateway and Core's internal NLB. The
+# Fargate module adds 5432 to RDS for this group; the RDS side admits it through
+# module.rds app_security_group_ids.
+
+resource "aws_security_group_rule" "nf_to_vpce_443" {
+  type                     = "egress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.nerfherder.id
+  source_security_group_id = module.vpc.sg_vpc_endpoints_id
+  description              = "Nerfherder to interface endpoints (secrets, ECR, logs)"
+}
+
+resource "aws_security_group_rule" "nf_to_s3_443" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.nerfherder.id
+  prefix_list_ids   = [module.vpc.s3_prefix_list_id]
+  description       = "Nerfherder to S3 through the gateway endpoint (bucket, image layers)"
+}
+
+resource "aws_security_group_rule" "nf_to_core_nlb_443" {
+  type                     = "egress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.nerfherder.id
+  source_security_group_id = aws_security_group.core_nlb.id
+  description              = "Nerfherder to Core internal NLB (token endpoint)"
+}
 
 resource "aws_security_group_rule" "nf_to_core" {
   type                     = "egress"

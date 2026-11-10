@@ -1,7 +1,8 @@
 # Nerfherder egress lockdown: no internet path from NF's group (C-G7, DR-20, O-017)
 
-Status: **DRAFT revision 2, for approval. Nothing built or applied.** Each phase is applied only
-on the owner's go, given first-hand.
+Status: **Revision 2, approved by the owner (merged `e6ff2d1`). L1 and L2 APPLIED 2026-11-10
+(PR #79; owner: "good to go on green"); acceptance passed.** The record is in
+`docs/PROJECT_STATE.md`, DR-20.
 
 Revision history:
 - **Revision 1** (`b792de3`) was reviewed by codex-1, codex-2 and hotpants. All three returned

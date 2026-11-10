@@ -52,3 +52,13 @@ output "private_app_route_table_id" {
   description = "Private app route table ID"
   value       = aws_route_table.private_app.id
 }
+
+output "sg_vpc_endpoints_id" {
+  description = "Security group of the interface endpoints (443 from the private app subnets)"
+  value       = aws_security_group.vpc_endpoints.id
+}
+
+output "s3_prefix_list_id" {
+  description = "Prefix list of the S3 gateway endpoint, for security-group egress rules"
+  value       = aws_vpc_endpoint.s3.prefix_list_id
+}
