@@ -295,7 +295,9 @@ resource "aws_iam_role_policy" "nf_migrate_exec" {
   })
 }
 
-# Manifest M:95-97: ListBucket on the bucket with no s3:prefix condition, objects on bucket/*.
+# NF annex at 0dc3357: ListBucket on the bucket with no s3:prefix condition, Get/Put on bucket/*,
+# and DeleteObject only under _uncommitted/ (NF deletes nothing else), so committed artifacts and
+# evidence/ cannot be deleted through this role.
 resource "aws_iam_role_policy" "nf_task_s3" {
   name = "artifact-bucket"
   role = aws_iam_role.nf_task.id
@@ -312,8 +314,14 @@ resource "aws_iam_role_policy" "nf_task_s3" {
       {
         Sid      = "Objects"
         Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Action   = ["s3:GetObject", "s3:PutObject"]
         Resource = ["${aws_s3_bucket.nerfherder.arn}/*"]
+      },
+      {
+        Sid      = "DeleteStagedOnly"
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObject"]
+        Resource = ["${aws_s3_bucket.nerfherder.arn}/_uncommitted/*"]
       },
     ]
   })

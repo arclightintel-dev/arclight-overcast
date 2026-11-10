@@ -6,7 +6,7 @@
     "portMappings": [
       { "containerPort": 8100, "protocol": "tcp" }
     ],
-    "stopTimeout": 35,
+    "stopTimeout": 60,
     "healthCheck": {
       "command": ["CMD", "python", "-c", "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:8100/ready', timeout=2).status == 200 else 1)"],
       "interval": 10,
