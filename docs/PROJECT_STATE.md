@@ -66,6 +66,26 @@ G4:
 3. `update-service --desired-count 1`.
 4. Verify the digest and `/ready`, then flip `shuttleforge_desired_count` to 1 in Terraform.
 
+**G3 and G4 DONE 2026-11-10 as SF.11 A1-A5** (owner's first-hand go for A3-A5; HTTPS-first ruled; S-057 first, never in parallel):
+- **A1 (SF).** r6 was pushed by CI: `arclight/shuttleforge:v1-55a2d20` = `sha256:f57384de90d40a9212fe75fda8eaf553c97f8a4efcf6f786457b667ad232f5f4`, a single-platform Docker v2 manifest, config `b6a13496…`. Verified in ECR.
+- **A2.** The four leaves keep their 2026-10-29 values, which Overcast's script generated. The owner confirmed in SF's session that they are staging-only.
+- **Entry gates.**
+  - `shuttleforge_staging` was empty: a read-only one-off (`arclight-dbcheck-staging`, `default_transaction_read_only=on`, deregistered afterwards) found relations=0 and no `alembic_version`.
+  - Core's staging token lifetime is 600 s, first-hand from Core.
+- **Amendment 3b** (PR #84, `02919e0`; codex-1 GO): the base serving revision `:2` renders `SHUTTLEFORGE_CORE_JWKS_URL = https://core-internal.staging.arclight-complex.net/.well-known/jwks.json`.
+- **A4.** Migrate `:2` (a copy of `:1`; only the image changed) ran in the dbbootstrap group: exit 0, `Running database migrations (backend: postgresql)...`, `Running upgrade -> sf9_5b_pg_baseline`, `sf9_5b_pg_baseline (head)`. SF logs its database URL already redacted (`postgresql+asyncpg://<redacted>/shuttleforge_staging`); checked.
+- **`sf-app-role` re-run:** exit 0. The trailing `REVOKE` is the `alembic_version` read-only revoke.
+- **A5.**
+  - **Revision and start:** serving `:3`, a copy of base `:2` with only the image changed. `update-service` at 23:15:38Z; task `e7f87246…` (1b, `10.0.11.248`) started at 23:17:03Z and was registered in the ALB group at 23:16:59Z. Stable at 23:18:48Z, deployment COMPLETED, running digest `f57384de…`.
+  - **Readiness:** `/ready` 200 `degraded` (by design, empty inventory). `/ready/detail` passes the pinned r6 first-admission predicate, evaluated in Python because `jq` is absent locally; body sha256 `bab8ded6…`. **`jwks` is `ok` (`state=ready, keys=1`)** over `core-internal`, and Core's log shows `GET /.well-known/jwks.json 200` from `10.0.11.248` at 23:16:59Z.
+  - **Identity:** commit `55a2d20`; database identity `shuttleforge_staging` / `sf9_5b_pg_baseline`, from `/ready/detail`. SF's `Database identity:` log line is absent, because its `logger.info` is not emitted; that was reported to SF. Policy line: `policy_source=default_deny policy_sha256=29f60f50…cc4c`.
+  - **Stray sentinel task:** setting the revision and desired 1 in one call briefly started a `:1` sentinel task, stopped while pending. It was harmless, and the runbook now says to switch the revision first.
+- **Terraform:** `shuttleforge_desired_count` now defaults to 1 (this PR). The plan shows no SF change.
+- **Not yet set up:**
+  - No SF alarms exist before P2.
+  - Stage B's fixture validation must account for DR-15's open egress (SF records it).
+  - Receipt: scratchpad `sfnext/`.
+
 **R3, OPEN again (2026-10-29):** at `ad2668b` an empty database reports `/ready` `degraded`. SF first answered that r5 would report `ready`, then withdrew it: TESTING_PROTOCOLS §7 Tier 2.5 and SF's locked V1-AC-032 require `degraded` with no providers.
 
 SF proposes reading `/ready/detail`: `degraded`, every check `ok` except `snapshot` = `warn` "snapshot has no usable config or endpoint inventory", and `jwks` `ok`. That conflicted with TESTING_PROTOCOLS §3 ("deploy verification must not depend on /ready/detail").
@@ -242,7 +262,7 @@ Updated 2026-11-10. Each state change waits on the owner's go, given first-hand.
    - So N-G4 needs P3's template: `https://core-internal…`, `https://shuttleforge-internal…:9000`, and no plaintext flag. The SF URL needs SF's NLB (P2) live.
    - **Never start NF on the current template revision.**
    - After that: the owner's go. N-G4 is useful only once SF serves leases. NF's lease smoke must run under the egress lockdown before the first collection.
-3. **ShuttleForge G3**: waits on SF's reviewed SF.11 plan. The first staging image is the line release current at that review (r6, `55a2d20`, today); the first-admission pin is confirmed for r6. G3's push record gives the tag, ECR digest and media type, and the amd64 child digest.
+3. **ShuttleForge**: SF.11 A1-A5 are done (2026-11-10; record above). SF runs r6 `:3` on `sha256:f57384de…` at desired 1, fetching JWKS over `core-internal`. Next: SF's A6/A7 reads, then Stage B. Stage C needs internal-TLS P2 and P3 (path B for SF) and C-G7's operational evidence. Pending the owner's go: DEBT #125 (drop `main` from SF's push-role trust).
 4. **Cloudflare Terraform**: spec an isolated root (provider v5) adopting the arclight-complex.net staging records and the Access app, then DR-21 origin client certificates.
 5. **Owner**: confirm the `arclight-prod-alarms` subscription email (DR-19); decide whether to take a live `SHOW max_connections` reading (needs a one-off task definition).
 6. Keep 7G scheduling blocked on Core/Complex's authority decision, and 7F blocked on the custody amendment.
