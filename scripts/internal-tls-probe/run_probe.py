@@ -45,8 +45,10 @@ def main():
     ap.add_argument("--check", action="append", default=[], help="host:port:expect, expect in tls|connect|blocked")
     ap.add_argument("--canary", action="store_true", help="bind arclight/<env>/probe/canary (presence and length only)")
     a = ap.parse_args()
-    for c in a.check:
-        if c.count(":") < 2 or c.rsplit(":", 2)[2] not in ("tls", "connect", "blocked") or "," in c:
+    for c in a.check:  # validated before any AWS call, so a malformed check launches nothing
+        parts = c.rsplit(":", 2)
+        if (len(parts) != 3 or not parts[0] or "," in c or parts[2] not in ("tls", "connect", "blocked")
+                or not parts[1].isdigit() or not 1 <= int(parts[1]) <= 65535):
             sys.exit(f"bad --check {c!r}: want host:port:expect, expect in tls|connect|blocked")
     r = ["--region", a.region]
     cluster = f"arclight-{a.env}"
