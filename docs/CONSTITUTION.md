@@ -44,12 +44,14 @@ Never implement a new infrastructure module from assumptions. Spec the following
 
 | Domain | Source of truth | Location |
 |--------|----------------|----------|
-| Infrastructure architecture | D-056 + INFRASTRUCTURE_SPEC | arclight-complex |
+| Production topology (after v1) | D-056 and the production infrastructure spec. **Parked for v1** (owner ruling 2026-11-09): no production environment in v1 | arclight-complex (`platform/DECISIONS.md`, `docs/proposals/production-infrastructure-spec.md`) |
 | Overcast scope | D-058, charter-overcast.md | arclight-complex |
-| Environment topology | D-059 | arclight-complex |
-| TURN server design | D-062 | arclight-complex |
+| Environment topology | D-059 (§9: v1 staging is production) | arclight-complex |
+| Platform test rules (readiness, deploy verification, boot order) | TESTING_PROTOCOLS §3, §9 | arclight-complex `platform/specs/TESTING_PROTOCOLS.md` |
+| Platform contracts | `platform/contracts/`, pinned by Git-blob SHA-256 (pins recorded in docs/PROJECT_STATE.md) | arclight-complex |
+| TURN server design | D-062. No consumer in v1 (Podbay deferred, D-071); coturn removed from Overcast (O-011) | arclight-complex |
 | Terraform state (staging) | S3 backend | arclight-terraform-state/staging/ |
-| Terraform state (prod) | S3 backend | arclight-terraform-state/prod/ |
+| Terraform state (prod) | S3 backend; Backstage's substrate only (O-016) | arclight-terraform-state/prod/ |
 | Backstage Terraform state | S3 backend | arclight-terraform-state; backstage/terraform.tfstate (O-012) |
 | Corporate Terraform state | Dedicated S3 backend | arclight-corporate-terraform-state-650880817826; state/terraform.tfstate, entra/bootstrap/terraform.tfstate and entra/applications/terraform.tfstate |
 | Secret values | AWS Secrets Manager | Never in git or Terraform state |
@@ -57,7 +59,7 @@ Never implement a new infrastructure module from assumptions. Spec the following
 | Corporate identity bootstrap | docs/specs/entra-management.md + docs/runbooks/manage-entra.md | Administrator-owned identity; public certificate only in Terraform; no self-granted Graph authority |
 | Overcast decisions | O-series | docs/DECISIONS.md (this repo) |
 | Phase status | docs/PROJECT_STATE.md | This repo |
-| Current handoff | docs/handoff/2026-10-03-handoff.md | Resume order, uncommitted work and evidence limits |
+| Handoffs | docs/handoff/ | Historical (latest 2026-10-03); docs/PROJECT_STATE.md is the current state |
 | Core 7G/7F coordination receipt | docs/platform-interface/module-feedback/core-phase7-integration-response.md | Local review evidence; canonical contracts and mechanism selection remain in arclight-complex |
 | Module boundaries | docs/CHARTER.md | This repo (reference copy) |
 

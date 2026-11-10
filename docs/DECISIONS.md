@@ -24,6 +24,8 @@ Self-hosted coturn on EC2 t3.micro with Elastic IP, per-environment. Twilio reje
 
 **Historical status at `d441a5d`**: Rolled back after 4 failed apply cycles due to unspec'd OS/package/systemd interactions; specification was required before reimplementation. This is not the current wiring status: `terraform/envs/staging/main.tf:934` at `5c3a93c` wires the coturn module. The July 10 deployment snapshot records subsequent deployment; this documentation reconciliation does not reverify it live.
 
+**Superseded (2026-10-21)**: the coturn instance and module were removed from staging with Podbay (O-011). D-062 has no consumer in v1: Podbay, its only consumer, is deferred to v2 (D-071).
+
 ---
 
 ## O-003: Podbay controller on Fargate, not EC2
@@ -33,6 +35,8 @@ Self-hosted coturn on EC2 t3.micro with Elastic IP, per-environment. Twilio reje
 INFRASTRUCTURE_SPEC originally said Podbay controller runs on EC2 capacity provider. Amended to Fargate. The controller is a stateless FastAPI service (JWT validation, session management, ecs:RunTask calls) — no host-level access needed. awsvpc networking provides identical VPC connectivity regardless of capacity provider.
 
 **Impact**: Uses existing `ecs-service-fargate` module. No new module needed.
+
+**Superseded (2026-10-21)**: the Podbay controller and its substrate were removed (O-011); Podbay is deferred to v2 (D-071).
 
 ---
 
@@ -134,9 +138,9 @@ Podbay support is withdrawn. Overcast stops the Podbay controller immediately an
 
 **Removal scope (staging root, `terraform/envs/staging/main.tf` at `9dea289`)**: `module.podbay_service` (l.884), workspace task definition and roles (l.634–700), controller task role and policies (l.701–826), security-group rules between Podbay and Core and for workspaces (l.564–632, 790–809, 947), the S3 export bucket and its configuration (l.827–883), `module.coturn` (l.934, D-062), `dbbootstrap_podbay_pw` (l.252), the Podbay entries in the secrets module and ECR list, the workspace subnets if nothing else uses them, and the EC2 capacity provider (l.159, 229) if no other EC2-backed workload is planned. Prod has no Podbay services; its substrate entries are removed in the same change set.
 
-**Data disposition (owner, 2026-10-21)**: snapshot, then delete. A final RDS snapshot before the `podbay_staging` database and role are dropped; the S3 export bucket's object listing recorded and contents copied or deliberately abandoned before the bucket is destroyed; secret shells deleted with the standard recovery window.
+**Data disposition (owner, 2026-10-21)**: snapshot, then delete. A final RDS snapshot before the `podbay_staging` database and role are dropped; the S3 export bucket's object listing recorded and contents copied or deliberately abandoned before the bucket is destroyed; secret shells deleted with the standard recovery window. *Superseded the same day by the owner's process ruling below: no snapshot or archive was kept, and the `podbay_staging` database and role were left in place.*
 
-**Platform record**: D-062 (coturn) and the Podbay sections of D-056 / INFRASTRUCTURE_SPEC are Complex-owned. Overcast removes the implementation; the platform decision that retires them is the owner's to route through Complex. Core will disable Podbay principals and clients on staging Core separately.
+**Platform record**: D-062 (coturn) and the Podbay sections of D-056 / INFRASTRUCTURE_SPEC are Complex-owned. Overcast removes the implementation; the platform decision that retires them is the owner's to route through Complex. Core will disable Podbay principals and clients on staging Core separately. *Platform status at arclight-complex `48c1715` (2026-11-10): D-071 (ratified 2026-10-21) defers Podbay to v2, and no Podbay deployment, image build, integration gate or smoke test is a v1 target. D-062 carries no status of its own; reported to Complex.*
 
 **Process (owner ruling, 2026-10-21)**: no spec/plan/review cycle; the data is staging-only with no retention value, so no snapshot or archive is kept. The removal is one Terraform change bundled with Core's deploy prerequisites (`CORE_TRUSTED_PROXY_CIDRS` from the Cloudflare locals, ECS container check on `/health`, 30 s target-group deregistration delay, NF/SF `core-client-secret` shells), reviewed by plan output and applied by the owner (DR-1). Applied 2026-10-21 (staging 6/6/74 after the ECR pre-step, prod 7/6/31); receipt in PROJECT_STATE. The `podbay_staging` database and role are left in place (harmless; the bootstrap image still creates them for new environments).
 
@@ -179,7 +183,7 @@ Overcast will provision Nerfherder on **staging only**, exactly D-072's list and
 
 **Preconditions carried (D-072 paragraph 4)**: D-059 section 9 in full (no real source registration, provider credential or live collection plugin on staging until the section 6 postures hold; the staging restore drill, R3, remains the open posture; **completed 2026-10-24 as V-1**, see `docs/runbooks/restore-rds.md`); Nerfherder's own constraints (one secret-bearing `role=all` task; ShuttleForge as the required egress route, which means NF's egress is fail-closed only once SF is deployed); the platform `/ready` status-code convention for the task health check; TLS to RDS is already enforced (`rds.force_ssl` = 1).
 
-**Sequencing (D-072 paragraph 5)**: Nerfherder's P3.5 plans are awaiting the owner's GO; NF's wiring change in this repository follows that GO; the apply is owner-authorized (DR-1). Nothing is scheduled by this record.
+**Sequencing (D-072 paragraph 5)**: Nerfherder's P3.5 plans are awaiting the owner's GO; NF's wiring change in this repository follows that GO; the apply is owner-authorized (DR-1). Nothing is scheduled by this record. *Status 2026-11-10: N-G1 and its follow-up are applied and N-G2 is complete; see [the wiring proposal](proposals/nerfherder-staging-wiring.md).*
 
 **Correction**: Overcast's P3.5 answer 16 cited "D-056 section 15". The deferral lived in the Overcast charter's Deferred list (amended by D-072) and in the infrastructure spec's "What NOT to Build Yet" section 15, which still lists Nerfherder and remains accurate for production. D-072 amends the charter entry only.
 

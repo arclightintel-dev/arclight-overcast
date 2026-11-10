@@ -4,7 +4,7 @@
 
 - Terraform >= 1.5 (located at `C:\Tools\terraform.exe`)
 - AWS CLI v2 (located at `C:\Program Files\Amazon\AWSCLIV2\aws.exe`)
-- Docker Desktop (for building dbbootstrap and workspace images)
+- Docker Desktop (for building the dbbootstrap image)
 - Git Bash (for shell scripts — PowerShell has pipe encoding issues with AWS CLI)
 
 ## Authentication
@@ -76,7 +76,7 @@ C:\Tools\terraform.exe apply change.tfplan
 ```
 
 **Staging**: the working path is **manual apply with admin credentials** from `terraform/envs/staging`. The intended CI auto-apply (`terraform-apply.yml` on merge to main) is **currently broken** — see [CI status](#ci-status) below. Every apply this session was run manually.
-**Prod**: manual operator apply only. OIDC role lacks infra provisioning permissions.
+**Prod** (`terraform/envs/prod`): parked for v1 (no production environment, owner ruling 2026-11-09). Since O-016 it holds only the VPC, NAT, endpoints, ALB and alarm topic Backstage runs on; administrator apply only, and no prod Terraform role exists.
 **Backstage** (`terraform/envs/backstage`): manual operator apply, excluded from the CI plan and
 apply workflows; credential-free checks run in `terraform-backstage-validate.yml`. Every variable
 has a committed default. An apply that creates or replaces the instance needs

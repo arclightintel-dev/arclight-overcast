@@ -1,5 +1,11 @@
 # Production Infrastructure Spec — AWS
 
+> **HISTORICAL COPY (banner added 2026-11-10, platform alignment against arclight-complex `48c1715`).** This is the June 2026 draft as reviewed before D-056 was ratified. It is not current guidance:
+> - D-056's production topology is **parked** (owner ruling 2026-11-09: no production environment in v1). A production deployment after v1 starts again from D-056 and Complex's `docs/proposals/production-infrastructure-spec.md`, not from this copy.
+> - Podbay is deferred to v2 (D-071); its sections here are history. Overcast removed the Podbay and coturn infrastructure (O-011).
+> - Deploy verification follows TESTING_PROTOCOLS §3 (`/ready` and the running digest, not `/ready/detail`), and boot order follows TESTING_PROTOCOLS §9.
+> - Core's `operator` principal type is retired (D-076).
+
 > **Status**: MODULE REVIEW COMPLETE. Ready for D-056 ratification.
 > **Produced**: 2026-06-22 | **Amended**: 2026-06-22 (module review feedback incorporated)
 > **Author**: claude-main, incorporating external infrastructure review + Core/ShuttleForge/Podbay review responses

@@ -29,12 +29,12 @@ docs/            # Charter, architecture decisions, runbooks
 ## Governing documents
 
 - Current status and next actions: [Project state](docs/PROJECT_STATE.md)
-- Latest handoff: [2026-10-03](docs/handoff/2026-10-03-handoff.md)
+- Handoffs (historical; latest [2026-10-03](docs/handoff/2026-10-03-handoff.md)); Project state supersedes them
 - Infrastructure providers, account inventory, and connection status: [Service registry](docs/service_registry.md)
 - Corporate identity operations: [Entra management runbook](docs/runbooks/manage-entra.md)
 - Core integration review and ownership: [7G/7F receipt](docs/platform-interface/module-feedback/core-phase7-integration-response.md)
 - Charter: `docs/CHARTER.md`
-- Infrastructure spec (D-056): `arclight-complex/docs/proposals/production-infrastructure-spec.md`
+- Infrastructure spec (D-056, parked for v1: no production environment): `arclight-complex/docs/proposals/production-infrastructure-spec.md`
 - Platform testing protocols: `arclight-complex/platform/specs/TESTING_PROTOCOLS.md`
 
 ## Prerequisites
