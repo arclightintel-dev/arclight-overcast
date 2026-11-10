@@ -84,6 +84,15 @@ variable "target_group_arn" {
   default     = null
 }
 
+variable "additional_load_balancers" {
+  description = "Extra target groups (e.g. an internal NLB) as {target_group_arn, container_port}. Empty for none."
+  type = list(object({
+    target_group_arn = string
+    container_port   = number
+  }))
+  default = []
+}
+
 variable "container_definitions" {
   description = "Rendered containerDefinitions JSON string"
   type        = string
