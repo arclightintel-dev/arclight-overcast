@@ -240,7 +240,7 @@ Updated 2026-11-10. Each state change waits on the owner's go, given first-hand.
 4. **Cloudflare Terraform**: spec an isolated root (provider v5) adopting the arclight-complex.net staging records and the Access app, then DR-21 origin client certificates.
 5. **Owner**: confirm the `arclight-prod-alarms` subscription email (DR-19); decide whether to take a live `SHOW max_connections` reading (needs a one-off task definition).
 6. Keep 7G scheduling blocked on Core/Complex's authority decision, and 7F blocked on the custody amendment.
-7. **Bandersnatch** (a gated delivery path for sharing a page and a download with a named outside recipient; owner's request 2026-11-10): [spec](proposals/bandersnatch.md) and [plan](proposals/bandersnatch-plan.md) drafted, internal review folded in. **Nothing is built or applied.** Waits on the owner's rulings D1-D15 (ownership first), then the external reviews on the owner's direction. Rulings are recorded as O-019 when made.
+7. **Bandersnatch** (a gated delivery path for sharing a page and a download with a named outside recipient; owner's request 2026-11-10): [spec](proposals/bandersnatch.md) and [plan](proposals/bandersnatch-plan.md) at revision 2: the internal review, the external reviews (codex-1, codex-2, hotpants) and the automated pull-request review are folded in. **Nothing is built or applied.** Waits on the owner's rulings D1-D15 (ownership first). Rulings are recorded as O-019 when made.
 
 ## Corporate management evidence — 2026-09-30
 

@@ -1,8 +1,9 @@
 # Bandersnatch: gated delivery to a named outside recipient (spec)
 
-Status: **Revision 1, draft for the owner's review. Spec only: nothing is built, applied,
-sent or published.** The internal review is folded in (see "Review record"); the external
-reviews wait on the owner's direction. The phased plan and its acceptance tests are in
+Status: **Revision 2, draft for the owner's review. Spec only: nothing is built, applied,
+sent or published.** Revision 2: the internal review, the external reviews (codex-1, codex-2,
+hotpants) and the automated pull-request review are folded in (see "Review record"). The
+phased plan and its acceptance tests are in
 [bandersnatch-plan.md](bandersnatch-plan.md).
 
 Request: the owner, 2026-11-10 (condensed in "What was asked"). Branch `spec/bandersnatch`,
@@ -27,9 +28,9 @@ Each is argued in the section named. D1 comes first because every other answer d
 | D6 | Mail-scanner and forwarding hardening | The click completes only in the **browser that asked for the link**; any other browser must re-enter the token | [Link and activation](#link-and-activation) |
 | D7 | Data store | **DynamoDB** (new, no network path to RDS) over the shared staging RDS | [Data model](#data-model) |
 | D8 | Names and mailboxes | Neutral hostname, mail subdomain, sender name, reply-to and report mailboxes: the owner picks them, and **none is written in this repository** | [Hygiene](#public-repository-hygiene) |
-| D9 | Token defaults | Expiry 7 days, one activation, three link emails, link valid 24 h | [Tokens](#accounts-and-tokens) |
-| D10 | Retention | Accounts, tokens and served releases kept (A3, A4); audit 2 years; failed attempts by strangers 90 days; links and sessions 30 days after expiry | [Logging](#logging-and-retention) |
-| D11 | Uptime | The service runs **only while a token is live**; desired count 0 otherwise | [Rollback](#rollback) |
+| D9 | Token defaults | Expiry 7 days, three link emails, link valid 24 h. One activation per token is **fixed, not a default** (A1) | [Tokens](#accounts-and-tokens) |
+| D10 | Retention | Accounts, tokens and served releases kept (A3, A4); audit 2 years; what a stranger typed (address, name) 90 days, but the time, outcome and IP of their attempt 2 years; links and sessions 30 days after expiry | [Logging](#logging-and-retention) |
+| D11 | Uptime | The service runs **only while a token can still be activated or a session is live**; desired count 0 otherwise | [Rollback](#rollback) |
 | D12 | Lock mail on the hosting domain | Publish a null SPF and `p=reject` DMARC on `arclight-complex.net`, which never sends mail (A5) | [Mail](#mail-path) |
 | D13 | SES production access | **The owner** submits AWS's request (outward-facing); draft text is in the plan | [Mail](#mail-path) |
 | D14 | Issuing outside an account's domains (not in the brief; proposed here) | Issue only to a person recorded on the account; an address outside the account's domains needs an explicit override | [Tokens](#accounts-and-tokens) |
@@ -127,9 +128,14 @@ Core already owns tokens, identity, OIDC and the scope grant.
   contract, permission vocabulary), not an implementation detail.
 - **Core cannot broker it today.** "Core-brokered login is not available in v1 (Core is not
   an OpenID provider)" (`docs/DECISIONS.md:156`).
-- **It widens the identity plane's public surface.** Every Core hostname sits behind the
-  `*.staging` Access application (live read-out below). An outsider flow needs an
-  unauthenticated public path into the service that signs every platform token.
+- **Done wholly in Core, it widens the identity plane's public surface.** Every Core hostname
+  sits behind the `*.staging` Access application (live read-out below), and an outsider flow
+  served by Core needs an unauthenticated public path into the service that signs every
+  platform token.
+- **A split is possible and is the stronger form of (b):** a public application handles the
+  pages, mail and rendering, and asks Core privately whether to admit. Core then stays off
+  the internet. It is not recommended now only because that Core integration does not exist;
+  it is the shape option (a) can grow into.
 - **Most of the work is not identity.** Serving a pinned static site, stamping downloads and
   sending mail are not Core's job.
 
@@ -149,7 +155,7 @@ per-address Include rule, one-time PIN login, a one-hour session. Checked agains
 | R4: a `GET` must not consume | Cloudflare's own page warns that mail-security tools following the link use the code up. A PIN lasts 10 minutes | **No** |
 | R5, A1: one hour, once | A one-hour session can be set. The recipient can always request a new PIN and sign in again; there is no single-use or counted policy | **No** ("once" cannot be enforced) |
 | R6: per-recipient token with expiry and use count | An Include rule lists exact addresses. No expiry date or use count on a rule | **Partly** |
-| R9: who, when, IP, what was downloaded | Authentication logs: address, IP, country, time (no user agent). **Kept 24 hours on the Free plan.** Per-request logs are Enterprise-only | **No** |
+| R9: who, when, IP, what was downloaded | Authentication logs: address, IP, country, time (no user agent). **Kept 24 hours on the Free plan.** Per-request logs are listed as Enterprise-only (Cloudflare's Logpush page is less definite) | **No** |
 | R10: stamped download | Nothing at the edge can stamp; the origin must | **No** |
 | R11: our domain's SPF, DKIM, DMARC | Mail comes from `noreply@notify.cloudflare.com`; no documented way to change it | **No** |
 | Seats | Each recipient takes one of 50 Free seats until removed | Operational |
@@ -201,8 +207,8 @@ Read 2026-11-10 from code at `08ec540` and live, read-only.
 
 | Component | Verified state | Evidence | Use here |
 |---|---|---|---|
-| Staging ALB `arclight-staging` | Internet-facing; 443 with `ELBSecurityPolicy-TLS13-1-2-2021-06`; 80 redirects to 443; default action 404 "Not Found" | `terraform/modules/alb/main.tf:91-121`; live `describe-listeners`, `describe-rules` | Host the page behind one new host-header rule |
-| ALB rules | Live priorities: ShuttleForge 2, Core 10, default. The module sets no priority (`alb/main.tf:157-172`); Core sits at 10 by hand (`docs/PROJECT_STATE.md:162-165`, `:181`) | live `describe-rules` | Our rule lives in the root with an explicit priority (Backstage pattern, `terraform/envs/backstage/alb.tf:5-44`) |
+| Staging ALB `arclight-staging` | Internet-facing; 443 with `ELBSecurityPolicy-TLS13-1-2-2021-06`; 80 redirects to 443; default action 404 "Not Found" | `terraform/modules/alb/main.tf:72-85` (`internal = false`), `:91-121`; live `describe-listeners`, `describe-rules` | Host the page behind one new host-header rule |
+| ALB rules | Live priorities: ShuttleForge 2, Core 10, default. The module sets no priority (`alb/main.tf:157-172`); Core sits at 10 by hand (`docs/PROJECT_STATE.md:163-166`, `:182`) | live `describe-rules` | Our rule lives in the root with an explicit priority (Backstage pattern, `terraform/envs/backstage/alb.tf:5-44`) |
 | ALB ingress | Cloudflare's 15 IPv4 and 7 IPv6 ranges only (O-005) | `terraform/envs/staging/main.tf:46-71`, `alb/main.tf:13-55` | Unchanged. DR-21 applies (D15) |
 | ALB access logs | Off | live `access_logs.s3.enabled false`; no `access_logs` in `alb/main.tf:72-85` | Nothing secret may sit in a URL that a later change could log |
 | ALB attributes | XFF `append`; invalid header fields not dropped; idle timeout 3600 s (`alb/main.tf:78`) | live attributes | Client IP comes from `CF-Connecting-IP`; the application enforces its own response deadline |
@@ -322,9 +328,11 @@ Option 1 is an interim. When DR-21 lands, the header and its shell are removed.
 
 ### Application behaviour
 
-Normative for the application, and **temporary in this repository**: when the application's
-repository exists this section moves there, and this document keeps only the interface
-(ports, health, configuration, egress, IAM). The charter forbids Overcast becoming "A shadow
+Normative for the application, and **temporary in this repository**. When the application's
+repository exists, every application norm moves there: this section, the data model,
+stamping, the release tool's rules and the operator tool. This document then keeps what
+Overcast owns: ports, health, configuration, resources and IAM, network and egress, DNS and
+mail provisioning, and rollback. The charter forbids Overcast becoming "A shadow
 platform spec" (`docs/CHARTER.md:43`); specifying another repository's internals here is the
 same hazard, accepted only until that repository exists.
 
@@ -412,7 +420,9 @@ does not quote it.
 - The link is `https://<page-host>/a/<nonce>`, where the nonce is 32 random bytes (base64url).
   Only `SHA-256(nonce)` is stored, as is `SHA-256(B)`.
 - **`GET /a/<nonce>` never changes state.** It returns the same static page for any nonce,
-  valid or not: one button. It writes a `link_opened` audit event (IP, user agent) when the
+  valid or not: one button, and a neutral line saying that pressing it starts a single hour
+  which cannot be paused or repeated, so press it when ready; and that on another device
+  the access code will be asked for. It writes a `link_opened` audit event (IP, user agent) when the
   nonce matches, which is how scanner pre-fetches show up. `HEAD` is treated the same way.
 - **`POST /a/<nonce>`** (the click) starts the session when all hold:
   - the nonce is the token's current link, unconsumed and less than 24 h old;
@@ -428,18 +438,23 @@ does not quote it.
 - On success, one DynamoDB transaction (idempotent on a client request token, so a retried
   write cannot count twice) marks the link consumed, counts the activation, creates the
   session and writes the audit event. The response sets the session cookie (called `S` here;
-  32 random bytes, `__Host-` prefix, `Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age` set
-  to the seconds remaining) and redirects (303) to `/v/`.
+  `__Host-` prefix, `Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age` set to the seconds
+  remaining) and redirects (303) to `/v/`.
+- **The session identifier is derived, not drawn:** `S = SHA-256(nonce, binding factor)`,
+  where the binding factor is the cookie `B` or the token, whichever the request proved. The
+  nonce is 32 random bytes, so `S` cannot be guessed; and only someone holding the link
+  **and** a binding factor can compute it, which is exactly who may start the session.
 - **Re-attaching, never restarting.** If the link is already consumed and its session is
-  still inside its hour **and has not been revoked**, a `POST` that passes the binding check
-  gets that same session back
-  (the activation budget is not checked again, since no new activation happens):
-  a new session identifier, the old one retired ten seconds later, **the same end time**.
-  The ten seconds are for races: after a double click or two requests in flight, whichever
-  response the browser keeps must carry a working identifier. This covers a response
-  lost on a mobile network, a double click, and a mail app's built-in browser handing over
-  to the real one. Without it the only activation could be spent with nothing to show for it.
-  It is still one session and one hour (A1).
+  still inside its hour and has not been revoked, a `POST` that passes the binding check
+  gets that same session back, with the same end time (the activation budget is not checked
+  again, since no new activation happens). Because `S` is derived, **every successful
+  response to the same browser carries the same cookie**: a double click, a retry, or
+  responses arriving out of order cannot leave the browser with a dead identifier, and
+  nothing is rotated or retired. A session can have at most two identifiers, one per
+  binding factor (the first browser's cookie; the token typed on another device). This
+  covers a response lost on a mobile network, a double click, and a mail app's built-in
+  browser handing over to the real one. Without it the only activation could be spent with
+  nothing to show for it. It is still one session and one hour (A1).
 - Anything else: one neutral page saying the link can no longer be used.
 
 Why D6 rather than a bare click:
@@ -463,14 +478,13 @@ origin, and ALB access logs are off; if they are ever turned on, `/a/` must be e
 #### Session
 
 - Every `/v/*` and `/d/*` request needs a session whose hash exists, whose end time (start +
-  3600 s, fixed) is in the future, which has not been revoked, which was not replaced more
-  than ten seconds ago, whose token is not revoked, whose account is not suspended and whose
-  release is flagged accessible. (The token's own expiry and budgets are checked at
+  3600 s, fixed) is in the future, which has not been revoked, whose token is not revoked,
+  whose account is not suspended and whose release is flagged accessible. (The token's own expiry and budgets are checked at
   submission and activation, not during the hour.) Token and release are read consistently on
   every request, so revoking a token or flagging a release takes effect at the next request. Suspending an account reaches each of its tokens within
   seconds (see Data model).
-- **Revoking a session** (the operator's `session revoke`) marks every identifier that
-  session has had, and its link. The serving check reads the first; the re-attach check
+- **Revoking a session** (the operator's `session revoke`) marks both of that session's
+  possible identifiers, and its link. The serving check reads the first; the re-attach check
   reads the second, so a revoked session cannot be picked up again under a new identifier.
 - No sliding expiry, no refresh, no second session from the same link. A1: extension means a
   new token.
@@ -511,10 +525,14 @@ the releases involved.
   our sender will follow. Only `SHA-256(token)` is stored. 130 random bits need no pepper:
   there is nothing to brute-force offline.
 - Fields: account, bound address (normalised, validated against a strict address grammar at
-  issue), release, issued at and by, expires at (default 7 days), `max_activations` (default
-  and recommended **1**, A1), `max_link_requests` (default 3), revoked at, by and why.
-- `max_activations` above 1 means separate one-hour sessions, never a longer one. The owner
-  may prefer to fix it at 1 in code for v1 (D9).
+  issue), release, a short **purpose** note (why this party is getting this, and in what
+  capacity), issued at and by, expires at (default 7 days), `max_link_requests` (default 3),
+  revoked at, by and why.
+- **One activation per token, always (A1).** There is no setting for it: the use count R6
+  asks for is `activations_used`, which goes from 0 to 1 and no further. More access means a
+  new token. Several sessions on one token would be a new ruling, not a configuration.
+- **Expiry bounds when a session may start, not when it ends.** A token that expires at
+  10:00 can be activated at 09:59, and that session runs its full hour.
 - **Reissue (A4)** is a new token under the same account for the same release. The old token's
   record stays, so the account shows both. Token records are kept, not deleted: they hold a
   hash, not the token.
@@ -530,10 +548,10 @@ protection on, AWS-owned encryption.
 |---|---|---|---|
 | `accounts` | `account_id` + `item` (`META`, `ORG#…`, `DOMAIN#…`, `PERSON#<address>`) | label, state (`active`, `suspended`), notes; per assignment: who added it and when | Until the owner removes the account |
 | `releases` | `release_id` | `manifest_sha256`, **`access`** (`accessible`, `inaccessible`), source repository and commit, published at and by, access changes (at, by, why) | **Always** (A4) |
-| `tokens` (the grant; **written only by operators**) | `token_hash`; index on `account_id` | `token_id`, `account_id`, `email`, `release_id`, `manifest_sha256`, `issued_at`, `issued_by`, `expires_at`, `max_activations`, `max_link_requests`, `account_suspended`, `revoked_at`, `revoked_by`, `revoke_reason` | With the account (A3) |
+| `tokens` (the grant; **written only by operators**) | `token_hash`; index on `account_id` | `token_id`, `account_id`, `email`, `release_id`, `manifest_sha256`, `purpose`, `issued_at`, `issued_by`, `expires_at`, `max_link_requests`, `account_suspended`, `revoked_at`, `revoked_by`, `revoke_reason` | With the account (A3) |
 | `token_state` (the counters; written by the task) | `token_hash` | `activations_used`, `link_requests_used`, `pending_sends`, `version`, `current_link_hash` | With the account (A3) |
 | `links` | `nonce_hash` | `token_hash`, `binding_hash`, `created_at`, `expires_at`, `consumed_at`, `session_hash`, `session_revoked_at`, `ses_message_id` | TTL: `expires_at` + 30 d |
-| `sessions` | `session_hash` | `token_hash`, `nonce_hash`, `started_at`, `expires_at`, `ip`, `user_agent`, `revoked_at`, `replaced_by`, `replaced_at` | TTL: `expires_at` + 30 d |
+| `sessions` | `session_hash` | `token_hash`, `nonce_hash`, `started_at`, `expires_at`, `ip`, `user_agent`, `revoked_at`, `binding_kind` (`cookie`, `token`) | TTL: `expires_at` + 30 d |
 | `limits` | `key` (`ip#…`, `email#…`, `global#…` with the window) | `count` | TTL: window end + 1 h |
 | `audit` | `event_id` (128 random bits); index on `account_id` | `at`, `event`, `outcome`, `account_id`, `token_id`, `session_id`, `release_id`, `manifest_sha256`, `ip`, `forwarded_for`, `cf_ray`, `user_agent`, `submitted_email`, `submitted_name`, `path`, `bytes`, `sha256`, `distribution_id`, `ses_message_id` | TTL per event class (D10) |
 
@@ -548,17 +566,21 @@ protection on, AWS-owned encryption.
   in it, so the guards and the protection would exclude each other.)
 - **The serving task reads `releases` and cannot write it; it has no access to `accounts`.**
   Suspending an account is the operator tool stamping `account_suspended` on each of the
-  account's tokens and repeating until a consistent check finds none unstamped.
+  account's tokens and repeating until a consistent read of the table (not the index) finds
+  none unstamped. **Issuing is a transaction with a condition check on the account's
+  state**, so a token cannot be issued into a suspended account, and one issued a moment
+  before the suspension is caught by the repeat.
 - **A release's `access` flag is a condition of every submission and activation, and is read
   on every request.** Flagging a release inaccessible stops every session on it at the next
   request and changes no object's bytes.
 - Supersession costs no extra write: activation requires `nonce_hash == token_state.current_link_hash`.
 - Single use and counts are `ConditionExpression`s inside `TransactWriteItems`, so two
   concurrent clicks cannot both start a session.
-- **The audit table is write-only for the task:** it may only `PutItem` there (no get, query,
-  scan, update or delete). A put can replace an item whose key is known, but event keys are
-  random and never returned to the task. Every event is also written to CloudWatch Logs,
-  which the task cannot alter; a disagreement between the two copies is itself evidence.
+- **The audit table is write-only for the task, not tamper-proof:** it may only `PutItem`
+  there (no get, query, scan, update or delete), so it cannot read or list events. It
+  chooses each event's key, though, so a compromised task could overwrite events it wrote
+  itself. **The copy in CloudWatch Logs, which the task cannot alter, is the evidence of
+  record**; a disagreement between the two copies is itself evidence.
 - Audit events: `submit`, `rate_limited` (one per key per window, with a count), `mail_sent`,
   `mail_failed`, `link_opened`, `activation_refused`, `session_started`,
   `session_reattached`, `asset_served`, `download`, `session_ended`, and the operator events
@@ -617,8 +639,9 @@ sender apart from corporate mail: **no record at the `arclightlabs.io` apex chan
   unacceptable. Production access must be granted before the real send; staging acceptance
   can use the owner's own verified address. If AWS refuses the request, the fallback is the
   alternative below.
-- **Message:** plain text with a minimal HTML alternative; neutral subject and copy; the link
-  and its validity. No images, no tracking pixels, click tracking disabled (it would rewrite
+- **Message:** plain text with a minimal HTML alternative; neutral subject and copy; the
+  link, how long the link stays valid, and that the hour starts at the button, not when the
+  mail arrives. No images, no tracking pixels, click tracking disabled (it would rewrite
   the link through an AWS host).
 - **Residual: sender and link are on different domains** (`arclightlabs.io` and
   `arclight-complex.net`), and a first message from a new subdomain containing little but a
@@ -663,12 +686,16 @@ also read live):
 - A release is immutable. Publishing writes new keys only; the bucket policy requires
   `If-None-Match` on every write, so an existing key cannot be overwritten.
 - Ending a share flags the release `inaccessible`. The objects, the manifest and the
-  `releases` record stay as they were served, so "what exactly did they get" always has an
-  answer: the pinned originals, plus the stamp fields in the audit log, reproduce every
-  stamped byte. A reissued token serves the same pinned release.
-- **Inaccessible also means unreadable by the task.** The task's read permission depends on
-  an object tag that only the operator tool sets when it flags a release. A compromised task
-  cannot read material that has been withdrawn. Tags change no bytes and no versions.
+  `releases` record stay as they were served, so "what exactly did they get" keeps its
+  answer: the pinned originals are kept indefinitely. Reproducing one recipient's *stamped*
+  copy also needs that session's stamp fields. Those are in the audit log for its two years,
+  and in the account report the owner exports after each share (plan P6), which is the
+  long-lived record. A reissued token serves the same pinned release.
+- **Inaccessible also means the task can no longer fetch it.** The task's read permission
+  depends on an object tag that only the operator tool sets when it flags a release, and the
+  task drops its local copy when it sees the flag change. This stops later reads from S3; it
+  cannot undo what a task that was already compromised had cached while the release was
+  accessible. Tags change no bytes and no versions.
 - Reissue is two deliberate steps: flag the release `accessible`, issue a token. Both are
   audited.
 - The bucket enforces retention: versioning on (and its suspension denied), no lifecycle rule
@@ -839,6 +866,11 @@ Notes from the payload inspection:
   download's stamped hash and `distribution_id`.
 - **Two copies:** the DynamoDB `audit` table and CloudWatch Logs `/arclight/staging/bandersnatch`
   (structured JSON).
+- **What the record shows, and what it does not.** It shows access and transfers observed
+  under an issued token, from an address, at a time. It does not show which person read the
+  material or kept it: a mailbox can be shared or handled by an assistant, a scanner can open
+  a link, and a download can be cut off at the hour. Reports should say "accessed under the
+  token issued to", not "read by".
 - **D10, retention (recommended):**
   - accounts and their tokens: kept until the owner removes the account (A3);
   - `releases` records and served material: kept (A4);
@@ -926,7 +958,7 @@ The service's security group, complete:
 | T3 | **Mail abuse and lockout**: using the form to mail-bomb someone, or to block a recipient | Mail goes only to the bound address of a valid token; three link emails per token, spent only on accepted sends; no limit that an outsider can trip against a recipient | The recipient can receive up to three link emails | AT-7, AT-8 |
 | T4 | **Enumeration through response differences** (status, body, headers, timing, cookies, limits) | Identical status, headers and body; cookie always set; 1.0 s floor with jitter; mail sent after the response; the only refusing limit ignores what was submitted | Statistical timing attacks need many samples, which the per-IP limit caps | AT-1 |
 | T5 | **Link forwarding** | Link alone is not enough (binding or token); single use; superseded by the next link; one-hour session | A recipient who forwards both the link and the token shares access; the audit log shows the second IP | AT-4 |
-| T6 | **Session theft** | `__Host-` cookie, `HttpOnly`, `Secure`, `SameSite=Lax`; strict CSP; no third-party code; one hour; re-attach retires the old identifier; revocable | Malware on the recipient's machine | AT-11, AT-12 |
+| T6 | **Session theft** | `__Host-` cookie, `HttpOnly`, `Secure`, `SameSite=Lax`; strict CSP; no third-party code; one hour; revocable | Malware on the recipient's machine | AT-11, AT-12 |
 | T7 | **Cache leakage** (Cloudflare, browser, proxies) | `no-store` everywhere; cache-bypass rule; no service worker; the page reloads at expiry | Content already on screen can be saved while the session lasts | AT-5b |
 | T8 | **Public object URLs** | Private bucket, Block Public Access, restrictive bucket policy, no presigned URLs, the application streams every byte | None | AT-9 |
 | T9 | **Indexing** | `X-Robots-Tag`, robots meta, `robots.txt` | A link pasted publicly by the recipient: the page needs a session anyway | AT-5b |
@@ -958,7 +990,7 @@ The service's security group, complete:
 - **DNS:** new records only. In `arclightlabs.io`, the corporate mail and web domain: six
   records under one new subdomain, nothing at the apex. In `arclight-complex.net`: the page
   record, and D12's two records.
-- **Cloudflare zone `arclight-complex.net`:** four rules scoped to one hostname, including
+- **Cloudflare zone `arclight-complex.net`:** five rules scoped to one hostname, including
   the zone's only free rate-limiting rule.
 - **SES production access** is account-wide: afterwards any principal with `ses:SendEmail`
   can mail anyone. Today only administrators hold that permission.
@@ -980,7 +1012,7 @@ It can still move data out through AWS's own service endpoints (see Network).
 | RB1, stop one release | Tool: `release set-access --inaccessible` | Every session on that material refuses at the next request; the task loses read access; the material is untouched | Seconds |
 | RB2, stop everything | Tool: `revoke --all`; desired count to 0 (CLI, and the Terraform variable) | Every request gets the ALB's 503 | 1 minute |
 | RB3, unpublish | Remove the proxied DNS record | The hostname stops resolving to us | Minutes |
-| RB4, remove the exposure | Targeted destroy of the service, listener rule, listener certificate, SES identity and configuration set, push role and ECR repository; remove the mail and page records and the Cloudflare rules; the `email` endpoint last | Nothing is reachable or sendable. **The payload bucket, every table and the log group stay** (A3, A4) | One apply |
+| RB4, remove the exposure | Targeted destroy of the service, listener rule, listener certificate, SES identity and configuration set and push role; remove the mail and page records and the Cloudflare rules; the `email` endpoint last | Nothing is reachable or sendable. **The payload bucket, every table, the log group and the image repository stay** (A3, A4; a repository holding images cannot be destroyed by Terraform as the module stands, and images expose nothing) | One apply |
 | RB5, remove the records | Not a rollback: the owner's separate, explicit decision. Export first; lift deletion protection and the bucket's protections by hand | Accounts, tokens, audit and served material are gone | Deliberate |
 
 - RB4 leaves the records and the served material in place at a few cents a month, so removing
@@ -1081,8 +1113,8 @@ accepted):
 Also during drafting, from the owner: A3, A4 and A5, and the offer to extend the Cloudflare
 tokens (plan P0).
 
-**Automated review on the pull request, 2026-11-10** (Codex, on `b2d52b0`; both checked
-against the text and accepted):
+**Automated review on the pull request, 2026-11-10** (Codex, four passes on successive
+commits from `b2d52b0`; each finding checked against the text and accepted):
 
 | Finding | Disposition |
 |---|---|
@@ -1091,9 +1123,32 @@ against the text and accepted):
 | (on `50b96cf`) A task killed with mail queued keeps the budget spent, and nothing durable records the pending send | **Accepted:** reservations are durable and one unconfirmed after two minutes no longer counts. The nonce is still never stored |
 | (on `f9a9567`) A reservation superseded by a later submission before either mail went out could not be found again | **Accepted:** reservations moved from the link record to the token (`pending_sends`), so one read sees them all; budget updates are versioned |
 | (on `f9a9567`) AT-9 required a 404 for another release's session on every path, which fails when two releases share a path | **Accepted:** the test asserts that another release's session never receives this release's bytes |
-| (on `cd6b508`) The serving and re-attach checks ignored a session's own revocation | **Accepted:** both check it; `session revoke` marks every identifier and the link; AT-21 tests it |
+| (on `cd6b508`) The serving and re-attach checks ignored a session's own revocation | **Accepted:** both check it; `session revoke` marks the session's identifiers and the link; AT-21 tests it |
 | (on `cd6b508`) An attribute allowlist on `tokens` would deny the conditional writes it was meant to permit (DynamoDB applies it to attributes a condition reads, and requires the key) | **Accepted:** the token is split into an operator-written grant and a task-written state record; guards are condition checks on the grant inside the transaction |
-| (on `50b96cf`) AT-4 required 49 of 50 concurrent clicks to be refused, but the re-attach rule lets bound requests succeed | **Accepted:** AT-4 asserts one activation and one end time; and re-attach now retires the old identifier after ten seconds, so racing responses cannot leave the browser with a dead one |
+| (on `50b96cf`) AT-4 required 49 of 50 concurrent clicks to be refused, but the re-attach rule lets bound requests succeed | **Accepted:** AT-4 asserts one activation and one end time; and a ten-second retirement was added for racing responses, **later replaced** by the derived identifier (external review, below) |
 
-**External reviews** (codex-1 correctness, codex-2 architecture, hotpants domain): prompts are
-prepared; they run on the owner's direction.
+**External reviews, 2026-11-10** (run on the owner's direction through the codex CLI, read-only,
+against `f9a9567`; each finding was checked against the text or the code before acceptance).
+Verdicts: **codex-1** (correctness) GO-WITH-CHANGES, no P1; **codex-2** (architecture) NO-GO as
+written on one point, the ownership recommendation GO; **hotpants** (domain) NO-GO as written
+on the same point.
+
+| Finding | From | Disposition |
+|---|---|---|
+| **P1.** A configurable `max_activations` let one token buy a second hour, against A1 | codex-2, hotpants | **Accepted:** one activation per token is fixed; the setting and its field are gone |
+| Shutdown "at the token's expiry" could cut a session started just before it | codex-1, hotpants | **Accepted:** expiry bounds when a session may start; shutdown waits for the hour (plan P6, AT-5) |
+| A ten-second retirement does not survive responses arriving out of order | codex-1 | **Accepted, with a different mechanism:** the session identifier is derived from the nonce and the binding factor, so every response to a browser carries the same cookie and nothing is retired |
+| RB4 cannot destroy an image repository that holds images | codex-2 | **Accepted (verified, `terraform/modules/ecr/main.tf:1-12`):** RB4 keeps it |
+| Core need not be exposed publicly: a public application with private Core admission is a stronger option (b) | codex-2 | **Accepted:** stated under option (b) |
+| The move to the application's repository must cover every application norm, not one section | codex-2 | **Accepted** |
+| The click page does not warn that the hour is single and unrepeatable | hotpants | **Accepted:** required on the page and in the mail |
+| "Always" overstated the evidence horizon; the 90-day figure hid two-year IP retention | hotpants | **Accepted:** originals indefinitely, stamp fields two years and in the exported report; D10 says both figures |
+| The record shows access under a token, not who read it; record purpose and capacity | hotpants | **Accepted:** stated under Logging; a purpose note on each token |
+| "Write-only" audit and tag-gated reads were described as stronger than they are | codex-1 | **Accepted:** both qualified |
+| Account suspension racing an issue was unspecified | codex-1 | **Accepted:** issuing checks the account's state in its transaction |
+| AT-23 passed a verifier that accepts any header; AT-10, AT-13 and AT-21 fixtures; missing negatives for several threats | codex-1 | **Accepted:** see the plan's table (AT-4, AT-5, AT-5b, AT-7, AT-9, AT-10, AT-13, AT-14, AT-15, AT-17, AT-20, AT-21, AT-23, and the new AT-24) |
+| Citation locators; "four" Cloudflare rules where there are five; the per-request logging claim | codex-1, codex-2 | **Accepted:** corrected |
+| Is this over-built for one recipient and one hour? | (asked of codex-2 and hotpants) | **Not raised:** both judged accounts, immutable releases and the test count proportionate; the only cut either asked for was the multiple-activation setting |
+
+Not re-reviewed: the changes made in response to these findings. The derived session
+identifier in particular is new in this revision and has had no independent review.
