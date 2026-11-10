@@ -389,18 +389,23 @@ does not quote it.
 - **Equal responses:** status, headers and body are byte-identical apart from the cookie value
   (same length). Every response to a submission is held to a **floor of 1.0 s plus 0-200 ms
   of jitter** from receipt, so database work and mail hand-off cannot be timed.
-- **A link request is only spent when SES accepts the mail, and the reservation is durable.**
-  The submission's transaction reserves the count and records the link's mail state as
-  `pending` with a time. When SES accepts the message the state becomes `sent`; if the send
-  fails after retries (capped at 60 s) it becomes `failed`, the count is given back and
-  `mail_failed` alarms. On a stop signal the task drains its queue first.
-- **A task that dies with mail queued cannot give anything back, so the next submission
-  does.** A reservation still `pending` after two minutes was never confirmed. The next
-  valid submission for that token does not count it against the budget, and returns it in
-  its own transaction. An abrupt stop therefore costs the recipient one retry, never a link
-  from the budget. The nonce is still never stored: an unsent link is simply abandoned.
-  (If the task died after SES accepted but before recording it, the recipient can receive
-  one mail more than the budget. That is the safe direction.)
+- **A link request is only spent when SES accepts the mail, and every reservation lives on
+  the token.** `link_requests_used` counts accepted sends only. The submission's transaction
+  adds the new link to the token's `pending_sends` (its hash and the time). When SES accepts
+  the message, the entry is removed and the count goes up by one; if the send fails after
+  retries (capped at 60 s) the entry is removed and `mail_failed` alarms. On a stop signal
+  the task drains its queue first.
+- **A task that dies with mail queued cannot tidy up, so the budget check ignores what it
+  left.** The budget is accepted sends plus pending entries younger than two minutes. Older
+  entries were never confirmed: they do not count, and the next submission removes them.
+  Because every reservation is on the token itself, this also covers a link that a later
+  submission superseded before either mail went out, with no search of the `links` table.
+  An abrupt stop therefore costs the recipient one retry, never a link from the budget. The
+  nonce is still never stored: an unsent link is simply abandoned. (If the task died after
+  SES accepted but before recording it, the recipient can receive one mail more than the
+  budget. That is the safe direction.)
+- **Budget updates are conditional on the token's version number**, so two submissions
+  racing for the last permitted mail cannot both reserve it.
 
 #### Link and activation
 
@@ -521,8 +526,8 @@ protection on, AWS-owned encryption.
 |---|---|---|---|
 | `accounts` | `account_id` + `item` (`META`, `ORG#…`, `DOMAIN#…`, `PERSON#<address>`) | label, state (`active`, `suspended`), notes; per assignment: who added it and when | Until the owner removes the account |
 | `releases` | `release_id` | `manifest_sha256`, **`access`** (`accessible`, `inaccessible`), source repository and commit, published at and by, access changes (at, by, why) | **Always** (A4) |
-| `tokens` | `token_hash`; index on `account_id` | `token_id`, `account_id`, `email`, `release_id`, `manifest_sha256`, `issued_at`, `issued_by`, `expires_at`, `max_activations`, `activations_used`, `max_link_requests`, `link_requests_used`, `current_link_hash`, `account_suspended`, `revoked_at`, `revoked_by`, `revoke_reason` | With the account (A3) |
-| `links` | `nonce_hash` | `token_hash`, `binding_hash`, `created_at`, `expires_at`, `consumed_at`, `session_hash`, `mail_state` (`pending`, `sent`, `failed`, `abandoned`), `mail_state_at`, `ses_message_id` | TTL: `expires_at` + 30 d |
+| `tokens` | `token_hash`; index on `account_id` | `token_id`, `account_id`, `email`, `release_id`, `manifest_sha256`, `issued_at`, `issued_by`, `expires_at`, `max_activations`, `activations_used`, `max_link_requests`, `link_requests_used`, `pending_sends`, `version`, `current_link_hash`, `account_suspended`, `revoked_at`, `revoked_by`, `revoke_reason` | With the account (A3) |
+| `links` | `nonce_hash` | `token_hash`, `binding_hash`, `created_at`, `expires_at`, `consumed_at`, `session_hash`, `ses_message_id` | TTL: `expires_at` + 30 d |
 | `sessions` | `session_hash` | `token_hash`, `nonce_hash`, `started_at`, `expires_at`, `ip`, `user_agent`, `revoked_at`, `replaced_by`, `replaced_at` | TTL: `expires_at` + 30 d |
 | `limits` | `key` (`ip#…`, `email#…`, `global#…` with the window) | `count` | TTL: window end + 1 h |
 | `audit` | `event_id` (128 random bits); index on `account_id` | `at`, `event`, `outcome`, `account_id`, `token_id`, `session_id`, `release_id`, `manifest_sha256`, `ip`, `forwarded_for`, `cf_ray`, `user_agent`, `submitted_email`, `submitted_name`, `path`, `bytes`, `sha256`, `distribution_id`, `ses_message_id` | TTL per event class (D10) |
@@ -868,8 +873,8 @@ The service's security group, complete:
 
 - **Task role** `arclight-bandersnatch-task-staging`, every statement conditioned on the
   relevant VPC endpoint (`aws:SourceVpce`), so its credentials are useless elsewhere:
-  - `tokens`: `GetItem`, and `UpdateItem` limited to the counters and `current_link_hash`
-    (`dynamodb:Attributes`). **No `PutItem`: the task cannot mint a token.**
+  - `tokens`: `GetItem`, and `UpdateItem` limited to the counters, `pending_sends`, `version`
+    and `current_link_hash` (`dynamodb:Attributes`). **No `PutItem`: the task cannot mint a token.**
   - `links`, `sessions`: `GetItem`, `PutItem`, `UpdateItem`. `limits`: `UpdateItem`.
   - `releases`: `GetItem`, `Scan`, `ConditionCheckItem`. `audit`: `PutItem` only.
     **Nothing on `accounts`.** No `Query` or `DeleteItem` anywhere.
@@ -1068,7 +1073,9 @@ against the text and accepted):
 |---|---|
 | Activation reused submission's checks, including "a link email left", so the link in the last permitted mail could never activate | **Accepted:** activation and session checks are now listed separately and exclude the mail budget; AT-8 tests the third mail's link |
 | AT-16 searched every response, including the payload itself, for the payload's subject and the recipient, so a correct release would fail it | **Accepted:** AT-16 is the codename everywhere; AT-16c is product, modules, recipient and subject on the access pages and the mail only |
-| (on `50b96cf`) A task killed with mail queued keeps the budget spent, and nothing durable records the pending send | **Accepted:** the link record carries its mail state; a reservation unconfirmed after two minutes is returned by the next submission. The nonce is still never stored |
+| (on `50b96cf`) A task killed with mail queued keeps the budget spent, and nothing durable records the pending send | **Accepted:** reservations are durable and one unconfirmed after two minutes no longer counts. The nonce is still never stored |
+| (on `f9a9567`) A reservation superseded by a later submission before either mail went out could not be found again | **Accepted:** reservations moved from the link record to the token (`pending_sends`), so one read sees them all; budget updates are versioned |
+| (on `f9a9567`) AT-9 required a 404 for another release's session on every path, which fails when two releases share a path | **Accepted:** the test asserts that another release's session never receives this release's bytes |
 | (on `50b96cf`) AT-4 required 49 of 50 concurrent clicks to be refused, but the re-attach rule lets bound requests succeed | **Accepted:** AT-4 asserts one activation and one end time; and re-attach now retires the old identifier after ten seconds, so racing responses cannot leave the browser with a dead one |
 
 **External reviews** (codex-1 correctness, codex-2 architecture, hotpants domain): prompts are
