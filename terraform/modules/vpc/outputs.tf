@@ -8,6 +8,11 @@ output "public_subnet_ids" {
   value       = aws_subnet.public[*].id
 }
 
+output "public_subnet_cidrs" {
+  description = "Public subnet CIDR blocks (the ALB's subnets)"
+  value       = aws_subnet.public[*].cidr_block
+}
+
 output "private_app_subnet_ids" {
   description = "Private app subnet IDs"
   value       = aws_subnet.private_app[*].id
