@@ -211,6 +211,13 @@ request with the owner's approval of the fix:
   - Pins moved to `v2-08de4e6`: local `core_image_tag` and repository variable `CORE_IMAGE_TAG`. Hashed receipt sent to Core, which verified it by tool and in ECS. **Rollback = service update to revision 17.**
   - Issuance check (step 4): the owner's Entra login, then `authority_inventory --since 2026-11-10T09:33:34Z` on `:18` (task `3e7b49be…`, 11:11:33-12:01Z). **RESULT OK**: one each of `login.succeeded`, `mfa.verified` and `token.issued` (human, success), 0 authority-changing events; changed rows are only the owner's `last_login_at` and the `brk_microsoft` identity's `last_verified_at`.
   - Core's corrections: the body-cap 413s write no audit row, by design (the cap refuses before routing), so the response IDs and the ALB counts are that step's evidence. Core's own `Expect` handling is proven in the image by the qualification smoke; no in-VPC probe is needed.
+- **Core S-057 live 2026-11-10 (owner's go, first-hand)**: revision 20 = revision 18 with only the image changed, `arclight/core@sha256:dec6d631af388a15a0fe1385f5f7872e967c42ed14f433db4fff7ace8e498333` (`v2-0ae4a10`, OCI index; code `0ae4a10`). The fresh field walk shows only `.containerDefinitions[0].image` among the registered inputs; ECS-computed `compatibilities` is the same set reordered. `:19` → `:20` is recorded. No migration.
+  - Preflight PASS on `d076a_retire_operator` (task `c2485de8…`, build `0ae4a10`, checks [1]-[6]). It was **Core's first secret injection through the new Secrets Manager endpoint**, and it succeeded.
+  - Rolling update 22:06:51Z, stable 22:09:59Z, deployment COMPLETED: task `f22e844b…` (1b) on the index digest and healthy in both target groups; `:18`'s task drained. `/ready` 200 `ready` on the public path, and on `core-internal` from SF's group (both NLB nodes, JWKS 1 key).
+  - Unknown-client check (S-057 plan §7), 22:11:57Z, through Cloudflare and Access: **401** `invalid_client` with `error`, `error_description` and `request_id` top-level; the chosen request ID was echoed in header and body; `no-store`. Client-side 1.46 s, which includes the edge and TLS.
+  - The owner's Entra login, then `authority_inventory --since 2026-11-10T22:09:59Z` on `:20` (task `08bec1d7…`). **RESULT OK**: `token.issue.failed` (system) 1, `token.issued` / `login.succeeded` / `mfa.verified` (human) 1 each, 0 authority-changing or unclassified events.
+  - ALB 22:06-23:04Z: ELB and target 5XX 0, target 4XX 2 (the 401, and a 404 at `/`).
+  - Pins moved to `v2-0ae4a10`: local `core_image_tag` and repository variable `CORE_IMAGE_TAG`. The hashed receipt was sent to Core (scratchpad `core-s057/ev`). **Rollback = service update to revision 18.**
 
 ## Applied 2026-10-21 — Podbay removal + Core deploy prerequisites (PR #18)
 
@@ -229,7 +236,7 @@ Verified live after apply: the only ECS service is `arclight-core-staging`, stil
 
 Updated 2026-11-10. Each state change waits on the owner's go, given first-hand.
 
-1. **Core S-055, revision 18**: live and verified 2026-11-10 (all four steps; record above). Core writes the release records.
+1. **Core S-057, revision 20**: live and verified 2026-11-10 (all six steps; record above; rollback `:18`). Core writes the release records. S-055 (revision 18) preceded it.
 2. **Nerfherder N-G4**: N-G3 is done (2026-11-10). N-G4 registers the service on `sha256:ee9ebfe3…` (rollback `v1-105f121`), sets desired 1 and runs the readiness probe.
    - **Blocked on internal-TLS P2, then P3.** NF's S1 image (NF PR #55) refuses to start on `ENVIRONMENT=staging` with an `http` Core URL, whatever the plaintext flag says (exit 2, `host.hosted_configuration_refused`; NF, 2026-11-10).
    - So N-G4 needs P3's template: `https://core-internal…`, `https://shuttleforge-internal…:9000`, and no plaintext flag. The SF URL needs SF's NLB (P2) live.
