@@ -32,3 +32,7 @@ Thumbs.db
 # Terraform plan JSON (holds state values; never commit)
 terraform/envs/*/change.json
 terraform/envs/*/plan.json
+
+# Python bytecode
+__pycache__/
+*.pyc
