@@ -236,8 +236,10 @@ your Network Load Balancer*)
     SF's `/ready` and `/ready/detail` at `https://shuttleforge.<domain>` through Cloudflare and
     Access to the public ALB. SF stays attached to the ALB target group on 9000
     (`shuttleforge.tf:42`), and the ALB's security group stays admitted on 9000.
-  - *How the manifest's YAML names the NLB listeners.* SF's additive form: each port keeps its
-    current `exposure` string (the Stages A/B registration) and gains `internal_tls: nlb`.
+  - *How the manifest's YAML names the NLB listeners.* **Agreed with SF on 2026-11-10, pending
+    SF's manifest change:** each port keeps its current `exposure` string (the Stages A/B
+    registration) and gains `internal_tls: nlb`. At `63f4492` the YAML is unchanged, and
+    l.165-166 leave the naming to this spec.
     - No Overcast tooling parses SF's manifest; the only references are prose and Terraform
       comments (checked 2026-11-10).
     - A list-typed `exposure` would break SF's `tests/test_deployment_5a.py`, which pins each
@@ -277,8 +279,10 @@ your Network Load Balancer*)
 checks immediately before it show, for both SF and NF:
 - `desiredCount`, `runningCount` and `pendingCount` all 0;
 - exactly one PRIMARY deployment;
-- the service's `taskDefinition`, and every `deployments[].taskDefinition`, naming a
-  sentinel-digest (`@sha256:000…0`) revision;
+- the service's `taskDefinition` and every `deployments[].taskDefinition`, which are ARNs.
+  Dereference each with `describe-task-definition`. The serving container's `image` must end
+  in `@sha256:` followed by exactly 64 zeros (`format("%064d", 0)`, `shuttleforge.tf:16`,
+  `nerfherder.tf:14`);
 - `list-tasks --family arclight-{shuttleforge,nerfherder}-staging --desired-status RUNNING`
   empty.
 
@@ -289,16 +293,27 @@ shows the `https` URLs and no `NERFHERDER_ALLOW_PLAINTEXT_INTERNAL_HTTP`. That r
 **P3, path B (if either service references a real-digest pre-P3 revision, running or at
 0).** Split the work:
 1. **P3a:** templates, SSM and the NF flag. No rule removal.
-2. **Deploy the `https` revisions.** SF goes through `deploy-service.yml` with its current tag.
-   NF goes by hand from its latest ACTIVE revision with its real digest, then `update-service
-   --task-definition`. SF goes first or with NF, because SF advertises `TRANSPORT_ENDPOINT`.
+2. **Move each consumer to its `https` revision, case by case:**
+   - **Running (desired ≥ 1).**
+     - SF goes through `deploy-service.yml` with its current tag.
+     - NF goes by hand: register from its latest ACTIVE revision with its real digest, then
+       `update-service --task-definition`.
+     - SF goes first or with NF, because SF advertises `TRANSPORT_ENDPOINT`.
+   - **Stopped at 0/0, with a real-digest reference.**
+     - `deploy-service.yml` cannot be used: it fails when no task runs
+       (`deploy-service.yml:179-183`).
+     - Instead, register the `https` revision with the real digest and run `update-service
+       --task-definition`, leaving the desired count at 0.
+     - Confirm zero tasks, and that the service now references the new revision.
+     - Step 3's running evidence is deferred to that consumer's activation (G4 or N-G4).
 3. **Verify running adoption:**
-   - `describe-tasks` shows every running task on the new revision, with `https` in its
-     environment;
+   - `describe-tasks` shows every running task on the new revision. Read the environment from
+     `describe-task-definition` on that revision's ARN; `describe-tasks` shows only overrides.
    - `NewFlowCount_TLS` or `ActiveFlowCount_TLS` rises on the target groups;
    - SF `/ready/detail` shows `jwks` `ok` from the fresh task;
    - NF's Core token and lease calls succeed.
 4. **Deregister** the pre-P3 real-digest `http` revisions, so they cannot be rollback targets.
+   ECS will not move a service onto an INACTIVE revision once deregistration has propagated.
 5. **P3b:** remove the rules. Then re-verify with **new** connections, because security-group
    connection tracking keeps established flows:
    - a direct `:8000` / `:9000` probe times out;
@@ -309,9 +324,14 @@ shows the `https` URLs and no `NERFHERDER_ALLOW_PLAINTEXT_INTERNAL_HTTP`. That r
   - SF's **running** task on an `https` revision, with `jwks` `ok` fetched over
     `core-internal`;
   - if NF runs, NF→SF over `shuttleforge-internal`;
-  - the direct rules removed.
-- **N-G4 completes only when** NF's **running** task is on an `https` revision with no plaintext
-  flag, and its Core token call over `core-internal` succeeds.
+  - the direct rules removed;
+  - SF's written confirmation, with code references, that its JWKS client verifies the server
+    certificate and hostname. A successful call alone does not prove verification (hotpants).
+- **N-G4 completes only when all of these hold:**
+  - NF's **running** task is on an `https` revision with no plaintext flag;
+  - its Core token call over `core-internal` succeeds;
+  - NF has confirmed in writing, with code references, that its httpx and curl clients verify
+    the server certificate and hostname.
 - `nerfherder-staging-wiring.md`'s N-G4 step 1 changes accordingly: it registers from the latest
   ACTIVE `arclight-nerfherder-staging` revision after P3. `deploy-service.yml` has no
   `nerfherder` option.
@@ -325,6 +345,16 @@ to a file and never truncated.
 destroy`. That is the known churn on `module.core_service.aws_ecs_task_definition.this`:
 - state still holds revision 8 (`10.0.0.0/16`, `v2-d5a6e70`);
 - the template renders H1b's ranges and `v2-08de4e6`.
+
+**Revision identities** (all three confirmation reviewers).
+- Before planning P1, record:
+  - `LIVE_TD`, the ARN the Core service runs;
+  - `LIVE_DIGEST`, its running task's resolved `imageDigest`;
+  - `ROLLBACK_TD`, the revision before it.
+- After the apply, record `P1_TD`, the revision Terraform registered.
+- Every expected-plan, acceptance, abort and rollback step uses these names.
+- Today they are `:18`, `sha256:2393682f…a777`, `:17` and `:19`. S-057 may change them, so
+  those numbers are dated examples, not constants.
 
 **P1 `-target` list.** Targeting the service pulls in its dependencies only, so everything
 else must be named (codex-1):
@@ -343,8 +373,9 @@ else must be named (codex-1):
 - **Adds:** exactly the resources above, minus the service.
 - **Update in place:** `module.core_service.aws_ecs_service.this`, with one `load_balancer`
   block.
-- **Replace:** `module.core_service.aws_ecs_task_definition.this`. `:19` is registered and the
-  unused `:8` deregistered; `:17`, the rollback revision, is untouched.
+- **Replace:** `module.core_service.aws_ecs_task_definition.this`. Terraform registers `P1_TD`
+  and deregisters the unused `:8` it holds in state. `LIVE_TD` and `ROLLBACK_TD` are
+  untouched.
 - **Hard stop if:**
   - the service is planned for **replacement**;
   - anything else changes or is destroyed;
@@ -352,10 +383,8 @@ else must be named (codex-1):
   - the guard below fails.
 - **After the apply, an untargeted staging plan must read "No changes."**
 
-**Pre-apply field walk** of the revision Terraform will register (`:19` today).
-- Compare the planned `container_definitions` (`terraform show -json`) against **the revision
-  the Core service runs at apply time**: `:18` today, or later if S-057 lands first.
-  Hard-coding `:18` would be wrong after a later release.
+**Pre-apply field walk** of `P1_TD`, the revision Terraform will register.
+- Compare the planned `container_definitions` (`terraform show -json`) against `LIVE_TD`.
 - **Precondition:** staging `core_image_tag` names the live image's tag exactly. That is
   `v2-08de4e6` today, which resolves to `sha256:2393682f…a777`; `arclight/core` is IMMUTABLE
   (Core verified it).
@@ -365,8 +394,8 @@ else must be named (codex-1):
 - Allowed differences: the image form (tag against digest) and AWS-normalised defaults.
 - Anything else is a stop. The registered revision becomes `deploy-service.yml`'s base
   (`describe-task-definition --task-definition "$FAMILY"`).
-- **After the roll:** ECS's resolved `containers[0].imageDigest` on the running task equals the
-  live digest.
+- **After the roll:** ECS's resolved `containers[0].imageDigest` on the running task equals
+  `LIVE_DIGEST`.
 
 **Coordination with Core's S-057** (image-only availability fix, in Astra review; Core,
 2026-11-10):
@@ -375,11 +404,25 @@ else must be named (codex-1):
 - Tell Core which revision is live before S-057's field walk. If P1 registers `:19` first,
   S-057 becomes `:20`. Core's plan says "the next revision".
 
-**Guard, for every P1 and P2 plan.** Reject any of the following:
-- a target group attached to the other service's NLB;
-- one target IP:port registered on both NLBs (AWS's multi-NLB collision condition);
-- a target group with cross-zone `"true"`;
-- any `target_group_health` block.
+**NLB gates, for every P1 and P2 apply.**
+- `scripts/plan_guard.py` checks CloudTrail protection only. It does **not** enforce these
+  gates; they are manual, each with a stated evidence source (codex-1, codex-2).
+- **Authored configuration** (the phase PR's HCL, not plan values):
+  - why HCL: `target_group_health` is Optional+Computed in the provider, so a plan's `after`
+    values carry it even when the HCL omits it;
+  - no `target_group_health` block anywhere;
+  - `enable_cross_zone_load_balancing = false` on both NLBs;
+  - `load_balancing_cross_zone_enabled = "false"` on every NLB target group;
+  - each listener's `load_balancer_arn` and `default_action` reference its own service's NLB
+    and target group, by root resource reference. An unresolved reference is a stop, not a
+    pass.
+- **Plan JSON:** the resource change list matches the phase's expected list exactly.
+- **Live, after the apply:**
+  - `describe-load-balancer-attributes` shows cross-zone false on both NLBs;
+  - `describe-target-group-attributes` shows cross-zone false and the AWS-default DNS
+    failover on every target group;
+  - `describe-target-health` on each group lists only that service's task IP:port. ECS owns
+    registration, so the shared-IP:port check can only be made at runtime.
 
 **P2 additional hard stop:** any change to Core's NLB, listener, target group, zone, record or
 alarm.
@@ -391,11 +434,11 @@ alarm.
 **P1:**
 1. **Steady within 15 min, or abort.** Core's service has no deployment circuit breaker.
    - **On success:**
-     - `:18` 1/1 with digest `sha256:2393682f…a777`;
+     - `LIVE_TD` 1/1, running `LIVE_DIGEST`;
      - `stg-int-core-8000` healthy;
      - the public target group healthy.
    - **On abort:** remove `additional_load_balancers` (an in-place update). Then confirm:
-     - `:18` 1/1 with that digest;
+     - `LIVE_TD` 1/1, running `LIVE_DIGEST`;
      - the public target group healthy;
      - Core's service `loadBalancers` lists only the public target group;
      - `stg-int-core-8000` has no registered targets. ECS deregisters them when the
@@ -421,6 +464,11 @@ alarm.
    over time, plus failed connects.
 
 **Probe family `arclight-probe-staging`:**
+- **Ownership (codex-1):**
+  - Terraform owns the execution role and the log group; both are in P1's target list.
+  - The task definition is registered by hand for each run, from a JSON template committed
+    with P1 and pinned to `LIVE_DIGEST`. It is deregistered after the run.
+  - It is not a Terraform resource.
 - **Image:** Core's, by digest, re-pinned each run from the live Core revision (ECR keeps the
   last ten `v` tags). It has Python and the Debian CA store, and `CMD` only.
 - **Secrets:** none, and no task role.
@@ -461,6 +509,13 @@ alarm.
 - **P2:** one alarm per SF group, with `actions_enabled = var.shuttleforge_desired_count > 0`
   (the NF pattern at `nerfherder.tf:506`). Otherwise breaching-on-missing would page while SF
   is 0/0.
+  - **SF's first start is G4's gate, not the alarms' (codex-2).**
+  - At 0/0 these alarms sit in ALARM with actions disabled. CloudWatch notifies only on a state
+    change, so enabling actions later sends nothing while the state stays ALARM. A first SF
+    task that never becomes healthy therefore pages no one.
+  - G4's operator readiness gate owns that failure.
+  - When G4 adopts `shuttleforge_desired_count = 1`, apply the alarm updates and confirm
+    `ActionsEnabled = true` and `StateValue = OK` on all three before closing G4.
 - **Never alarm on `ZonalHealthStatus`.** A cross-zone-off singleton always reports 0 in the AZ
   without its task.
 
@@ -485,30 +540,39 @@ AWS list prices for us-east-1, read 2026-11-10:
 | Two NLBs (2 × $0.0225 × 730 h) | $32.85 |
 | Two Route 53 private zones | $1.00 |
 | Alarms: Core $0.10, plus SF $0.30 from P2 | $0.40 |
-| NLCU: a fraction of one at staging load | ceiling +$4.38 per NLB at one full NLCU |
-| Inter-AZ transfer: about $0.01/GB each way when a consumer and the published node are in different AZs | cents |
+| NLCU: a fraction of one at staging load | +$4.38 per NLB at one full NLCU continuously |
+| Inter-AZ transfer: $0.01/GB charged at each end when a consumer and the published node are in different AZs | cents |
 
-- **After P1:** about $17.03.
-- **After P2:** about $34.25 base, or $34.55 with all alarms.
-- **Ceiling:** about $43.30.
+- **After P1:** about $17.03 (one NLB, one zone, one alarm).
+- **After P2:** about $34.25, including all four alarms.
+- **With one full NLCU on each NLB:** about $43.01, before transfer, probe runs and logs. That
+  is not a ceiling.
 
 ## Rollback
 
 **P1:**
-- Remove Core's `additional_load_balancers`. That is in place and a rolling deployment of
-  `:18`.
+- Remove Core's `additional_load_balancers`. That is an in-place update and a rolling
+  deployment of `LIVE_TD`.
 - Destroy Core's NLB resources. The public path is untouched.
-- If `:19` turns out wrong, deregister `:19` so `:18` is the latest ACTIVE revision again.
-- Image rollback stays "update the service to revision 17", or to the previous revision after
-  later releases. `loadBalancers` lives on the service, so a task-definition rollback keeps
+- If `P1_TD` turns out wrong, deregister `P1_TD` so `LIVE_TD` is the latest ACTIVE revision
+  again.
+- Image rollback stays "update the service to `ROLLBACK_TD`" (`:17` today). `loadBalancers` lives on the service, so a task-definition rollback keeps
   the NLB attached. Removing the NLB is its own rollback (Core).
 
 **P2:** remove SF's `additional_load_balancers`, then SF's NLB resources. Core is unaffected.
 
-**P3**, in order:
-1. Restore the direct rules **first**.
-2. Restore the templates and SSM.
-3. Redeploy the `http` revisions. Restoring templates alone does not move a running service.
+**P3.** D-077 bounds this rollback (codex-2, hotpants).
+- **After a consumer's live-material gate** (SF past Stage C entry, or NF past N-G4), plain HTTP
+  is never a recovery path.
+  - Repair TLS.
+  - If compliant transport is unavailable, **hold or stop** that consumer's activity until it
+    is restored.
+- **Before that gate** (fixture data only), HTTP recovery is allowed, in this order:
+  1. restore the direct rules first;
+  2. restore the templates and SSM;
+  3. register a **new ACTIVE** `http` revision with the intended digest, then `update-service`.
+     - A deregistered pre-P3 revision cannot be reused.
+     - Restoring templates alone does not move a running service.
 
 ## Residual risks
 
@@ -587,3 +651,23 @@ AWS list prices for us-east-1, read 2026-11-10:
 - **Core, via Complex:** concurs, with no code change. Its three settings and its stalled-body
   note are included.
 - **Owner, 2026-11-10:** approved two NLBs (+$16.93/month) and disabling "Terraform Apply".
+- **Confirmation round on revision 3 (`53c42b7`)**, same reviewers and setup, at the owner's
+  direction. Reports are in the session scratchpad under `nlb/r3/`.
+  - **Verdicts:**
+    - codex-1: GO-WITH-CHANGES for the merge and P1;
+    - codex-2: GO-WITH-CHANGES for the merge, GO for P1;
+    - hotpants: GO-WITH-CHANGES for both.
+  - All three confirm F1 and F2 are resolved and ask for no topology change.
+  - Their P2 corrections were each checked against code, AWS docs or SF's manifest at
+    `63f4492` before acceptance. All are applied:
+    - captured revision identities instead of a fixed `:18` / `:19`;
+    - a P3 rollback that respects D-077 and never reuses deregistered revisions;
+    - the NLB gates as manual checks with stated evidence sources (`plan_guard.py` covers
+      CloudTrail only);
+    - G4 owning SF's first-start failure while its alarms are muted;
+    - path B for stopped services;
+    - probe task-definition ownership;
+    - sentinel inspection by ARN dereference;
+    - consumer attestation that clients verify certificates and hostnames;
+    - the SF YAML naming marked as agreed and pending;
+    - corrected costs.
