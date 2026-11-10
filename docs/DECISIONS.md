@@ -256,7 +256,7 @@ Saving about $72/month. A production deployment after v1 starts from D-056, not 
 **Authority**: the owner's ruling, 2026-11-10 ("4. absolutely", on Overcast's proposal while C-G7 was being scoped). | **Recorded**: 2026-11-10. Spec: [nf-egress-lockdown.md](proposals/nf-egress-lockdown.md).
 
 **The rule:**
-- A service that Overcast deploys gets **no** route to the internet unless it is explicitly granted one.
+- A service that Overcast deploys has **no permitted direct internet egress from its task ENI** unless it is explicitly granted. This is enforced in the service's security group; shared NAT routes may remain for the services that are granted egress (wording per codex-2's review).
 - Its security group names only what the service needs: other services' security groups, interface endpoints and the S3 gateway prefix list.
 - The Fargate module's `443 → 0.0.0.0/0` rule becomes opt-in (`internet_egress`, default `false`).
 

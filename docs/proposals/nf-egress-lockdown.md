@@ -1,7 +1,12 @@
 # Nerfherder egress lockdown: no internet path from NF's group (C-G7, DR-20, O-017)
 
-Status: **DRAFT revision 1, for review. Nothing built or applied.** Each phase is applied only on
-the owner's go, given first-hand.
+Status: **DRAFT revision 2, for approval. Nothing built or applied.** Each phase is applied only
+on the owner's go, given first-hand.
+
+Revision history:
+- **Revision 1** (`b792de3`) was reviewed by codex-1, codex-2 and hotpants. All three returned
+  GO-WITH-CHANGES with no P1 finding.
+- **Revision 2** folds in their findings and NF's answers of 2026-11-10 (see "Review record").
 
 ## Why
 
@@ -14,9 +19,15 @@ the owner's go, given first-hand.
     RDS 5432 and self 8100.
 - **DR-20.** `NERFHERDER_EGRESS_MODE=sf_required` is enforced in NF's configuration, not the
   network.
-- **NF's manifest expects this change.** Its egress list keeps "443 for secret injection" only
-  until Overcast's interface endpoints exist (NF `docs/DEPLOYMENT_MANIFEST.md:185` at
-  `0f755ea3`).
+- **NF's manifest expects this change.** At NF main `809c130` (`docs/DEPLOYMENT_MANIFEST.md`):
+  - l.183: "443 to the interface-endpoint group (ECR api and dkr, Logs; Secrets Manager
+    proposed)";
+  - l.184: "443 to 0.0.0.0/0 today (… Overcast proposes removing it once Secrets Manager has its
+    endpoint)".
+  - NF drops "proposed" at L1 and removes l.184 at L2, as docs-only changes. Overcast tells NF
+    before each.
+  - The code inventory below is pinned at `0f755ea3`. The 16 commits up to `809c130` touch no
+    `src/` file.
 - **Owner rulings, 2026-11-10:**
   - spec the lockdown (C-G7 / DR-20);
   - **O-017: consumer services get no internet egress by default. Core and ShuttleForge keep it
@@ -87,8 +98,10 @@ through the task ENI.
 In `terraform/modules/ecs-service-fargate`:
 - **New variable** `internet_egress` (bool, **default `false`**). It controls the module's
   `443 → 0.0.0.0/0` rule.
-- `aws_security_group_rule.https_egress` gains `count = var.internet_egress ? 1 : 0`, and its
-  description becomes "HTTPS to the internet (O-017 opt-in)".
+- `aws_security_group_rule.https_egress` gains `count = var.internet_egress ? 1 : 0`.
+  - **Its description stays as it is.** Changing it would turn Core's and SF's moves into
+    in-place updates and break L2's exact-plan gate (codex-1).
+  - The O-017 explanation goes in a code comment instead.
 - **A `moved` block** in the module, from `aws_security_group_rule.https_egress` to
   `aws_security_group_rule.https_egress[0]`:
   - Core and SF keep their rules with no replacement and no egress gap;
@@ -132,28 +145,59 @@ the three rules and O-017.
   - NF's migrations make no HTTP or AWS calls (`alembic/`, Proven).
   - Locking it the same way takes the same three rules. **Owner's call; not proposed here.**
 - **SF's own groups and P2's NLB pairs.** P2 adds NF's rules to SF's NLB on its own plan.
+  - NF reaches SF only on 9000, 9050 and 9100: to SF's tasks before P3, and to SF's NLB after
+    (internal-TLS spec l.60 and l.221). Neither path uses 443, so this change never touches NF's
+    route to SF.
 - **Prod.** NF does not run there (D-072).
+
+### D5. An injection canary, so the new path is proven before any real start
+
+Secret injection is the endpoint's main new dependency. Fargate performs it before the
+application starts, so it can be proven with an inert task (codex-2).
+
+**Revision 2 uses Overcast's own canary, not a module's secret:**
+- **Shell:** `aws_secretsmanager_secret.probe_canary`, named `arclight/<env>/probe/canary`. Its
+  value is a fixed, non-sensitive string, set out of band with `put-secret-value` at L1, so it
+  never enters state (INV-004).
+- **Role:** the probe's execution role, `probe_exec`, gains `secretsmanager:GetSecretValue` on
+  that one ARN, plus `kms:Decrypt` conditioned on `kms:ViaService = secretsmanager.<region>`.
+  That is the same pattern as NF's execution role.
+- **Probe:** `run_probe.py --canary` binds it as `PROBE_CANARY`. `probe.py` reports only
+  `canary: present` and the value's length, never the value.
+- **Why not a Core secret** (codex-2's proposal)? That would place a module's secret in an
+  Overcast test task. The canary keeps custody with the modules, and it is reusable for the next
+  consumer lockdown.
+
+Cost: about $0.40/month.
 
 ## Phases
 
 Two applies, so the endpoint can be verified while NF still has its open path.
 
-**L1: endpoint and outputs.** No change to any group's rules.
-- **Expected plan:** `+1` `module.vpc.aws_vpc_endpoint.extra["secretsmanager"]`; two new module
-  outputs; nothing else.
+**L1: endpoint, canary and outputs.** No change to any group's rules.
+- **Expected plan**, exactly:
+  - `+1` `module.vpc.aws_vpc_endpoint.extra["secretsmanager"]`;
+  - `+1` `aws_secretsmanager_secret.probe_canary`;
+  - `~1` `aws_iam_role_policy.probe_exec` (the D5 statements only);
+  - two new module outputs.
+
+  There are no Route 53 resources: AWS manages the private DNS (codex-1).
 - **Gate:** no ECS rollout in flight (any service), and `plan_guard` OK.
+- **After the apply:** set the canary's value. Tell NF before the apply.
 
 **L2: the lockdown.**
 - **Expected plan:**
-  - `moved`: `module.core_service…https_egress` → `[0]` and
-    `module.shuttleforge_service…https_egress` → `[0]` (no change);
-  - `-1` `module.nerfherder_service.aws_security_group_rule.https_egress[0]`;
+  - two pure moves, `module.core_service…https_egress` and
+    `module.shuttleforge_service…https_egress` to `[0]` (no-op, `previous_address` set);
+  - `-1` `module.nerfherder_service.aws_security_group_rule.https_egress[0]`, moved and then
+    destroyed;
   - `+3` the NF rules in D3;
-  - nothing else. In particular, no change to any ECS service or task definition.
+  - **nothing else:** no update, and no ECS service or task-definition change.
 - **Gate:**
   - L1's acceptance passed;
   - the plan JSON matches the expected list exactly;
-  - `plan_guard` OK.
+  - `plan_guard` OK;
+  - NF told.
 
 NF and SF are at 0/0 (`describe-services`, 2026-11-10), so L2 changes no running task's path.
 
@@ -165,65 +209,118 @@ in the private app subnets with no public IP.
 **L1:**
 1. From NF's group, `secretsmanager.us-east-1.amazonaws.com` resolves only to addresses in
    `10.0.10.0/24` and `10.0.11.0/24`, and a TLS handshake to it verifies against public roots.
-2. A Core task start is not required. The next Core deploy (S-057) is the first secret
-   injection through the endpoint; it is watched, not forced.
+2. **Canary injection** (`--canary`) succeeds from NF's group. The task reaches RUNNING, and the
+   probe reports `canary: present`. Private DNS sends that retrieval through the endpoint.
+3. **Positive control for L2's negative.** The `blocked`-mode targets in L2 item 5 **connect on
+   443** from NF's group. Port 80 is already blocked and is recorded as blocked.
+4. The next Core deploy (S-057) is the first module injection through the endpoint. It is
+   watched, not forced.
 
 **L2 (discriminating):**
-1. **The probe task starts and its log arrives.** That proves the ECR endpoints, the S3 prefix
-   list for layers, and the Logs endpoint from NF's group.
+1. **The probe task starts and its log arrives.**
+   - That proves the ECR endpoints, the S3 prefix list for layers, and the Logs endpoint from
+     NF's group.
+   - Linux Fargate does not cache image layers (codex-1).
 2. **Core.** `core-internal` gives verified TLS and `/ready` 200 through each node IP.
-3. **Secrets Manager.** TLS to the endpoint name verifies.
-4. **S3.** NF's bucket host, in the form botocore uses for `us-east-1` (`<bucket>.s3.amazonaws.com`
-   and the regional `<bucket>.s3.us-east-1.amazonaws.com`), resolves inside the prefix list's
-   CIDRs and completes a verified TLS handshake.
+3. **Canary injection** still succeeds, now with no open 443.
+4. **S3.** These hosts resolve inside the prefix list's CIDRs and complete a verified TLS
+   handshake:
+   - required: `arclight-staging-nerfherder-artifacts.s3.amazonaws.com:443`, the global host NF
+     reports for its boto3 1.43.77 build;
+   - also: `arclight-staging-nerfherder-artifacts.s3.us-east-1.amazonaws.com:443`, because NF
+     pins only `boto3>=1.34` and a later default could change (codex-1).
 5. **Negative: no internet path.**
-   - TCP 443 and TCP 80 to two public addresses outside AWS's S3 ranges (for example
-     `1.1.1.1:443` and the resolved address of `example.com`) **time out**.
-   - Run the same probe once **before** L2 as the positive control: it must connect.
+   - The targets that connected in L1 item 3 now **time out** on 443: `1.1.1.1:443`, and the
+     resolved address of `example.com:443`.
+   - Port 80 to the same addresses stays blocked.
 6. **Core and SF unaffected.** Both services are steady, and their groups' egress rules are
    identical before and after (`describe-security-groups`).
-7. **Secret injection in NF's group, end to end,** is proven at N-G4, when NF's service task
-   first starts with its secrets. It cannot be proven earlier without an NF image.
-   - If that start fails with `ResourceInitializationError`, use the rollback below.
+7. **The exact NF proof** comes at N-G4, when NF's service task first starts with its own
+   secrets. If that start fails with `ResourceInitializationError`, roll back L2.
+8. **C-G7's operational evidence** is not this receipt. L2 can pass with SF at 0/0. Before
+   NF's first collection, NF's lease smoke runs under the deployed restrictions. The internal-TLS
+   spec's acceptance P2 already requires it ("The proxy path is proven by NF's lease smoke")
+   (hotpants).
 
-**Probe extension** (implementation PR): an optional list of `host:port:expect` checks, where
-`expect` is `tls`, `connect` or `blocked`. The probe prints each result in the `PROBE` line. No
-change to the existing checks.
+**Probe extension** (implementation PR):
+- an optional list of `host:port:expect` checks, where `expect` is `tls`, `connect` or
+  `blocked`. Each result goes in the `PROBE` line.
+- `--canary` (D5).
+
+The existing checks do not change.
 
 ## Rollback
 
-- **L2:** set `internet_egress = true` on `nerfherder_service`. One apply restores the
-  `443 → 0.0.0.0/0` rule at `[0]`. The three new rules can stay.
-- **L1:** remove `"secretsmanager"` from `extra_interface_endpoints`. Secrets Manager reverts to
-  the NAT path for every task.
+- **L2:** set `internet_egress = true` on `nerfherder_service`. One apply re-creates the
+  `443 → 0.0.0.0/0` rule at `[0]`, with a new rule ID. The three new rules can stay.
+- **L1:** roll back L2 first, then remove `"secretsmanager"` from `extra_interface_endpoints`.
+  Secrets Manager then reverts to the NAT path for every task.
   - Core, SF and dbbootstrap all keep `443 → 0.0.0.0/0`, so they work either way.
-  - NF needs L2 rolled back first.
+  - The canary can stay.
 
 ## Risks
 
 - **Staging-wide private DNS (D1).** A broken endpoint stops every task start that injects
   secrets.
-  - Mitigations: two AZs, L1's resolution check, and watching the next Core deploy.
+  - Mitigations: two AZs, L1's resolution and canary checks, and watching the next Core deploy.
   - The rollback is one apply.
-- **The S3 hostname form (Inferred).** botocore's default for `us-east-1` is the legacy global
-  host. Its addresses are us-east-1 S3 ranges, which should be in `pl-63a5400a`. Acceptance
-  item 4 decides.
-- **Fargate agent traffic (Inferred).** ECS's network guidance lists agent management and
-  telemetry endpoints for custom firewalls. On Fargate the agent is AWS-managed and is not
-  expected to use the task's security group. Acceptance item 1 (the task starts, runs and stops
-  normally) decides.
+  - The endpoint group admits only the private app subnets, so a one-off task placed elsewhere
+    cannot reach it.
+  - The runbooks place dbbootstrap tasks in the app subnets. Core's migration run in
+    `deploy-service.md` (l.105) has a placeholder network configuration (codex-1). Name the app
+    subnets there (DR-22).
+- **The S3 prefix-list rule is service-wide, not bucket-specific** (hotpants).
+  - NF's bucket scope comes from its task role.
+  - At the network level, NF can still reach any us-east-1 S3 bucket. That includes an origin
+    hosted on S3, or a foreign bucket that accepts writes.
+  - NF's code refuses direct source paths (`sf_required`, Proven at `0f755ea3`).
+  - Closing the network gap needs a gateway endpoint policy, for example
+    `aws:ResourceAccount` = this account plus the ECR layer bucket. That would affect **every**
+    staging task, so it is not proposed here.
+- **Fargate agent traffic.** AWS says Fargate needs no ECS interface endpoints (codex-1, ECS
+  VPC endpoints guide). L2 item 1 confirms it.
 - **SF's `transport_endpoint`.** NF dials whatever host and port SF's lease returns, with no
   allowlist (`strategies.py:352-360`).
-  - With only SG-to-SG rules to SF on 9050/9100, any other destination fails closed, which is
-    the intent.
-  - Asked NF and SF which host form SF returns in staging (2026-11-10).
+  - It is independent of this change, because NF never reaches SF on 443 (D4).
+  - It is an activation dependency for P2, P3 and N-G4. A destination outside the permitted SF
+    path fails closed, which is the intent.
+  - SF confirms the :9100 route's port at P2.
+- **Core's exception has no declared purpose** (hotpants, P3). Overcast asks Core to declare its
+  external dependencies in its manifest. This does not block NF's lockdown.
 - **A future NF dependency** (telemetry, a JWKS fetch) needs an explicit rule. NF's manifest
   egress list is the contract; a change to it is a change request to Overcast.
+- **SG-only enforcement** fails if an open rule or an open group is later added to NF's task
+  (codex-2). The plan gate and this spec's rule list are the control. A consumer subnet split is
+  not warranted now.
 - **ECS Exec stays off (O-018).** No `ssmmessages` endpoint is needed.
 
 ## Decisions recorded with this spec
 
-- **O-017:** consumer services get no internet egress by default.
+- **O-017:** consumer services get no permitted direct internet egress by default.
 - **O-018:** no ECS Exec for ShuttleForge.
 
 Both are in `docs/DECISIONS.md`.
+
+## Review record
+
+Revision 1 `b792de3`; codex-1, codex-2 and hotpants (gpt-6-astra, ultra, read-only); all
+GO-WITH-CHANGES, no P1.
+
+| Finding | From | Disposition |
+|---|---|---|
+| The TCP 80 positive control can never pass (NF allows only 443 today) | all three | **Accepted:** 443 connects before and times out after; 80 is blocked both times |
+| D2's description change makes Core's and SF's moves updates, breaking the exact-plan gate | codex-1 | **Accepted:** description unchanged; L2 is now 3 create, 1 destroy, 2 no-op moves |
+| Injection can be proven before N-G4 with an inert task | codex-2 | **Accepted, with Overcast's own canary (D5)** instead of a Core secret |
+| O-017's "no route" contradicts keeping the NAT route | codex-2 | **Accepted:** "no permitted direct internet egress from its task ENI" |
+| Core's exception has no declared dependencies | hotpants | **Accepted, nonblocking:** asked of Core |
+| The S3 prefix-list rule is service-wide | hotpants | **Accepted:** wording, plus the residual and the endpoint-policy option (not proposed) |
+| NF's boto3 is unpinned (`>=1.34`) | codex-1 | **Accepted:** the global host is required, the regional host also probed |
+| C-G7 needs operational evidence, not just a network receipt | hotpants | **Accepted:** L2 item 8 |
+| Placement of Core's migration run task is unverified | codex-1 | **Accepted:** a risk line; the fix belongs in DR-22's runbook pass |
+| The O-018 one-off pattern proves connectivity, not SF's live-provider behaviour | hotpants | **Noted:** SF's behavioural checks are SF's (its logs and `/ready/detail`) |
+| L1 creates no Route 53 resources; outputs don't change prod's plan | codex-1 | **Folded** into L1's expected plan |
+
+**NF's answers (2026-11-10):**
+- `transport_endpoint` is SF's value, and is independent of 443 (D4).
+- The S3 host is global, as above.
+- NF's T2 S9 counts `core_auth.unreachable` (internal-TLS amendment 3a).
