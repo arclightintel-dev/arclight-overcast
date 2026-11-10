@@ -327,6 +327,18 @@ shows the `https` URLs and no `NERFHERDER_ALLOW_PLAINTEXT_INTERNAL_HTTP`. That r
   - the direct rules removed;
   - SF's written confirmation, with code references, that its JWKS client verifies the server
     certificate and hostname. A successful call alone does not prove verification (hotpants).
+    - **Received 2026-11-10, at r6 `55a2d20`. Overcast checked it read-only:**
+      - the only JWKS client is `httpx.AsyncClient(timeout=10.0)` (`shuttleforge/auth/jwks.py:109`),
+        so httpx defaults apply: `verify=True`, `CERT_REQUIRED`, `check_hostname`;
+      - no verification-disabling pattern appears in `shuttleforge/`, `scripts/entrypoint.sh`
+        or the `Dockerfile`.
+    - **Its conditions are Overcast's to keep.** The client honours its environment, so SF's
+      task definition must set none of `SSL_CERT_FILE`, `SSL_CERT_DIR`, `HTTPS_PROXY` or
+      `HTTP_PROXY`. None is set in `services/shuttleforge/task-definition.json.tpl` today, and
+      P3 must not add one.
+    - **Re-confirm at Stage C against the pushed CI image's resolved httpx.** That is r6's
+      0.28.1. SF's push compares `pip freeze` with r6's reference and stops on any
+      difference.
 - **N-G4 completes only when all of these hold:**
   - NF's **running** task is on an `https` revision with no plaintext flag;
   - its Core token call over `core-internal` succeeds;
