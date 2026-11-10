@@ -603,6 +603,13 @@ alarm.
   reports 0 in the AZ without its task.
 - **`TCP_Target_Reset_Count` on Core's NLB is the watch item for amendment 3a's residual
   collision risk.** It stays non-paging until a baseline exists.
+  - **Observed after the 3a apply (2026-11-10):** two probes left 25 target resets, all on
+    the cross-zone (1a) node, decaying over four minutes after the probe tasks had stopped.
+    Every request succeeded, and Core logged no error.
+  - So the metric alone cannot separate collisions from teardown noise. A collision shows as a
+    failed connect or request, such as NF's `core_auth.unreachable`, and that is the
+    discriminating signal.
+  - The cause is Unverified (see `PROJECT_STATE.md`, DR-10).
 
 **Diagnostic metrics** (dashboard or non-paging until a baseline exists):
 - **Per NLB:**
