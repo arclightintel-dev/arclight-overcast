@@ -4,6 +4,7 @@ Status: **N-G1 APPLIED 2026-11-09 21:05:34-21:06:35Z (owner's go): 38 added, 1 c
 remaining gates; every apply needs the owner's go first-hand. Inputs: NF's accepted manifest at
 `cf5b228` (final for every rendered value), O-013, and Overcast's nine confirmations of
 2026-10-29. Nothing contradicts them.
+**N-G3 complete 2026-11-10 20:49Z** (owner's go): migrate `:2` on `sha256:ee9ebfe3…6fde1` (`v1-59a9ede`) returned `migrate.ok` at `b8f7a31e024c`, and the `nf-app-role` re-run exited 0. Record: `docs/PROJECT_STATE.md`.
 
 ## Built (`terraform/envs/staging/nerfherder.tf`)
 
