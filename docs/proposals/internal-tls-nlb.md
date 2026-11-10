@@ -236,9 +236,12 @@ your Network Load Balancer*)
     SF's `/ready` and `/ready/detail` at `https://shuttleforge.<domain>` through Cloudflare and
     Access to the public ALB. SF stays attached to the ALB target group on 9000
     (`shuttleforge.tf:42`), and the ALB's security group stays admitted on 9000.
-  - *How the manifest's YAML names the NLB listeners.* Overcast proposes
-    `exposure: internal_nlb_tls` on 9050 and 9100, and on 9000 alongside `alb`. The wording is
-    SF's to write.
+  - *How the manifest's YAML names the NLB listeners.* SF's additive form: each port keeps its
+    current `exposure` string (the Stages A/B registration) and gains `internal_tls: nlb`.
+    - No Overcast tooling parses SF's manifest; the only references are prose and Terraform
+      comments (checked 2026-11-10).
+    - A list-typed `exposure` would break SF's `tests/test_deployment_5a.py`, which pins each
+      `exposure` as a string. The wording is SF's.
 - SF is at 0/0, so no task starts.
 - **SF deploy gap.** A stop-before-start (0/100) outage lasts several minutes, not 60 s. It adds
   up:
