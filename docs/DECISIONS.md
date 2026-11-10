@@ -251,6 +251,39 @@ Saving about $72/month. A production deployment after v1 starts from D-056, not 
 - `restore-db-instance-from-db-snapshot`, then `modify-db-instance --manage-master-user-password`.
 - Secret shells are restorable for 30 days.
 
+## O-017: Consumer services get no internet egress by default
+
+**Authority**: the owner's ruling, 2026-11-10 ("4. absolutely", on Overcast's proposal while C-G7 was being scoped). | **Recorded**: 2026-11-10. Spec: [nf-egress-lockdown.md](proposals/nf-egress-lockdown.md).
+
+**The rule:**
+- A service that Overcast deploys has **no permitted direct internet egress from its task ENI** unless it is explicitly granted. This is enforced in the service's security group; shared NAT routes may remain for the services that are granted egress (wording per codex-2's review).
+- Its security group names only what the service needs: other services' security groups, interface endpoints and the S3 gateway prefix list.
+- The Fargate module's `443 → 0.0.0.0/0` rule becomes opt-in (`internet_egress`, default `false`).
+
+**Explicit exceptions, by the owner:**
+- **Core** keeps internet egress.
+- **ShuttleForge** keeps it. It is ShuttleForge's job to reach the internet for its consumers (DR-15).
+
+**Why.** A consumer's "only through ShuttleForge" posture (Nerfherder's `NERFHERDER_EGRESS_MODE=sf_required`) must hold in the network, not only in the consumer's configuration (C-G7, DR-20).
+
+**Consequences:**
+- New consumer modules start with no internet egress. Their manifest's egress list is the contract, and any change to it is a change request to Overcast.
+- The dbbootstrap group (operations tooling) is outside the rule's scope until the owner extends it.
+
+## O-018: No ECS Exec for ShuttleForge
+
+**Authority**: the owner's ruling, 2026-11-10 ("5. agree", on Overcast's recommendation, in answer to SF's plan item 22). | **Recorded**: 2026-11-10.
+
+**The ruling:** ShuttleForge's task keeps holding no AWS credentials:
+- no task role;
+- `enableExecuteCommand` false;
+- no cluster exec configuration;
+- no `ssmmessages` endpoint.
+
+**Instead,** any in-task verification SF needs is a **one-off task whose output lands in CloudWatch Logs**. It runs in SF's security group, with no secrets beyond what the check needs, and its revision is deregistered afterwards. Overcast's internal-TLS probe (`scripts/internal-tls-probe/`) is the pattern.
+
+**Why.** Enabling Exec would give SF's task a role with `ssmmessages` permissions and open an interactive path into the task that holds live provider credentials. That reverses SF's security posture for a debugging convenience.
+
 ## Core coordination disposition — not a new mechanism decision
 
 **Review date**: 2026-10-01 | **Recorded here**: 2026-10-03.
