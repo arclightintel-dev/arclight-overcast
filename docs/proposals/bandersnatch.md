@@ -402,7 +402,10 @@ does not quote it.
   nonce matches, which is how scanner pre-fetches show up. `HEAD` is treated the same way.
 - **`POST /a/<nonce>`** (the click) starts the session when all hold:
   - the nonce is the token's current link, unconsumed and less than 24 h old;
-  - the token, its account and its release pass the same checks as at submission;
+  - the token is not revoked or expired, its account is not suspended, its release is flagged
+    accessible, and it has an **activation** left. The link-email budget is **not** checked
+    here: the link in the last permitted mail must still work after that mail has used the
+    budget up;
   - **binding (D6):** the request carries the cookie `B` whose hash was recorded with this
     link, **or** the form carries the token itself.
 - Without `B` the click page answers with one field asking for the access code. So the
@@ -414,7 +417,8 @@ does not quote it.
   32 random bytes, `__Host-` prefix, `Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age` set
   to the seconds remaining) and redirects (303) to `/v/`.
 - **Re-attaching, never restarting.** If the link is already consumed and its session is
-  still inside its hour, a `POST` that passes the binding check gets that same session back:
+  still inside its hour, a `POST` that passes the binding check gets that same session back
+  (the activation budget is not checked again, since no new activation happens):
   a new session identifier, the old one dead, **the same end time**. This covers a response
   lost on a mobile network, a double click, and a mail app's built-in browser handing over
   to the real one. Without it the only activation could be spent with nothing to show for it.
@@ -442,9 +446,10 @@ origin, and ALB access logs are off; if they are ever turned on, `/a/` must be e
 #### Session
 
 - Every `/v/*` and `/d/*` request needs a session whose hash exists, whose end time (start +
-  3600 s, fixed) is in the future, and whose token, account and release still pass. Token and
-  release are read consistently on every request, so revoking a token or flagging a release
-  takes effect at the next request. Suspending an account reaches each of its tokens within
+  3600 s, fixed) is in the future, whose token is not revoked, whose account is not suspended
+  and whose release is flagged accessible. (The token's own expiry and budgets are checked at
+  submission and activation, not during the hour.) Token and release are read consistently on
+  every request, so revoking a token or flagging a release takes effect at the next request. Suspending an account reaches each of its tokens within
   seconds (see Data model).
 - No sliding expiry, no refresh, no second session from the same link. A1: extension means a
   new token.
@@ -902,7 +907,7 @@ The service's security group, complete:
 | T16 | **CSRF, forced downloads and clickjacking** | `Sec-Fetch-Site` and `Origin` on every `POST` and on downloads; no state change on any `GET`; `frame-ancestors 'none'` | None | AT-12 |
 | T17 | **Replay of an activation** | Conditional, idempotent transaction; a consumed link only re-attaches its own live session | None | AT-4 |
 | T18 | **Payload tampering or loss** | Three-point pin; no overwrite, no delete, no lifecycle; the task cannot write `releases` or the bucket | An administrator can still publish a wrong release (that is the release review's job) | AT-10 |
-| T19 | **Exposure through this public repository** | Neutral names; names, wording and pins out of git and out of CI logs; no control depends on the design being secret | The codename and design are public (see Hygiene) | AT-16 |
+| T19 | **Exposure through this public repository** | Neutral names; names, wording and pins out of git and out of CI logs; no control depends on the design being secret | The codename and design are public (see Hygiene) | AT-16, AT-16c |
 | T20 | **A lost response burns the only activation** | Re-attach within the hour | A recipient who loses both the cookie and the token needs a reissue | AT-4 |
 
 ## Blast radius
@@ -980,6 +985,10 @@ It can still move data out through AWS's own service endpoints (see Network).
   design. It must never reach a response, a mail, a cookie, a file name or a header the
   recipient sees; AT-16 searches every response and the received mail for it. Internal AWS
   names (service, tables, log group) may carry it: the recipient never sees them.
+- **R1's neutrality applies to the access pages and the mail, not to the payload.** The
+  payload is about its subject, and its stamp carries the recipient's own address by design.
+  AT-16c checks the access pages, the mail, the headers and the names for the product, the
+  modules, the recipient and the subject.
 - This document's own detail about the first payload is held to categories. The file-level
   evidence is in the owner's private receipt.
 
@@ -1039,6 +1048,14 @@ accepted):
 
 Also during drafting, from the owner: A3, A4 and A5, and the offer to extend the Cloudflare
 tokens (plan P0).
+
+**Automated review on the pull request, 2026-11-10** (Codex, on `b2d52b0`; both checked
+against the text and accepted):
+
+| Finding | Disposition |
+|---|---|
+| Activation reused submission's checks, including "a link email left", so the link in the last permitted mail could never activate | **Accepted:** activation and session checks are now listed separately and exclude the mail budget; AT-8 tests the third mail's link |
+| AT-16 searched every response, including the payload itself, for the payload's subject and the recipient, so a correct release would fail it | **Accepted:** AT-16 is the codename everywhere; AT-16c is product, modules, recipient and subject on the access pages and the mail only |
 
 **External reviews** (codex-1 correctness, codex-2 architecture, hotpants domain): prompts are
 prepared; they run on the owner's direction.
