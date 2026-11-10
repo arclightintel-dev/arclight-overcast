@@ -110,7 +110,7 @@ These documents live in arclight-complex and govern Overcast's behavior (aligned
 - **D-074**: token lifetime L = 900 s, JWKS cache C = 1 h; an edge gate such as Cloudflare Access is defense in depth only (§6)
 - **D-075**: CloudTrail log protection (applied as O-015). **D-076**: Core's `operator` principal type retired
 - **D-062**: coturn. No current consumer (Podbay deferred) and removed from Overcast (O-011)
-- **TESTING_PROTOCOLS §3**: `/ready` 200/503; deploy verification uses `/ready` and the running image digest and never presents a credential
+- **TESTING_PROTOCOLS §3**: `/ready` 200/503; deploy verification uses `/ready` and the running image digest and never presents a module credential (a Cloudflare Access edge token is outside the rule; Complex, 2026-11-10)
 - **charter-overcast.md**: Boundary charter (normative copy in arclight-complex)
 - **Platform Operations Model**: Rollback policy, alarm delivery, operational posture
 
