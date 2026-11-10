@@ -389,9 +389,18 @@ does not quote it.
 - **Equal responses:** status, headers and body are byte-identical apart from the cookie value
   (same length). Every response to a submission is held to a **floor of 1.0 s plus 0-200 ms
   of jitter** from receipt, so database work and mail hand-off cannot be timed.
-- **A link request is only spent when SES accepts the mail.** If the send fails after
-  retries, or the task stops with mail queued, the count is given back and `mail_failed`
-  alarms. On a stop signal the task drains its queue first.
+- **A link request is only spent when SES accepts the mail, and the reservation is durable.**
+  The submission's transaction reserves the count and records the link's mail state as
+  `pending` with a time. When SES accepts the message the state becomes `sent`; if the send
+  fails after retries (capped at 60 s) it becomes `failed`, the count is given back and
+  `mail_failed` alarms. On a stop signal the task drains its queue first.
+- **A task that dies with mail queued cannot give anything back, so the next submission
+  does.** A reservation still `pending` after two minutes was never confirmed. The next
+  valid submission for that token does not count it against the budget, and returns it in
+  its own transaction. An abrupt stop therefore costs the recipient one retry, never a link
+  from the budget. The nonce is still never stored: an unsent link is simply abandoned.
+  (If the task died after SES accepted but before recording it, the recipient can receive
+  one mail more than the budget. That is the safe direction.)
 
 #### Link and activation
 
@@ -419,7 +428,9 @@ does not quote it.
 - **Re-attaching, never restarting.** If the link is already consumed and its session is
   still inside its hour, a `POST` that passes the binding check gets that same session back
   (the activation budget is not checked again, since no new activation happens):
-  a new session identifier, the old one dead, **the same end time**. This covers a response
+  a new session identifier, the old one retired ten seconds later, **the same end time**.
+  The ten seconds are for races: after a double click or two requests in flight, whichever
+  response the browser keeps must carry a working identifier. This covers a response
   lost on a mobile network, a double click, and a mail app's built-in browser handing over
   to the real one. Without it the only activation could be spent with nothing to show for it.
   It is still one session and one hour (A1).
@@ -446,8 +457,9 @@ origin, and ALB access logs are off; if they are ever turned on, `/a/` must be e
 #### Session
 
 - Every `/v/*` and `/d/*` request needs a session whose hash exists, whose end time (start +
-  3600 s, fixed) is in the future, whose token is not revoked, whose account is not suspended
-  and whose release is flagged accessible. (The token's own expiry and budgets are checked at
+  3600 s, fixed) is in the future, which was not replaced more than ten seconds ago, whose
+  token is not revoked, whose account is not suspended and whose release is flagged
+  accessible. (The token's own expiry and budgets are checked at
   submission and activation, not during the hour.) Token and release are read consistently on
   every request, so revoking a token or flagging a release takes effect at the next request. Suspending an account reaches each of its tokens within
   seconds (see Data model).
@@ -510,8 +522,8 @@ protection on, AWS-owned encryption.
 | `accounts` | `account_id` + `item` (`META`, `ORG#…`, `DOMAIN#…`, `PERSON#<address>`) | label, state (`active`, `suspended`), notes; per assignment: who added it and when | Until the owner removes the account |
 | `releases` | `release_id` | `manifest_sha256`, **`access`** (`accessible`, `inaccessible`), source repository and commit, published at and by, access changes (at, by, why) | **Always** (A4) |
 | `tokens` | `token_hash`; index on `account_id` | `token_id`, `account_id`, `email`, `release_id`, `manifest_sha256`, `issued_at`, `issued_by`, `expires_at`, `max_activations`, `activations_used`, `max_link_requests`, `link_requests_used`, `current_link_hash`, `account_suspended`, `revoked_at`, `revoked_by`, `revoke_reason` | With the account (A3) |
-| `links` | `nonce_hash` | `token_hash`, `binding_hash`, `created_at`, `expires_at`, `consumed_at`, `session_hash` | TTL: `expires_at` + 30 d |
-| `sessions` | `session_hash` | `token_hash`, `nonce_hash`, `started_at`, `expires_at`, `ip`, `user_agent`, `revoked_at`, `replaced_by` | TTL: `expires_at` + 30 d |
+| `links` | `nonce_hash` | `token_hash`, `binding_hash`, `created_at`, `expires_at`, `consumed_at`, `session_hash`, `mail_state` (`pending`, `sent`, `failed`, `abandoned`), `mail_state_at`, `ses_message_id` | TTL: `expires_at` + 30 d |
+| `sessions` | `session_hash` | `token_hash`, `nonce_hash`, `started_at`, `expires_at`, `ip`, `user_agent`, `revoked_at`, `replaced_by`, `replaced_at` | TTL: `expires_at` + 30 d |
 | `limits` | `key` (`ip#…`, `email#…`, `global#…` with the window) | `count` | TTL: window end + 1 h |
 | `audit` | `event_id` (128 random bits); index on `account_id` | `at`, `event`, `outcome`, `account_id`, `token_id`, `session_id`, `release_id`, `manifest_sha256`, `ip`, `forwarded_for`, `cf_ray`, `user_agent`, `submitted_email`, `submitted_name`, `path`, `bytes`, `sha256`, `distribution_id`, `ses_message_id` | TTL per event class (D10) |
 
@@ -894,7 +906,7 @@ The service's security group, complete:
 | T3 | **Mail abuse and lockout**: using the form to mail-bomb someone, or to block a recipient | Mail goes only to the bound address of a valid token; three link emails per token, spent only on accepted sends; no limit that an outsider can trip against a recipient | The recipient can receive up to three link emails | AT-7, AT-8 |
 | T4 | **Enumeration through response differences** (status, body, headers, timing, cookies, limits) | Identical status, headers and body; cookie always set; 1.0 s floor with jitter; mail sent after the response; the only refusing limit ignores what was submitted | Statistical timing attacks need many samples, which the per-IP limit caps | AT-1 |
 | T5 | **Link forwarding** | Link alone is not enough (binding or token); single use; superseded by the next link; one-hour session | A recipient who forwards both the link and the token shares access; the audit log shows the second IP | AT-4 |
-| T6 | **Session theft** | `__Host-` cookie, `HttpOnly`, `Secure`, `SameSite=Lax`; strict CSP; no third-party code; one hour; re-attach kills the old identifier; revocable | Malware on the recipient's machine | AT-11, AT-12 |
+| T6 | **Session theft** | `__Host-` cookie, `HttpOnly`, `Secure`, `SameSite=Lax`; strict CSP; no third-party code; one hour; re-attach retires the old identifier; revocable | Malware on the recipient's machine | AT-11, AT-12 |
 | T7 | **Cache leakage** (Cloudflare, browser, proxies) | `no-store` everywhere; cache-bypass rule; no service worker; the page reloads at expiry | Content already on screen can be saved while the session lasts | AT-5b |
 | T8 | **Public object URLs** | Private bucket, Block Public Access, restrictive bucket policy, no presigned URLs, the application streams every byte | None | AT-9 |
 | T9 | **Indexing** | `X-Robots-Tag`, robots meta, `robots.txt` | A link pasted publicly by the recipient: the page needs a session anyway | AT-5b |
@@ -1056,6 +1068,8 @@ against the text and accepted):
 |---|---|
 | Activation reused submission's checks, including "a link email left", so the link in the last permitted mail could never activate | **Accepted:** activation and session checks are now listed separately and exclude the mail budget; AT-8 tests the third mail's link |
 | AT-16 searched every response, including the payload itself, for the payload's subject and the recipient, so a correct release would fail it | **Accepted:** AT-16 is the codename everywhere; AT-16c is product, modules, recipient and subject on the access pages and the mail only |
+| (on `50b96cf`) A task killed with mail queued keeps the budget spent, and nothing durable records the pending send | **Accepted:** the link record carries its mail state; a reservation unconfirmed after two minutes is returned by the next submission. The nonce is still never stored |
+| (on `50b96cf`) AT-4 required 49 of 50 concurrent clicks to be refused, but the re-attach rule lets bound requests succeed | **Accepted:** AT-4 asserts one activation and one end time; and re-attach now retires the old identifier after ten seconds, so racing responses cannot leave the browser with a dead one |
 
 **External reviews** (codex-1 correctness, codex-2 architecture, hotpants domain): prompts are
 prepared; they run on the owner's direction.
