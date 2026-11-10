@@ -187,10 +187,16 @@ module "core_service" {
   cloud_map_namespace_id = module.ecs_cluster.cloud_map_namespace_id
   target_group_arn       = module.alb.target_group_arns["core"]
   container_port         = 8000
-  desired_count          = var.core_desired_count
-  cpu                    = 256
-  memory                 = 512
-  execution_role_arn     = module.secrets.execution_role_arns["core"]
+  # Internal TLS (D-077, P1). The ARN goes through the listener so the service attaches only
+  # after the listener exists.
+  additional_load_balancers = [{
+    target_group_arn = aws_lb_listener.core_internal_443.default_action[0].target_group_arn
+    container_port   = 8000
+  }]
+  desired_count      = var.core_desired_count
+  cpu                = 256
+  memory             = 512
+  execution_role_arn = module.secrets.execution_role_arns["core"]
 
   container_definitions = templatefile("${path.module}/../../../services/core/task-definition.json.tpl", {
     environment                     = var.environment

@@ -95,7 +95,7 @@ resource "aws_ecs_service" "this" {
   deployment_minimum_healthy_percent = var.deployment_minimum_healthy_percent
   deployment_maximum_percent         = var.deployment_maximum_percent
 
-  health_check_grace_period_seconds = var.target_group_arn != null ? var.health_check_grace_period_seconds : null
+  health_check_grace_period_seconds = (var.target_group_arn != null || length(var.additional_load_balancers) > 0) ? var.health_check_grace_period_seconds : null
 
   dynamic "load_balancer" {
     for_each = var.target_group_arn != null ? [1] : []
@@ -103,6 +103,18 @@ resource "aws_ecs_service" "this" {
       target_group_arn = var.target_group_arn
       container_name   = var.service_name
       container_port   = var.container_port
+    }
+  }
+
+  # Extra target groups, e.g. an internal NLB (D-077 / DR-10). Pass each target_group_arn
+  # through the listener's default_action so the service waits for the listener: ECS refuses
+  # a target group that has no associated load balancer yet.
+  dynamic "load_balancer" {
+    for_each = var.additional_load_balancers
+    content {
+      target_group_arn = load_balancer.value.target_group_arn
+      container_name   = var.service_name
+      container_port   = load_balancer.value.container_port
     }
   }
 
