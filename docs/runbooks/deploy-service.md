@@ -1,12 +1,14 @@
 # Runbook: Deploy a Service
 
-## Boot order (D-056 §9)
+## Boot order (TESTING_PROTOCOLS §9)
 
 ```
 1. Core (Tier 0 — no upstream module dependencies)
 2. ShuttleForge (depends on Core for JWKS)
-3. Nerfherder (depends on Core for JWKS and ShuttleForge for leases; Podbay withdrawn, O-011)
+3. Nerfherder (depends on Core for JWKS and ShuttleForge for leases; Podbay deferred to v2, D-071)
 ```
+
+The database comes first. Staging is the only v1 platform environment (no production in v1).
 
 Deploy in this order. Each service must pass `/ready` before deploying the next.
 

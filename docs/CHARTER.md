@@ -3,7 +3,8 @@
 > This is a reference copy. The normative charter lives at:
 > `arclight-complex/platform/boundary-charters/charter-overcast.md`
 >
-> Updated 2026-07-02 per D-058 (scope expansion) and D-059 (environment topology)
+> Updated 2026-07-02 per D-058 (scope expansion) and D-059 (environment topology).
+> Aligned 2026-11-10 with arclight-complex `48c1715`: no production environment in v1 (owner ruling 2026-11-09, D-056 parked); Podbay deferred to v2 (D-071); Nerfherder enabled on staging only (D-072). The normative charter at `48c1715` still lists Route 53, Podbay ECR repositories and a weaker staging auto-deploy rule; reported to Complex.
 
 ## Summary
 
@@ -14,7 +15,7 @@ Overcast is the AWS deployment substrate repository for the Arclight platform.
 ### Owns
 
 - Infrastructure provisioning (VPC, ECS, RDS, ALB, ECR, IAM, Secrets Manager, CloudWatch)
-- All environment infrastructure (staging, production, future dev/preview)
+- All environment infrastructure (staging, production, future dev/preview). v1 has staging only; production is parked
 - Deployment automation (CI/CD deploy workflows — module repos own build/test)
 - Developer access provisioning (IAM Identity Center, OIDC trust policies)
 - Frontend web application deployment (S3 + CloudFront or Fargate)
@@ -47,6 +48,8 @@ See the full charter for service onboarding contract, drift risks, and governanc
 
 | Decision | Summary |
 |----------|---------|
-| D-056 | Production infrastructure spec (architecture, topology, security) |
+| D-056 | Production infrastructure spec (architecture, topology, security). Parked for v1 (owner ruling 2026-11-09) |
 | D-058 | Overcast scope: frontend, domains, all environments, CI/CD deploy, developer access |
-| D-059 | Environment topology: local + staging + prod, manual deploy trigger, hybrid CI/CD, SSO + OIDC |
+| D-059 | Environment topology: local + staging + prod, manual deploy trigger, hybrid CI/CD, SSO + OIDC. v1: staging is production (§9); no auto-deploy to staging while it carries operational material (§8) |
+| D-071 | Podbay deferred to v2: no Podbay deployment is a v1 target |
+| D-072 | Nerfherder deployment enabled on staging only; production remains deferred |

@@ -9,7 +9,7 @@
 | `vpc` | VPC, 6 subnets (public/app/db ×2 AZ), IGW, NAT GW, VPC endpoints (S3 gateway; ECR API/DKR and Logs interfaces), service SGs | Active |
 | `ecr` | ECR repositories (staging owns the four platform repositories; the Backstage root owns its three), lifecycle policies, immutable tags | Active |
 | `ecs-cluster` | ECS cluster, Cloud Map namespace | Active |
-| `ecs-service-fargate` | Generic Fargate service (task def, service, Cloud Map, SG rules); `lifecycle { ignore_changes = [task_definition] }` so out-of-band deploys aren't reverted | Active (Core) |
+| `ecs-service-fargate` | Generic Fargate service (task def, service, Cloud Map, SG rules); `lifecycle { ignore_changes = [task_definition] }` so out-of-band deploys aren't reverted | Active (Core, ShuttleForge, Nerfherder) |
 | `ecs-service-ec2` | Generic EC2-backed service | Stub only |
 | `rds-postgres` | PostgreSQL instance, managed password, SGs | Active |
 | `alb` | ALB, listeners, target groups, host routing, Cloudflare CIDR restriction | Active |
@@ -24,16 +24,20 @@
 
 ```
 terraform/envs/
-  staging/          — full environment: Core live (Podbay and coturn removed under O-011)
-    main.tf         — ~540 lines, 9 module calls + root resources
-    variables.tf    — 12 variables
+  staging/          — the v1 platform environment ("v1: staging is production", D-059 §9): Core live;
+                      ShuttleForge and Nerfherder wired at desired count 0 (Podbay and coturn removed, O-011)
+    main.tf         — 568 lines, 9 module calls + root resources
+    shuttleforge.tf — ShuttleForge service, migrate family, secrets and roles (1 module call)
+    nerfherder.tf   — Nerfherder service, bootstrap/migrate families, bucket and roles (O-013; 1 module call)
+    variables.tf    — 14 variables
     outputs.tf      — 15 outputs
     backend.tf      — S3 backend at staging/terraform.tfstate
     terraform.tfvars — gitignored, real values
-  prod/             — substrate only, no services
-    main.tf         — ~490 lines, 7 module calls (no ECR, no Core/Podbay service, no coturn);
-                      the VPC module also carries five one-AZ interface endpoints (O-012, OW-6)
-    variables.tf    — prod defaults (multi-AZ, larger instances)
+  prod/             — parked for v1 (no production environment, owner ruling 2026-11-09): reduced by O-016
+                      to what Backstage runs on
+    main.tf         — 93 lines, 3 module calls (vpc with NAT and the five one-AZ interface endpoints of
+                      O-012 / OW-6, alb, observability with the alarm topic and the ALB 5xx alarm)
+    variables.tf    — 7 variables
     backend.tf      — S3 backend at prod/terraform.tfstate
   backstage/        — Backstage host on the prod VPC and ALB (O-012); owner-applied, excluded from CI apply
     *.tf            — one EC2 Docker host, its data volume, IAM, buckets, secrets shells, SSM
@@ -70,11 +74,13 @@ Each service has templates in `services/{name}/`:
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `terraform-plan.yml` | PR touching `terraform/**` | Validate + plan, post to PR — **currently broken** (see below) |
-| `terraform-apply.yml` | Push to main touching `terraform/**` | Auto-apply staging — **currently broken** (see below) |
-| `deploy-service.yml` | `workflow_dispatch` (manual) + `repository_dispatch` (type `deploy-service`, cross-repo self-serve — O-009) | Register new task-def revision + update ECS service with new image tag |
-| `build-and-push-image.yml` | Manual (`workflow_dispatch`) | Fallback build of Overcast-owned images (dbbootstrap); module repos own their own build/test/push |
+| `terraform-plan.yml` | PR touching `terraform/**` | Validate + plan staging with the read-only plan role; summary-only PR comment (the repository is public). Works since 2026-10-23 (DR-1b plan side) |
+| `terraform-apply.yml` | Push to main touching `terraform/**` | Auto-apply staging — **broken** (DR-1; see below) |
+| `deploy-service.yml` | `workflow_dispatch` (manual) + `repository_dispatch` (type `deploy-service`, cross-repo self-serve — O-009) | Register a task-definition revision pinned by digest (O-3), update the ECS service, verify `/ready` and the running digest |
+| `build-and-push-image.yml` | Manual (`workflow_dispatch`) | Fallback build of Overcast-owned images (dbbootstrap). Cannot push today (DR-17a); module repos own their own build/test/push |
+| `deploy-backstage.yml` | Manual (`workflow_dispatch`) | Backstage release deploy over SSM (O-012) |
+| `terraform-backstage-validate.yml`, `terraform-corporate-validate.yml` | PR | Validation only for the Backstage and corporate roots |
 
 All workflows use GitHub OIDC — no long-lived AWS credentials.
 
-**CI status (2026-07-11):** `terraform-plan.yml` and `terraform-apply.yml` are broken. CI pins Terraform `~> 1.5`, which rejects the cross-variable `validation` block in `terraform/modules/iam-github-oidc/variables.tf` (`oidc_provider_arn` references `var.create_oidc_provider` — requires Terraform ≥ 1.9), and `terraform.tfvars` is gitignored so CI lacks required vars (`core_image_tag` has no default). All applies this session were run manually with admin credentials. Deploy-model rework is scoped next session (O-009, `docs/handoff/2026-07-10-handoff.md`). See DEVELOPMENT.md for the working (manual) apply path.
+**CI status (2026-11-10):** plan works on pull requests (Terraform 1.15.6, read-only role). `terraform-apply.yml` is still broken (DR-1: it uses the old role, pins Terraform `~> 1.5` and has no variables), so staging applies are run locally by an administrator after `scripts/plan_guard.py`. See DEVELOPMENT.md for the working apply path.
