@@ -58,9 +58,9 @@ variable "shuttleforge_policy_enabled" {
 }
 
 variable "shuttleforge_desired_count" {
-  description = "ShuttleForge ECS service desired task count (0 until the first digest deploy; a singleton, never above 1)"
+  description = "ShuttleForge ECS service desired task count (1 since the first digest deploy, SF.11 A5 2026-11-10; a singleton, never above 1)"
   type        = number
-  default     = 0
+  default     = 1
 
   validation {
     condition     = contains([0, 1], var.shuttleforge_desired_count)
