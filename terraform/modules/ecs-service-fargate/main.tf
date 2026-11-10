@@ -53,11 +53,7 @@ resource "aws_security_group_rule" "alb_ingress" {
   description              = "ALB to ${var.service_name}"
 }
 
-# O-017 opt-in (spec nf-egress-lockdown.md, D2). The description below is unchanged on
-# purpose: changing it would turn the moved rules of existing callers into in-place updates.
 resource "aws_security_group_rule" "https_egress" {
-  count = var.internet_egress ? 1 : 0
-
   type              = "egress"
   from_port         = 443
   to_port           = 443
@@ -65,11 +61,6 @@ resource "aws_security_group_rule" "https_egress" {
   security_group_id = var.security_group_id
   cidr_blocks       = ["0.0.0.0/0"]
   description       = "HTTPS for ECR, secrets, logs, external APIs"
-}
-
-moved {
-  from = aws_security_group_rule.https_egress
-  to   = aws_security_group_rule.https_egress[0]
 }
 
 resource "aws_security_group_rule" "rds_egress" {

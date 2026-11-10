@@ -41,12 +41,10 @@ module "shuttleforge_service" {
   cloud_map_namespace_id = module.ecs_cluster.cloud_map_namespace_id
   target_group_arn       = module.alb.target_group_arns["shuttleforge"]
   container_port         = 9000
-  # O-017: ShuttleForge keeps internet egress (it is the platform's egress broker).
-  internet_egress    = true
-  desired_count      = var.shuttleforge_desired_count
-  cpu                = 1024
-  memory             = 2048
-  execution_role_arn = module.secrets.execution_role_arns["shuttleforge"]
+  desired_count          = var.shuttleforge_desired_count
+  cpu                    = 1024
+  memory                 = 2048
+  execution_role_arn     = module.secrets.execution_role_arns["shuttleforge"]
 
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
