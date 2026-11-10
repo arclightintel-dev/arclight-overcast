@@ -192,6 +192,16 @@ resource "aws_cloudwatch_log_group" "probe" {
   tags = { Name = "/arclight/${var.environment}/probe" }
 }
 
+# Injection canary (spec nf-egress-lockdown.md, D5). A shell only: its fixed, non-sensitive value
+# is set out of band, so it never enters state (INV-004). Only the probe role can read it, and
+# the probe reports its presence and length, never the value.
+resource "aws_secretsmanager_secret" "probe_canary" {
+  name        = "arclight/${var.environment}/probe/canary"
+  description = "Non-sensitive canary proving secret injection from a security group (egress spec D5)"
+
+  tags = { Name = "arclight/${var.environment}/probe/canary" }
+}
+
 resource "aws_iam_role" "probe_exec" {
   name               = "arclight-ecs-exec-probe-${var.environment}"
   assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
@@ -227,6 +237,13 @@ resource "aws_iam_role_policy" "probe_exec" {
         Effect   = "Allow"
         Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
         Resource = ["${aws_cloudwatch_log_group.probe.arn}:*"]
+      },
+      {
+        # Default aws/secretsmanager key, so no KMS statement is needed (spec D5).
+        Sid      = "ReadCanary"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = [aws_secretsmanager_secret.probe_canary.arn]
       },
     ]
   })

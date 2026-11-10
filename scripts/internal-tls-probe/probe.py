@@ -1,7 +1,11 @@
-# Internal TLS acceptance probe (spec docs/proposals/internal-tls-nlb.md, P1 acceptance 2-4).
-# Runs inside Core's image (Python + Debian CA store) as `python -c <this file> NAME NODE_IPS`,
-# with no secrets. Standard library only. It prints one line: "PROBE {json}".
+# Internal TLS acceptance probe (spec docs/proposals/internal-tls-nlb.md, P1 acceptance 2-4),
+# extended for the egress lockdown (docs/proposals/nf-egress-lockdown.md).
+# Runs inside Core's image (Python + Debian CA store) as
+# `python -c <this file> NAME NODE_IPS [CHECKS]`. It has no secrets, except that --canary binds
+# the probe canary, of which only presence and length are reported. Standard library only. It
+# prints one line: "PROBE {json}".
 import json
+import os
 import socket
 import ssl
 import sys
@@ -69,4 +73,37 @@ for ip in NODES:
     r["ms"] = ms(t)
     nodes[ip] = r
 out["nodes"] = nodes
+
+# Egress checks: CHECKS is "host:port:expect,..."; expect is tls (verified handshake, SNI host),
+# connect (TCP) or blocked (TCP connect times out). The address tried is recorded so a later run
+# can pin it.
+CHECKS = [c for c in (sys.argv[3].split(",") if len(sys.argv) > 3 else []) if c]
+checks = {}
+for spec in CHECKS:
+    host, port, expect = spec.rsplit(":", 2)
+    r, t = {"expect": expect}, time.time()
+    try:
+        addrs = sorted({ai[4][0] for ai in socket.getaddrinfo(host, int(port), socket.AF_INET, socket.SOCK_STREAM)})
+        r["addrs"], r["ip"] = addrs, addrs[0]
+        s = socket.create_connection((addrs[0], int(port)), timeout=5)
+        r["tcp"] = "ok"
+        if expect == "tls":
+            CTX.wrap_socket(s, server_hostname=host).close()
+            r["tls"] = "ok"
+        else:
+            s.close()
+    except (socket.timeout, TimeoutError):
+        r["tls" if "tcp" in r else "tcp"] = "timeout"
+    except Exception as e:  # noqa: BLE001
+        r["error"] = repr(e)[:200]
+    r["ms"] = ms(t)
+    r["pass"] = {"blocked": r.get("tcp") == "timeout", "connect": r.get("tcp") == "ok",
+                 "tls": r.get("tls") == "ok"}.get(expect, False)
+    checks[spec] = r
+if CHECKS:
+    out["checks"] = checks
+
+# Canary: presence and length only, never the value.
+if "PROBE_CANARY" in os.environ:
+    out["canary"] = {"present": True, "length": len(os.environ["PROBE_CANARY"])}
 print("PROBE " + json.dumps(out, sort_keys=True), flush=True)

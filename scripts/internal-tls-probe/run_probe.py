@@ -3,6 +3,10 @@
 Operator tool. It needs AWS credentials that may register and run ECS tasks.
 
     python scripts/internal-tls-probe/run_probe.py --sg <security-group-id> [--name ...]
+        [--check host:port:expect ...] [--canary]
+
+--check adds egress checks (expect: tls, connect or blocked), and --canary binds the probe
+canary secret, reporting presence and length only (docs/proposals/nf-egress-lockdown.md).
 
 Steps:
 1. Pins Core's live image digest from the running Core task (LIVE_DIGEST).
@@ -38,7 +42,12 @@ def main():
     ap.add_argument("--region", default="us-east-1")
     ap.add_argument("--name", default="core-internal.staging.arclight-complex.net")
     ap.add_argument("--nlb", default="arclight-stg-int-core")
+    ap.add_argument("--check", action="append", default=[], help="host:port:expect, expect in tls|connect|blocked")
+    ap.add_argument("--canary", action="store_true", help="bind arclight/<env>/probe/canary (presence and length only)")
     a = ap.parse_args()
+    for c in a.check:
+        if c.count(":") < 2 or c.rsplit(":", 2)[2] not in ("tls", "connect", "blocked") or "," in c:
+            sys.exit(f"bad --check {c!r}: want host:port:expect, expect in tls|connect|blocked")
     r = ["--region", a.region]
     cluster = f"arclight-{a.env}"
     svc = aws("ecs", "describe-services", "--cluster", cluster, "--services", f"arclight-core-{a.env}", *r)["services"][0]
@@ -57,10 +66,18 @@ def main():
     role = aws("iam", "get-role", "--role-name", f"arclight-ecs-exec-probe-{a.env}")["Role"]["Arn"]
     tpl = string.Template((HERE / "task-definition.json.tpl").read_text(encoding="utf-8"))
     td = tpl.substitute(ENVIRONMENT=a.env, EXEC_ROLE_ARN=role, IMAGE=image, REGION=a.region)
+    if a.canary:  # bound only on request: injection runs before Python, so it changes the run
+        canary_arn = aws("secretsmanager", "describe-secret", "--secret-id", f"arclight/{a.env}/probe/canary", *r)["ARN"]
+        tdj = json.loads(td)
+        tdj["containerDefinitions"][0]["secrets"] = [{"name": "PROBE_CANARY", "valueFrom": canary_arn}]
+        td = json.dumps(tdj)
     # Everything that can fail without side effects happens before registration, so once a
     # revision exists the finally below always deregisters it.
     code = (HERE / "probe.py").read_text(encoding="utf-8")
-    overrides = {"containerOverrides": [{"name": "probe", "command": ["python", "-c", code, a.name, ",".join(nodes)]}]}
+    overrides = {"containerOverrides": [{"name": "probe", "command": [
+        "python", "-c", code, a.name, ",".join(nodes), ",".join(a.check)]}]}
+    if len(json.dumps(overrides)) > 8192:  # ECS limit on the overrides document
+        sys.exit(f"overrides are {len(json.dumps(overrides))} characters; ECS allows 8192")
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
         f.write(td)
         td_path = f.name
@@ -68,7 +85,8 @@ def main():
               "file://" + td_path.replace("\\", "/"), *r)
     probe_td = reg["taskDefinition"]["taskDefinitionArn"]
     try:
-        print(f"LIVE_TD={live_td}\nLIVE_DIGEST={live_digest}\nPROBE_TD={probe_td}\nNLB_NODES={nodes}\nSG={a.sg}", flush=True)
+        print(f"LIVE_TD={live_td}\nLIVE_DIGEST={live_digest}\nPROBE_TD={probe_td}\nNLB_NODES={nodes}\nSG={a.sg}\n"
+              f"CHECKS={a.check}\nCANARY={a.canary}", flush=True)
         run = aws("ecs", "run-task", "--cluster", cluster, "--task-definition", probe_td, "--launch-type", "FARGATE",
                   "--network-configuration", json.dumps({"awsvpcConfiguration": {
                       "subnets": subnets, "securityGroups": [a.sg], "assignPublicIp": "DISABLED"}}),
