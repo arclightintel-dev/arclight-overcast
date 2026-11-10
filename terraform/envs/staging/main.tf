@@ -206,9 +206,12 @@ module "core_service" {
     secret_arn_oidc_google          = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-google-client-secret"]
     secret_arn_oidc_microsoft       = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-microsoft-client-secret"]
     secret_arn_oidc_github          = module.secrets.secret_arns["arclight/${var.environment}/core/oidc-github-client-secret"]
-    # JSON array of trusted proxy ranges: the VPC (ALB nodes) plus Cloudflare, so the
-    # rate limiter keys on the real client. Same source of truth as the ALB ingress rules.
-    trusted_proxy_cidrs = replace(jsonencode(concat([var.vpc_cidr], local.cloudflare_ipv4_cidrs, local.cloudflare_ipv6_cidrs)), "\"", "\\\"")
+    # JSON array of trusted proxy ranges: the ALB's subnets (its nodes, the only in-VPC hop
+    # that forwards visitors) plus Cloudflare, so the rate limiter keys on the real client.
+    # Not the whole VPC: ShuttleForge and Nerfherder reach Core directly from the private app
+    # subnets and must not be able to choose their key with a forged X-Forwarded-For (owner,
+    # 2026-11-10; Core hardening H1b). Same Cloudflare source of truth as the ALB ingress rules.
+    trusted_proxy_cidrs = replace(jsonencode(concat(module.vpc.public_subnet_cidrs, local.cloudflare_ipv4_cidrs, local.cloudflare_ipv6_cidrs)), "\"", "\\\"")
   })
 }
 
