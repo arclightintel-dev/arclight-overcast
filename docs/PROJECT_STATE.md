@@ -181,7 +181,9 @@ request with the owner's approval of the fix:
   - Rolling update 09:31:02Z, deployment completed 09:33:34Z: task `c728d03d…` HEALTHY on the index digest, revision 17's task stopped and drained, `/ready` 200 `ready`.
   - Body cap (Overcast's check): a POST to `/oauth/token` through Cloudflare and Access with a declared 2,097,152-byte body, `Expect` suppressed and no Authorization, got **413** in Core's envelope (`payload_too_large`, `request_id` matching `x-request-id`). A second POST with `Expect: 100-continue` also got 413; its `100 Continue` came from Cloudflare's edge. CloudWatch 09:34Z: `HTTPCode_Target_4XX_Count` 2, `RequestCount` 3, ELB 502 / 5XX and target 5XX none. No RST or 502.
   - ECR scan-on-push (amd64 child `sha256:1aad78cb…`): 0 critical, 2 high, 9 medium, 3 low (H6 baseline on `v2-6add49d`: 0 / 6 / 15 / 4).
-  - Pins moved to `v2-08de4e6`: local `core_image_tag` and repository variable `CORE_IMAGE_TAG`. Hashed receipt sent to Core. Pending: the owner's Entra login, for Core's `token.issued` check after 09:33:34Z. **Rollback = service update to revision 17.**
+  - Pins moved to `v2-08de4e6`: local `core_image_tag` and repository variable `CORE_IMAGE_TAG`. Hashed receipt sent to Core, which verified it by tool and in ECS. **Rollback = service update to revision 17.**
+  - Issuance check (step 4): the owner's Entra login, then `authority_inventory --since 2026-11-10T09:33:34Z` on `:18` (task `3e7b49be…`, 11:11:33-12:01Z). **RESULT OK**: one each of `login.succeeded`, `mfa.verified` and `token.issued` (human, success), 0 authority-changing events; changed rows are only the owner's `last_login_at` and the `brk_microsoft` identity's `last_verified_at`.
+  - Core's corrections: the body-cap 413s write no audit row, by design (the cap refuses before routing), so the response IDs and the ALB counts are that step's evidence. Core's own `Expect` handling is proven in the image by the qualification smoke; no in-VPC probe is needed.
 
 ## Applied 2026-10-21 — Podbay removal + Core deploy prerequisites (PR #18)
 
@@ -200,7 +202,7 @@ Verified live after apply: the only ECS service is `arclight-core-staging`, stil
 
 Updated 2026-11-10. Each state change waits on the owner's go, given first-hand.
 
-1. **Core S-055, revision 18**: live 2026-11-10 (record above). Pending: the owner's Entra login for Core's issuance check.
+1. **Core S-055, revision 18**: live and verified 2026-11-10 (all four steps; record above). Core writes the release records.
 2. **Nerfherder N-G3**: waits on NF's image push; then register the migrate family on its digest, run it, and re-run `nf-app-role`.
 3. **ShuttleForge G3**: waits on SF's reviewed SF.11 plan. The first staging image is the line release current at that review (r6, `55a2d20`, today); the first-admission pin is confirmed for r6. G3's push record gives the tag, ECR digest and media type, and the amd64 child digest.
 4. **Cloudflare Terraform**: spec an isolated root (provider v5) adopting the arclight-complex.net staging records and the Access app, then DR-21 origin client certificates.
