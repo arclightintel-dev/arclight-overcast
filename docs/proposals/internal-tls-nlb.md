@@ -17,8 +17,10 @@ Revision history:
 Owner rulings, 2026-11-10:
 - **D-077.** On deployed environments, every internal hop that carries a credential uses TLS
   with server authentication that the client verifies.
-  - Complex records it as a pointer under D-074 in its next records batch. It is not yet
-    present at Complex `48c1715`.
+  - Recorded on Complex `main` since `3135bca` (PR #30), at `platform/DECISIONS.md:1613`,
+    verified read-only. The external reviewers read the older alignment pin `48c1715`.
+  - Complex PR #31 (`ac261ea`) adds a pointer under D-077 for this spec, marked
+    Overcast-reported. Cite `3135bca` or newer in later reviews.
 - **Option A for Core.** TLS terminates at an internal load balancer holding a public ACM
   certificate.
   - The last hop to the task stays plain inside the private subnets. That is the same posture
@@ -220,10 +222,23 @@ your Network Load Balancer*)
 - What it builds: `aws_lb.sf_internal`, its security group and rules, three target groups, three
   listeners, the `shuttleforge-internal` zone and record, the three SF alarms, and SF's
   `additional_load_balancers`.
-- Preconditions:
-  - SF's `DEPLOYMENT_MANIFEST.md` amendment, allowing an NLB TLS listener on `:9050` / `:9100`,
-    has merged on SF's line;
+- Preconditions, **both met 2026-11-10**:
+  - SF's `DEPLOYMENT_MANIFEST.md` amendment ("Internal TLS") has merged: SF PR #42, `f14ab7b` on
+    `appliance/main`, carried to `v1-operate` as `63f4492`. Read at `63f4492`, l.130-160, it
+    agrees with this spec:
+    - TLS on 9000, 9050 and 9100 with the `*.staging` certificate;
+    - TCP target groups with client IP preserved;
+    - `/ready:9000` for all three health checks;
+    - from Stage C, consumers admitted only through the NLB's security group.
   - SF has been told why all three checks stay on `/ready:9000`.
+- **SF's two open questions, answered.**
+  - *Where the first-admission probe comes from.* It is unchanged. `deploy-service.yml` reads
+    SF's `/ready` and `/ready/detail` at `https://shuttleforge.<domain>` through Cloudflare and
+    Access to the public ALB. SF stays attached to the ALB target group on 9000
+    (`shuttleforge.tf:42`), and the ALB's security group stays admitted on 9000.
+  - *How the manifest's YAML names the NLB listeners.* Overcast proposes
+    `exposure: internal_nlb_tls` on 9050 and 9100, and on 9000 alongside `alb`. The wording is
+    SF's to write.
 - SF is at 0/0, so no task starts.
 - **SF deploy gap.** A stop-before-start (0/100) outage lasts several minutes, not 60 s. It adds
   up:
@@ -504,8 +519,8 @@ AWS list prices for us-east-1, read 2026-11-10:
 
 ## Open before P2
 
-- SF's manifest amendment.
-- The NF `:9100` configuration item, if NF uses that port.
+- The NF `:9100` configuration item, if NF uses that port. SF's manifest amendment landed on
+  2026-11-10 (see P2).
 
 ## Review record
 
