@@ -1,6 +1,6 @@
 # Nerfherder staging wiring (O-013)
 
-Status: **N-G1 APPLIED 2026-11-09 21:05:34-21:06:35Z (owner's go): 38 added, 1 changed, 0 destroyed; exit check passed (the three NERFHERDER_S3_* keys are present as "" in both task definitions; full plan shows no NF diff). Push role `arn:aws:iam::650880817826:role/arclight-nerfherder-ecr-push-staging`.** Owner 2026-11-09: build NF's wiring now, in parallel with SF's
+Status: **N-G1 APPLIED 2026-11-09 21:05:34-21:06:35Z (owner's go): 38 added, 1 changed, 0 destroyed; exit check passed (the three NERFHERDER_S3_* keys are present as "" in both task definitions; full plan shows no NF diff). Push role `arn:aws:iam::650880817826:role/arclight-nerfherder-ecr-push-staging`.** **Follow-up (PR #65, NF annex 0dc3357) APPLIED 2026-11-10 (owner's go): 1 added, 1 changed, 1 destroyed; the task role allows `s3:DeleteObject` only on `_uncommitted/*`; service family revision `:2` has stopTimeout 60 (the service stays at 0/0 on `:1` until the first digest deploy, which starts from the newest revision).** Owner 2026-11-09: build NF's wiring now, in parallel with SF's
 remaining gates; every apply needs the owner's go first-hand. Inputs: NF's accepted manifest at
 `cf5b228` (final for every rendered value), O-013, and Overcast's nine confirmations of
 2026-10-29. Nothing contradicts them.
@@ -107,7 +107,7 @@ refused at admission (`sf_required`). That is correct behaviour, not a fault.
   it's NF's call.
 - **Narrower delete.** NF deletes objects only under `_uncommitted/`. Narrowing
   `s3:DeleteObject` to `_uncommitted/*` would protect `evidence/`. This departs from manifest line
-  97, so it's NF's call.
+  97, so it's NF's call. **NF chose it (annex 0dc3357); applied 2026-11-10 (PR #65).**
 - **Sequences.** `event_chain_state.id` has an implicit sequence that is never used: the row is
   seeded and inserts are blocked. No grant is needed.
 - **Merge order.** Merge this after PR #62 (O-016): the shared push-role map would otherwise also
