@@ -368,6 +368,9 @@ resource "aws_iam_role_policy" "ecr_push" {
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload",
+          # Read-only: lets a push job check its own repository before pushing (e.g. SF's A1
+          # preflight; owner, 2026-11-10).
+          "ecr:DescribeImages",
         ]
         Resource = [for repo in each.value.ecr_repos : var.ecr_repository_arns[repo]]
       },

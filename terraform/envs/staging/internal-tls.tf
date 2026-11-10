@@ -9,8 +9,13 @@
 # open on empty groups, so ShuttleForge gets a separate NLB in P2 and never shares this one.
 #
 # Fixed settings, all deliberate (see the spec's "NLB gates"):
-#   - cross-zone OFF on the NLB and the target group: avoids the documented 5-tuple
-#     collisions with client IP preservation and single-task targets;
+#   - cross-zone ON for Core's target group (owner, 2026-11-10; overrides the NLB-level off).
+#     Core runs one task, and every deploy can move it to the other AZ. With cross-zone off, P1
+#     measured the empty AZ's node staying in DNS for 4-6 minutes and failing after connect.
+#     With it on, either node forwards to the task. The residual cost is AWS's documented
+#     5-tuple collision class (client IP preservation, few targets); watch
+#     TCP_Target_Reset_Count. This NLB carries only Core's group, so the shared-NLB coupling
+#     that gave SF its own NLB does not apply;
 #   - client IP preserved and proxy protocol v2 OFF: Core keys its rate limiter on the transport
 #     peer, and uvicorn cannot parse a PPv2 header;
 #   - NO target_group_health block: an empty dns_failover {} makes the provider set the count
@@ -96,7 +101,7 @@ resource "aws_lb_target_group" "core_internal_8000" {
   preserve_client_ip                = "true"
   proxy_protocol_v2                 = false
   deregistration_delay              = 30
-  load_balancing_cross_zone_enabled = "false"
+  load_balancing_cross_zone_enabled = "true"
 
   health_check {
     protocol            = "HTTP"
