@@ -328,7 +328,7 @@ shows the `https` URLs and no `NERFHERDER_ALLOW_PLAINTEXT_INTERNAL_HTTP`. That r
   - SF's written confirmation, with code references, that its JWKS client verifies the server
     certificate and hostname. A successful call alone does not prove verification (hotpants).
     - **Received 2026-11-10, at r6 `55a2d20`. Overcast checked it read-only:**
-      - the only JWKS client is `httpx.AsyncClient(timeout=10.0)` (`shuttleforge/auth/jwks.py:109`),
+      - the only JWKS client is `httpx.AsyncClient(timeout=10.0)` (`shuttleforge/auth/jwks.py:110`),
         so httpx defaults apply: `verify=True`, `CERT_REQUIRED`, `check_hostname`;
       - no verification-disabling pattern appears in `shuttleforge/`, `scripts/entrypoint.sh`
         or the `Dockerfile`.
