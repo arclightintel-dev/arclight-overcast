@@ -285,8 +285,20 @@ The existing checks do not change.
   - It is an activation dependency for P2, P3 and N-G4. A destination outside the permitted SF
     path fails closed, which is the intent.
   - SF confirms the :9100 route's port at P2.
-- **Core's exception has no declared purpose** (hotpants, P3). Overcast asks Core to declare its
-  external dependencies in its manifest. This does not block NF's lockdown.
+- **Core's exception: purpose declared (hotpants, P3; answered by Core on 2026-11-10).**
+  - Source: Core's code at `6645079`, the S-057 head, unchanged from the live `08de4e6`.
+    Core-reported; not re-verified by Overcast.
+  - **All of Core's internet egress is the human-login path,** HTTPS on 443:
+    - Entra: `login.microsoftonline.com` (discovery, token, JWKS);
+    - Google: `accounts.google.com` and the endpoints it names;
+    - GitHub OAuth: `github.com` and `api.github.com`.
+  - The hosts follow the bound identity brokers (`identity_provider_brokers` rows). Calls happen
+    only on `/auth/login` and `/auth/callback`, never on the service-token path.
+  - Core has no AWS SDK, webhook or mail traffic.
+  - Core will add a `network.egress` declaration in NF's shape after S-057 (tracked by Core).
+  - Overcast prescribes no schema, because governance is earned.
+  - Core keeps open 443 by O-017. A security group cannot filter by host name, so narrowing
+    Core is not proposed.
 - **A future NF dependency** (telemetry, a JWKS fetch) needs an explicit rule. NF's manifest
   egress list is the contract; a change to it is a change request to Overcast.
 - **SG-only enforcement** fails if an open rule or an open group is later added to NF's task
@@ -312,7 +324,7 @@ GO-WITH-CHANGES, no P1.
 | D2's description change makes Core's and SF's moves updates, breaking the exact-plan gate | codex-1 | **Accepted:** description unchanged; L2 is now 3 create, 1 destroy, 2 no-op moves |
 | Injection can be proven before N-G4 with an inert task | codex-2 | **Accepted, with Overcast's own canary (D5)** instead of a Core secret |
 | O-017's "no route" contradicts keeping the NAT route | codex-2 | **Accepted:** "no permitted direct internet egress from its task ENI" |
-| Core's exception has no declared dependencies | hotpants | **Accepted, nonblocking:** asked of Core |
+| Core's exception has no declared dependencies | hotpants | **Accepted; answered by Core on 2026-11-10:** login-path only (see Risks) |
 | The S3 prefix-list rule is service-wide | hotpants | **Accepted:** wording, plus the residual and the endpoint-policy option (not proposed) |
 | NF's boto3 is unpinned (`>=1.34`) | codex-1 | **Accepted:** the global host is required, the regional host also probed |
 | C-G7 needs operational evidence, not just a network receipt | hotpants | **Accepted:** L2 item 8 |
