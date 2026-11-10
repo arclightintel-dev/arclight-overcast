@@ -344,6 +344,24 @@ shows the `https` URLs and no `NERFHERDER_ALLOW_PLAINTEXT_INTERNAL_HTTP`. That r
   - its Core token call over `core-internal` succeeds;
   - NF has confirmed in writing, with code references, that its httpx and curl clients verify
     the server certificate and hostname.
+    - **Received 2026-11-10, at NF main `cee7463c`, with a negative test.** Each client, built as
+      NF builds it, refused a wrong-hostname and an untrusted-CA certificate, at both proxy and
+      origin TLS for curl.
+    - **Overcast checked it read-only:**
+      - the one internal httpx client is
+        `httpx.AsyncClient(..., trust_env=False, follow_redirects=False, verify=settings.internal_ca_bundle or True)`
+        (`runtime/host.py:1173-1174`);
+      - curl's `HttpTransportStrategy` defaults `verify=True` (`plugin/strategies.py:430`);
+      - nothing in `src/` disables verification;
+      - `internal_ca_bundle` and `transport_ca_bundle` default to `None` (`config.py:130,139`).
+    - **Its condition is Overcast's to keep.** With option A, NF's task definition must not set
+      an internal CA bundle (`internal_ca_bundle`); one would replace the public roots for the
+      Core and SF calls.
+      - A transport bundle (`transport_ca_bundle`) is set only if NF uses `:9100`. It must then
+        hold the public roots plus SF's MITM CA (see "Out of scope").
+      - Neither is set in `services/nerfherder/task-definition.json.tpl` today.
+      - `trust_env=False` means `SSL_CERT_FILE` and the proxy variables cannot redirect the httpx
+        client.
 - `nerfherder-staging-wiring.md`'s N-G4 step 1 changes accordingly: it registers from the latest
   ACTIVE `arclight-nerfherder-staging` revision after P3. `deploy-service.yml` has no
   `nerfherder` option.
