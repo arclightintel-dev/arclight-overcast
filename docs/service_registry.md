@@ -59,6 +59,21 @@ The primary corporate domain, `ansanalytics.com`, was not returned by either acc
 
 CF-01 Access application: `a378347b-e740-4d07-877b-892268ed395b`, type `self_hosted`. Its account IdP listing contains `cloudflare` and `onetimepin`; no Entra provider was returned. Cloudflare dashboard SSO is a separate connection and was not inspected.
 
+### Hand-made Cloudflare configuration (not in Terraform; DR-21)
+
+Cloudflare is not yet under Terraform (DR-21), so these were made through the dashboard or API, and
+their records are kept here. Entries are by type only: no private hostnames (public repository).
+Earlier hand-made items are recorded where they were made:
+- the staging Access application (above);
+- the WAF rule blocking `/api/admin/test-token` (owner, 2026-10-22, PR #39);
+- Backstage's proxied CNAME to the prod ALB (O-012, `docs/PROJECT_STATE.md` Backstage row).
+
+| Zone | Item | Made | Notes |
+|---|---|---|---|
+| `arclight-complex.net` | Bandersnatch: one **CNAME**, proxied, first-level name (kept out of git; in the local staging `terraform.tfvars`) → the staging ALB | 2026-11-11 ~05:35Z, Bandersnatch session through the Cloudflare API (Terraform write token), owner's go | Read back: resolves to Cloudflare; ALB 503 while the service is at 0 tasks; http 301 → https; `cf-cache-status` DYNAMIC. Outside the `*.staging` Access application, by design (O-019). |
+| `arclight-complex.net` | Bandersnatch: one **response-header transform rule** scoped to that hostname, removing `NEL` and `Report-To` (a new entrypoint ruleset for phase `http_response_headers_transform`; there was none before) | 2026-11-11 ~05:35Z, same session and go | Read back: neither header present. |
+| `arclight-complex.net` | Bandersnatch: a **cache rule** and a **configuration rule** for the same hostname | Not yet made | The token lacks those permissions. The owner will extend the token or use the dashboard; record them here when made. |
+
 ## Secret-store recommendation
 
 Use **AWS Secrets Manager as the primary deployment and runtime vault**, with Entra governing human access through AWS IAM Identity Center. This builds on the store already used by the application infrastructure and gives non-AWS deployment credentials a central home without adding a second vault immediately. This is a recommendation, not a provisioned migration or a ratified new platform decision.
