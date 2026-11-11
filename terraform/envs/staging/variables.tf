@@ -192,3 +192,9 @@ variable "bandersnatch_page_title" {
   default     = ""
   sensitive   = true
 }
+
+variable "sf_fixture_upstream_enabled" {
+  description = "SF.11 Stage B fixture upstream listener (spec sf-stage-b-fixture-upstream.md): on from B1 through B4, off before Stage C"
+  type        = bool
+  default     = true
+}
