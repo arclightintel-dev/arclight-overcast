@@ -41,9 +41,9 @@ variable "core_desired_count" {
 }
 
 variable "nerfherder_desired_count" {
-  description = "Nerfherder ECS service desired task count (a singleton; 1 from N-G4, 2026-11-11, on the S1 digest)"
+  description = "Nerfherder ECS service desired task count (a singleton; 0 after the N-G4 soak, 2026-11-11, until SF Stage C)"
   type        = number
-  default     = 1
+  default     = 0
 
   validation {
     condition     = contains([0, 1], var.nerfherder_desired_count)
