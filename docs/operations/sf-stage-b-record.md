@@ -89,6 +89,27 @@ Not referenced, because they have no stored version: `core-client-secret` and `p
 
 ---
 
+## Entry B3: compatible rollback while fixture-only (AC-15.11; owner's go in Overcast's session, 2026-11-11)
+
+Both deploys were made by hand, mirroring `deploy-service.yml` (register by digest, `update-service
+--force-new-deployment`, wait for stable, verify the running digest), with the deployment set to stop
+before start (0/100).
+
+| Step | Revision and image | Old task stopped | New task started | Targets registered | Interruption | New task |
+|---|---|---|---|---|---|---|
+| 1. N | `:6` = copy of base `:4` on `sha256:793033d8…` (r7; field walk: image only, against `:4` and `:5`; no plaintext-JWKS flag) | 08:27:18Z (`074582d8…`, `:5`) | 08:29:51Z | 08:30:22Z (all four groups) | about 3m04s | `5fbede68…`, us-east-1a |
+| 2. N−1 | `:5` (r6, `sha256:f57384de…`), the existing ACTIVE revision | 08:34:26Z (`5fbede68…`) | 08:36:59Z | 08:37:29-08:37:39Z | about 3m03s-3m13s | `1284a069…`, us-east-1b |
+
+- **After each step:** `/ready` and `/ready/detail` returned `ready`, with all 13 checks `ok`, the schema `sf9_5b_pg_baseline`
+  unchanged, `snapshot` "configs=1, endpoints=1" and `jwks` ok (no plaintext). Commit `5999bc0` after step 1 and `55a2d20` after step 2.
+- **SF's own reads** passed at 08:33:53Z and 08:39:15Z, with the fixture endpoint `active` both times.
+- **DEBT #127 startup lines,** from N's task log (stream `shuttleforge/shuttleforge/5fbede68…`):
+  - 08:30:16.622Z `INFO shuttleforge.db_config: Database identity: backend=postgresql database=shuttleforge_staging schema_revision=sf9_5b_pg_baseline server_version=16.13`
+  - 08:30:16.750Z `INFO shuttleforge.auth.jwks: JWKS client started (url=https://core-internal.staging.arclight-complex.net/.well-known/jwks.json)`
+- **SF now runs r6 on `:5`.** `:6` (r7) stays ACTIVE and unused until SF decides.
+
+---
+
 ## Entry B6: fixture teardown receipt
 
 Not yet written. Fields are per the spec: decision, UTC time, affected resources (including the
