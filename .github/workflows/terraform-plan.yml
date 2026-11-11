@@ -35,6 +35,17 @@ jobs:
     env:
       TF_VAR_core_image_tag: ${{ vars.CORE_IMAGE_TAG }}
       TF_VAR_alarm_email: ${{ secrets.ALARM_EMAIL }}
+      # Bandersnatch (O-019). Secrets, not variables: a repository variable is printed in
+      # this public repository's job log. The image digest identifies nothing.
+      TF_VAR_bandersnatch_image: ${{ vars.BANDERSNATCH_IMAGE }}
+      TF_VAR_bandersnatch_public_host: ${{ secrets.BANDERSNATCH_PUBLIC_HOST }}
+      TF_VAR_bandersnatch_graph_tenant_id: ${{ secrets.BANDERSNATCH_GRAPH_TENANT_ID }}
+      TF_VAR_bandersnatch_graph_client_id: ${{ secrets.BANDERSNATCH_GRAPH_CLIENT_ID }}
+      TF_VAR_bandersnatch_mail_from: ${{ secrets.BANDERSNATCH_MAIL_FROM }}
+      TF_VAR_bandersnatch_mail_from_name: ${{ secrets.BANDERSNATCH_MAIL_FROM_NAME }}
+      TF_VAR_bandersnatch_mail_reply_to: ${{ secrets.BANDERSNATCH_MAIL_REPLY_TO }}
+      TF_VAR_bandersnatch_mail_subject: ${{ secrets.BANDERSNATCH_MAIL_SUBJECT }}
+      TF_VAR_bandersnatch_page_title: ${{ secrets.BANDERSNATCH_PAGE_TITLE }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

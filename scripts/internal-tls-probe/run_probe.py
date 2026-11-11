@@ -44,6 +44,7 @@ def main():
     ap.add_argument("--nlb", default="arclight-stg-int-core")
     ap.add_argument("--check", action="append", default=[], help="host:port:expect, expect in tls|connect|blocked")
     ap.add_argument("--canary", action="store_true", help="bind arclight/<env>/probe/canary (presence and length only)")
+    ap.add_argument("--port", type=int, default=443, help="TLS port for NAME's /ready and per-node checks (SF: 9000)")
     a = ap.parse_args()
     for c in a.check:  # validated before any AWS call, so a malformed check launches nothing
         parts = c.rsplit(":", 2)
@@ -77,7 +78,7 @@ def main():
     # revision exists the finally below always deregisters it.
     code = (HERE / "probe.py").read_text(encoding="utf-8")
     overrides = {"containerOverrides": [{"name": "probe", "command": [
-        "python", "-c", code, a.name, ",".join(nodes), ",".join(a.check)]}]}
+        "python", "-c", code, a.name, ",".join(nodes), ",".join(a.check), str(a.port)]}]}
     if len(json.dumps(overrides)) > 8192:  # ECS limit on the overrides document
         sys.exit(f"overrides are {len(json.dumps(overrides))} characters; ECS allows 8192")
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:

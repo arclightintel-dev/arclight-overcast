@@ -14,6 +14,8 @@ import urllib.request
 
 NAME = sys.argv[1]
 NODES = [n for n in (sys.argv[2].split(",") if len(sys.argv) > 2 else []) if n]
+PORT = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else 443  # SF's NLB listens on 9000
+AUTH = NAME if PORT == 443 else f"{NAME}:{PORT}"
 CTX = ssl.create_default_context()  # public roots; verifies certificate and hostname
 out = {"name": NAME}
 
@@ -23,7 +25,7 @@ def ms(t):
 
 
 try:
-    out["resolved"] = sorted({ai[4][0] for ai in socket.getaddrinfo(NAME, 443, proto=socket.IPPROTO_TCP)})
+    out["resolved"] = sorted({ai[4][0] for ai in socket.getaddrinfo(NAME, PORT, proto=socket.IPPROTO_TCP)})
 except Exception as e:  # noqa: BLE001 - report, never raise
     out["resolve_error"] = repr(e)[:200]
 
@@ -31,7 +33,7 @@ except Exception as e:  # noqa: BLE001 - report, never raise
 def get(path):
     t = time.time()
     try:
-        with urllib.request.urlopen(f"https://{NAME}{path}", timeout=10, context=CTX) as r:
+        with urllib.request.urlopen(f"https://{AUTH}{path}", timeout=10, context=CTX) as r:
             body = r.read()
             res = {"status": r.status, "ms": ms(t), "body": body[:200].decode("utf-8", "replace")}
             if path.endswith("jwks.json"):
@@ -50,14 +52,14 @@ nodes = {}
 for ip in NODES:
     r, t = {}, time.time()
     try:
-        s = socket.create_connection((ip, 443), timeout=5)
+        s = socket.create_connection((ip, PORT), timeout=5)
         r["tcp"] = "ok"
         r["self_ip"] = s.getsockname()[0]
         try:
             ss = CTX.wrap_socket(s, server_hostname=NAME)
             r["tls"] = "ok"
             ss.settimeout(10)
-            ss.sendall(f"GET /ready HTTP/1.1\r\nHost: {NAME}\r\nConnection: close\r\n\r\n".encode())
+            ss.sendall(f"GET /ready HTTP/1.1\r\nHost: {AUTH}\r\nConnection: close\r\n\r\n".encode())
             data = b""
             while True:
                 chunk = ss.recv(4096)

@@ -41,6 +41,12 @@ module "shuttleforge_service" {
   cloud_map_namespace_id = module.ecs_cluster.cloud_map_namespace_id
   target_group_arn       = module.alb.target_group_arns["shuttleforge"]
   container_port         = 9000
+  # Internal TLS (D-077, P2): SF's three internal NLB groups. Each ARN goes through its listener
+  # so the service attaches only after the listener exists.
+  additional_load_balancers = [for p in ["9000", "9050", "9100"] : {
+    target_group_arn = aws_lb_listener.sf_internal[p].default_action[0].target_group_arn
+    container_port   = tonumber(p)
+  }]
   # O-017: ShuttleForge keeps internet egress (it is the platform's egress broker).
   internet_egress    = true
   desired_count      = var.shuttleforge_desired_count
@@ -54,9 +60,13 @@ module "shuttleforge_service" {
   health_check_grace_period_seconds = 150
 
   container_definitions = templatefile("${path.module}/../../../services/shuttleforge/task-definition.json.tpl", {
-    environment               = var.environment
-    image                     = local.sf_image_unset
-    namespace                 = local.sf_namespace
+    environment = var.environment
+    image       = local.sf_image_unset
+    namespace   = local.sf_namespace
+    # HTTPS-first (internal-TLS amendment 3b; owner, 2026-11-10): Core's internal NLB name.
+    core_jwks_url = "https://${local.core_internal_fqdn}/.well-known/jwks.json"
+    # Internal TLS P3: the proxy endpoint SF advertises in a lease is its internal NLB.
+    transport_endpoint        = "https://${local.sf_internal_fqdn}:9050"
     region                    = var.aws_region
     log_group                 = "/arclight/${var.environment}/shuttleforge"
     secret_arn_db_url         = module.secrets.shuttleforge_db_url_secret_arn
@@ -142,31 +152,10 @@ resource "aws_iam_role_policy" "sf_exec_no_migration_url" {
 }
 
 ################################################################################
-# Security group pair: ShuttleForge -> Core JWKS on 8000
-#
-# SF's only Core traffic is GET /.well-known/jwks.json. Under D-074 section 3 SF refuses
-# every Core JWT after 1 h without a JWKS refresh, so this path must stay stable.
+# ShuttleForge -> Core: JWKS only, over core-internal (internal TLS amendment 3b).
+# The direct 8000 pair (core_from_sf, sf_to_core) was removed in P3b: SF reaches Core
+# through the internal NLB (core_nlb_from_sf_443 in internal-tls.tf) and its 443 egress.
 ################################################################################
-
-resource "aws_security_group_rule" "core_from_sf" {
-  type                     = "ingress"
-  from_port                = 8000
-  to_port                  = 8000
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_core_id
-  source_security_group_id = module.vpc.sg_shuttleforge_id
-  description              = "ShuttleForge to Core JWKS"
-}
-
-resource "aws_security_group_rule" "sf_to_core" {
-  type                     = "egress"
-  from_port                = 8000
-  to_port                  = 8000
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_shuttleforge_id
-  source_security_group_id = module.vpc.sg_core_id
-  description              = "ShuttleForge to Core JWKS"
-}
 
 ################################################################################
 # DR-15: dataplane egress to proxy providers (owner, 2026-11-09: open egress on staging)

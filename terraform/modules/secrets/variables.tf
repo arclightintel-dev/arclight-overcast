@@ -24,6 +24,16 @@ variable "public_domain" {
   type        = string
 }
 
+variable "core_internal_url" {
+  description = "Core's internal base URL, through its internal NLB (internal TLS P3, D-077)"
+  type        = string
+}
+
+variable "shuttleforge_internal_url" {
+  description = "ShuttleForge's internal API URL, through its internal NLB (internal TLS P3, D-077)"
+  type        = string
+}
+
 variable "private_dns_namespace" {
   description = "Private DNS namespace (e.g., staging.internal.arclight-complex.net)"
   type        = string

@@ -298,15 +298,27 @@ locals {
     shuttleforge = {
       # GitHub names the repository arclightintel-dev/shuttleforge; the OIDC sub carries
       # the current name, so "arclight-shuttleforge" could never be assumed (2026-11-10).
+      # v1-operate only (SF DEBT #125, owner 2026-11-11): main never builds a deployable image.
       repo_name = "shuttleforge"
       ecr_repos = ["arclight/shuttleforge"]
-      refs      = ["main", "v1-operate"]
+      refs      = ["v1-operate"]
     }
     # O-013 (staging only; the prod root no longer uses this module after O-016).
     nerfherder = {
       repo_name = "arclight-nerfherder"
       ecr_repos = ["arclight/nerfherder"]
       refs      = ["main"]
+    }
+    # Bandersnatch: needed before the application's first push, so not behind the staging flag.
+    # The repository was created 2026-11-10, after GitHub made immutable OIDC subjects the
+    # default for new repositories: its sub carries the owner and repository ids, so the
+    # name-only form the other entries use can never be assumed. Read it with
+    # `gh api repos/<owner>/<repo>/actions/oidc/customization/sub`.
+    bandersnatch = {
+      repo_name  = "arclight-bandersnatch"
+      sub_prefix = "repo:arclightintel-dev@224845687/arclight-bandersnatch@1453386524"
+      ecr_repos  = ["arclight/bandersnatch"]
+      refs       = ["main"]
     }
   }
 }
@@ -328,7 +340,7 @@ data "aws_iam_policy_document" "ecr_push_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [for ref in each.value.refs : "repo:${var.github_org}/${each.value.repo_name}:ref:refs/heads/${ref}"]
+      values   = [for ref in each.value.refs : "${try(each.value.sub_prefix, "repo:${var.github_org}/${each.value.repo_name}")}:ref:refs/heads/${ref}"]
     }
   }
 }

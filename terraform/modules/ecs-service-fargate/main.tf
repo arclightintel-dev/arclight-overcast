@@ -12,6 +12,15 @@ resource "aws_ecs_task_definition" "this" {
   task_role_arn            = var.task_role_arn
 
   container_definitions = var.container_definitions
+
+  # Fargate ephemeral (bind-mount) volumes, e.g. a writable /tmp under a read-only root
+  # file system; the container definition mounts them by name.
+  dynamic "volume" {
+    for_each = toset(var.ephemeral_volumes)
+    content {
+      name = volume.value
+    }
+  }
 }
 
 ################################################################################

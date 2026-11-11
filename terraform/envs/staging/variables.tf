@@ -41,7 +41,7 @@ variable "core_desired_count" {
 }
 
 variable "nerfherder_desired_count" {
-  description = "Nerfherder ECS service desired task count (0 until the first digest deploy; a singleton)"
+  description = "Nerfherder ECS service desired task count (a singleton; 0 after the N-G4 soak, 2026-11-11, until SF Stage C)"
   type        = number
   default     = 0
 
@@ -58,9 +58,9 @@ variable "shuttleforge_policy_enabled" {
 }
 
 variable "shuttleforge_desired_count" {
-  description = "ShuttleForge ECS service desired task count (0 until the first digest deploy; a singleton, never above 1)"
+  description = "ShuttleForge ECS service desired task count (1 since the first digest deploy, SF.11 A5 2026-11-10; a singleton, never above 1)"
   type        = number
-  default     = 0
+  default     = 1
 
   validation {
     condition     = contains([0, 1], var.shuttleforge_desired_count)
@@ -102,3 +102,99 @@ variable "core_image_tag" {
   }
 }
 
+################################################################################
+# Bandersnatch (bandersnatch.tf). The hostname, mail addresses and wording are never committed:
+# they come from the gitignored terraform.tfvars. Nothing but the ECR repository and push role
+# exists until bandersnatch_enabled is true.
+################################################################################
+
+variable "bandersnatch_enabled" {
+  description = "Create the Bandersnatch substrate (tables, bucket, roles, ALB rule, service). On since O-019: its tables and bucket are deletion-protected, so a plan with it off fails rather than destroys. The private values below have no usable default: supply them in terraform.tfvars (CI: repository secrets)"
+  type        = bool
+  default     = true
+}
+
+variable "bandersnatch_desired_count" {
+  description = "Bandersnatch ECS service desired task count (0 except while a share is live)"
+  type        = number
+  default     = 0
+}
+
+variable "bandersnatch_image" {
+  description = "Bandersnatch image as repository@sha256:digest; empty registers a digest that cannot exist"
+  type        = string
+  default     = ""
+}
+
+variable "bandersnatch_mail_mode" {
+  description = "Mail path: graph (Microsoft 365; grants 443 to the internet). ses is not wired yet: it needs the SES email interface endpoint first"
+  type        = string
+  default     = "graph"
+
+  validation {
+    condition     = var.bandersnatch_mail_mode == "graph"
+    error_message = "bandersnatch_mail_mode must be graph. The ses path has no network route until the SES email interface endpoint is added."
+  }
+}
+
+variable "bandersnatch_public_host" {
+  description = "Public hostname of the page, no scheme (terraform.tfvars only)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_graph_tenant_id" {
+  description = "Entra tenant of the sending application (graph mode)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_graph_client_id" {
+  description = "Entra application (client) id used for Graph sendMail (graph mode)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_mail_from" {
+  description = "Sender address"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_mail_from_name" {
+  description = "Sender display name"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_mail_reply_to" {
+  description = "Reply-To address"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_mail_subject" {
+  description = "Neutral subject line"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_page_title" {
+  description = "Neutral page title"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "sf_fixture_upstream_enabled" {
+  description = "SF.11 Stage B fixture upstream listener (spec sf-stage-b-fixture-upstream.md): on from B1 through B4, off before Stage C"
+  type        = bool
+  default     = true
+}

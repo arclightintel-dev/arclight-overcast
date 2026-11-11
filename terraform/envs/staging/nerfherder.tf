@@ -76,50 +76,9 @@ resource "aws_security_group_rule" "nf_to_core_nlb_443" {
   description              = "Nerfherder to Core internal NLB (token endpoint)"
 }
 
-resource "aws_security_group_rule" "nf_to_core" {
-  type                     = "egress"
-  from_port                = 8000
-  to_port                  = 8000
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.nerfherder.id
-  source_security_group_id = module.vpc.sg_core_id
-  description              = "Nerfherder to Core token endpoint"
-}
-
-resource "aws_security_group_rule" "core_from_nf" {
-  type                     = "ingress"
-  from_port                = 8000
-  to_port                  = 8000
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_core_id
-  source_security_group_id = aws_security_group.nerfherder.id
-  description              = "Nerfherder to Core token endpoint"
-}
-
-# O-1, rescoped to Nerfherder (2026-10-29): lease API 9000, dataplane 9050, mitm 9100.
-resource "aws_security_group_rule" "nf_to_sf" {
-  for_each = toset(["9000", "9050", "9100"])
-
-  type                     = "egress"
-  from_port                = tonumber(each.key)
-  to_port                  = tonumber(each.key)
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.nerfherder.id
-  source_security_group_id = module.vpc.sg_shuttleforge_id
-  description              = "Nerfherder to ShuttleForge ${each.key}"
-}
-
-resource "aws_security_group_rule" "sf_from_nf" {
-  for_each = toset(["9000", "9050", "9100"])
-
-  type                     = "ingress"
-  from_port                = tonumber(each.key)
-  to_port                  = tonumber(each.key)
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_shuttleforge_id
-  source_security_group_id = aws_security_group.nerfherder.id
-  description              = "Nerfherder to ShuttleForge ${each.key} (O-1)"
-}
+# Internal TLS P3b: the direct NF->Core 8000 pair (nf_to_core, core_from_nf) and NF->SF
+# 9000/9050/9100 rules (nf_to_sf, sf_from_nf; O-1) were removed. NF reaches Core and SF only
+# through their internal NLBs (nf_to_core_nlb_443 above; nf_to_sf_nlb in internal-tls.tf).
 
 # NF's post-deploy check reads /ready/detail, and nothing else can reach NF: a one-off probe task
 # in this group calls the service on 8100.
@@ -386,10 +345,14 @@ module "nerfherder_service" {
   deployment_maximum_percent         = 100
 
   container_definitions = templatefile("${path.module}/../../../services/nerfherder/task-definition.json.tpl", {
-    environment                   = var.environment
-    image                         = local.nf_image_unset
-    namespace                     = local.sf_namespace
-    region                        = var.aws_region
+    environment = var.environment
+    image       = local.nf_image_unset
+    namespace   = local.sf_namespace
+    region      = var.aws_region
+    # Internal TLS P3: Core and SF through their internal NLBs; no plaintext flag.
+    core_url                      = "https://${local.core_internal_fqdn}"
+    jwks_url                      = "https://${local.core_internal_fqdn}/.well-known/jwks.json"
+    shuttleforge_url              = "https://${local.sf_internal_fqdn}:9000"
     log_group                     = local.nf_log_group
     bucket                        = local.nf_bucket
     core_client_id                = local.nf_core_client_id

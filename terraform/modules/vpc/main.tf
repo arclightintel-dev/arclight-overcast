@@ -194,6 +194,19 @@ resource "aws_vpc_endpoint" "logs" {
   tags = { Name = "arclight-${var.environment}-logs" }
 }
 
+# Optional DynamoDB gateway endpoint: lets a service with no internet egress (O-017) reach
+# DynamoDB through a prefix-list rule, as the S3 gateway does for S3. Off by default.
+resource "aws_vpc_endpoint" "dynamodb" {
+  count = var.dynamodb_gateway_endpoint ? 1 : 0
+
+  vpc_id            = aws_vpc.this.id
+  service_name      = "com.amazonaws.${data.aws_region.current.name}.dynamodb"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = [aws_route_table.private_app.id]
+
+  tags = { Name = "arclight-${var.environment}-dynamodb" }
+}
+
 # Additional interface endpoints (O-012/OW-6): same shape as the three above. Private
 # DNS makes each one the only path to its service from this VPC, so add services here,
 # never from another root.

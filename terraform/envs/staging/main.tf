@@ -83,6 +83,8 @@ module "vpc" {
   # Secrets Manager endpoint (spec nf-egress-lockdown.md, D1; owner: two AZs, 2026-11-10).
   # Private DNS makes it the only Secrets Manager path for every staging task.
   extra_interface_endpoints = ["secretsmanager"]
+  # Bandersnatch has no internet path to DynamoDB (bandersnatch.tf).
+  dynamodb_gateway_endpoint = var.bandersnatch_enabled
 }
 
 module "ecr" {
@@ -143,7 +145,10 @@ module "secrets" {
   domain_name           = var.domain_name
   public_domain         = "${var.environment}.${var.domain_name}"
   private_dns_namespace = "${var.environment}.internal.${var.domain_name}"
-  ecr_repository_arns   = module.ecr.repository_arns
+  # Internal TLS P3 (D-077): the SSM internal URLs point at the internal NLBs.
+  core_internal_url         = "https://${local.core_internal_fqdn}"
+  shuttleforge_internal_url = "https://${local.sf_internal_fqdn}:9000"
+  ecr_repository_arns       = module.ecr.repository_arns
 }
 
 module "observability" {

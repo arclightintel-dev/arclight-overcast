@@ -44,3 +44,9 @@ variable "extra_interface_endpoint_subnet_indexes" {
   type        = list(number)
   default     = null
 }
+
+variable "dynamodb_gateway_endpoint" {
+  description = "Create a DynamoDB gateway endpoint on the private app route table"
+  type        = bool
+  default     = false
+}

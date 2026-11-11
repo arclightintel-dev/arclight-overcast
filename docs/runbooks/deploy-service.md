@@ -69,14 +69,20 @@ or have the service run migrations on boot.
   1. Register a copy of the latest `arclight-shuttleforge-migrate-staging` revision with
      the release digest.
   2. Run it with the **dbbootstrap** security group (443 and RDS only, no route to
-     Core). It binds only `db-url-migration` and runs `--migrate-only`.
+     Core), in the **private app subnets** with `assignPublicIp` DISABLED. The Secrets
+     Manager and ECR endpoints admit only those subnets. It binds only `db-url-migration`
+     and runs `--migrate-only`.
   3. Then re-run `dbbootstrap sf-app-role`, so `alembic_version` stays read-only for the
      runtime role.
   4. Only then deploy.
 - **Desired count is 0 until the first deploy.** The workflow cannot start a service
   from zero.
   1. Register the serving revision on the digest.
-  2. Run `update-service --task-definition <rev> --desired-count 1`.
+  2. Run `update-service --task-definition <rev>` first, then `update-service --desired-count 1`.
+     Setting both in one call scales the old deployment up for a moment. At SF's first start
+     (A5, 2026-11-10) that launched a task on the deregistered sentinel revision, which the
+     new deployment stopped while it was still pending. It was harmless, because the all-zero
+     digest cannot pull, but it is avoidable.
   3. Run the workflow's checks by hand:
      - the running digest;
      - `/ready` 200 with body `ready`. A degraded task also returns 200.

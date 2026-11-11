@@ -33,3 +33,17 @@ github_repos = [
   "arclight-podbay",
   "arclight-overcast",
 ]
+
+# Bandersnatch (bandersnatch.tf). Real values live only in terraform.tfvars, never in git.
+bandersnatch_enabled         = false
+bandersnatch_desired_count   = 0
+bandersnatch_image           = "" # repository@sha256:<digest> once the first image is pushed
+bandersnatch_mail_mode       = "graph"
+bandersnatch_public_host     = "page.example.com"
+bandersnatch_graph_tenant_id = "00000000-0000-0000-0000-000000000000"
+bandersnatch_graph_client_id = "00000000-0000-0000-0000-000000000000"
+bandersnatch_mail_from       = "no-reply@example.com"
+bandersnatch_mail_from_name  = "Example"
+bandersnatch_mail_reply_to   = "replies@example.com"
+bandersnatch_mail_subject    = "Your link"
+bandersnatch_page_title      = "Example"
