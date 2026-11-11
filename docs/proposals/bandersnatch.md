@@ -1,246 +1,118 @@
-# Bandersnatch: gated delivery to a named outside recipient (spec)
+# Bandersnatch: gated delivery to a named outside recipient (spec and plan)
 
-Status: **Revision 3, draft for the owner's review. Spec only: nothing is built, applied,
-sent or published.** The internal review, the external reviews (codex-1, codex-2, hotpants),
-the automated pull-request review and a delta review of revision 2 are folded in (see "Review
-record"). The phased plan and its acceptance tests are in
-[bandersnatch-plan.md](bandersnatch-plan.md).
+Status: **draft for the owner.** Spec and plan in one. Nothing is built, applied, sent or published.
+Request: the owner, 2026-11-10. Branch cut from `main` at `08ec540`. Live read-outs are dated 2026-11-10, read-only.
+**This repository is public (DR-14).** This document names no recipient, address, payload subject, hostname or recipient-facing wording; it uses `<page-host>` and `<mail-domain>`.
+History: earlier revisions and their reviews are in pull request #82 and git.
 
-Request: the owner, 2026-11-10 (condensed in "What was asked"). Branch `spec/bandersnatch`,
-cut from `main` at `08ec540`. Live read-outs are dated 2026-11-10 and were read-only.
-
-**This repository is public (DR-14).** This document names no recipient, no recipient
-address, no payload subject, no public hostname and no recipient-facing wording. Real values
-live outside git (see "Public-repository hygiene").
-
-## Decisions for the owner
-
-Each is argued in the section named. D1 comes first because every other answer depends on it.
+## 1. Decisions for the owner
 
 | # | Decision | Recommendation | Section |
 |---|---|---|---|
-| **D1** | **Who owns the token, session and audit logic?** (a) a small hosted application in its own private repository, on Overcast's substrate; (b) Core; (c) Cloudflare Access alone | **(a)** for the first share, by owner ruling on the O-012 pattern. Whether it becomes the platform's standard is a question for Complex | [Ownership](#d1-ownership) |
-| D2 | Environment | **Staging**, the only platform environment in v1 | [Environment](#d2-environment) |
-| D3 | Which JSON ships | **The compact example.** The full export only on a stated need, and never its companion guide as it stands | [The JSON choice](#d3-which-json-ships) |
-| **D3b** | **The page's own data bundle carries more than either JSON** | Before the first release, strip what the page never displays and every internal name and identifier; the owner confirms what remains | [Payload findings](#payload-findings-the-owner-must-see) |
-| D4 | The OpenStreetMap tile calls | **A static map image built at release time**, and the map library removed | [Third-party calls](#third-party-calls-and-the-map) |
-| D5 | Stamping | **Embedded metadata** in the JSON download, plus a visible line on the served page and metadata in each PDF. Needs the download to become a server file | [Stamping](#stamping) |
-| D6 | Mail-scanner and forwarding hardening | The click completes only in the **browser that asked for the link**; any other browser must re-enter the token | [Link and activation](#link-and-activation) |
-| D7 | Data store | **DynamoDB** (new, no network path to RDS) over the shared staging RDS | [Data model](#data-model) |
-| D8 | Names and mailboxes | Neutral hostname, mail subdomain, sender name, reply-to and report mailboxes: the owner picks them, and **none is written in this repository** | [Hygiene](#public-repository-hygiene) |
-| D9 | Token defaults | Expiry 7 days, three link emails, link valid 24 h. One activation per token is **fixed, not a default** (A1) | [Tokens](#accounts-and-tokens) |
-| D10 | Retention | Accounts, tokens and served releases kept (A3, A4); audit 2 years; what a stranger typed (address, name) 90 days, but the time, outcome and IP of their attempt 2 years; links and sessions 30 days after expiry | [Logging](#logging-and-retention) |
-| D11 | Uptime | The service runs **only while a token can still be activated or a session is live**; desired count 0 otherwise | [Rollback](#rollback) |
-| D12 | Lock mail on the hosting domain | Publish a null SPF and `p=reject` DMARC on `arclight-complex.net`, which never sends mail (A5) | [Mail](#mail-path) |
-| D13 | SES production access | **The owner** submits AWS's request (outward-facing); draft text is in the plan | [Mail](#mail-path) |
-| D14 | Issuing outside an account's domains (not in the brief; proposed here) | Issue only to a person recorded on the account; an address outside the account's domains needs an explicit override | [Tokens](#accounts-and-tokens) |
-| D15 | Proving a request came through our own Cloudflare zone, while DR-21 is open | **A shared-secret header** added by a Cloudflare rule and required by the application, until DR-21's client certificates land | [Origin authentication](#origin-authentication-d15) |
+| **D1** | Who owns the token, session and audit logic: (a) a small hosted application in its own private repository on Overcast's substrate; (b) Core; (c) Cloudflare Access alone | **(a)** for the first share, by owner ruling on the O-012 pattern. Whether it becomes the platform standard is a question the owner puts to Complex; hosting the first application does not wait on the answer | 4 |
+| D3 | Which JSON ships | The compact example. The full export only on a stated need, as its own release; never its companion guide as it stands | 7 |
+| **D3b** | The page's own data bundle carries more than either JSON | Before the first release, strip what the page never displays and every internal name and identifier; the owner confirms the displayed personal data is meant to leave | 7 |
+| D4 | The OpenStreetMap tile calls | A static map image built at release time; map library removed | 7 |
+| D12 | Lock mail on the hosting domain | Null SPF (`v=spf1 -all`) and `p=reject` DMARC on `arclight-complex.net`, which never sends mail (A5) | 6.5 |
+| **D13** | The mail path: (1) Microsoft 365; (2) Amazon SES on a subdomain; (3) no automated mail | **(1)** for the first share, because it needs no wait. (2) is the better long-term setup | 6.5 |
+| D15 | Proving a request came through our own Cloudflare zone while DR-21 is open | A shared-secret header set by a Cloudflare rule and required by the application, removed when DR-21's client certificates land. Alternatives: wait for DR-21; or accept forgeable rate-limit keys and logged IPs for anyone with their own Cloudflare zone | 6.2 |
 
-Already decided by the owner (not reopened here):
-- **A1. Activation:** strictly one hour from the click, once. Extending means reissuing.
-- **A2. Binding:** a token binds to the exact address it was issued to, not a domain.
-- **A3. Accounts** (2026-11-10, during drafting): tokens are tracked under accounts, and an
-  account can be assigned domains, organisations and people.
-- **A4. Served material is never retired** (same message): a release stays exactly as it was
-  served and is only flagged inaccessible, so a token can be reissued against it.
-- **A5. Domains** (2026-11-10, during drafting): `arclight-complex.net` is for application
-  hosting; mail goes out under `arclightlabs.io`.
+Already ruled by the owner, not reopened:
+- **A1.** One hour from the click, once per token, fixed. Extending means reissuing.
+- **A2.** A token binds to the exact email address, not a domain.
+- **A3.** Tokens are tracked under accounts; an account can be assigned organisations, domains and people.
+- **A4.** Served material is never deleted, only flagged inaccessible, so a token can be reissued against it.
+- **A5.** `arclight-complex.net` is application hosting only; mail goes out under `arclightlabs.io`.
 
-## What was asked
+## 2. Defaults
 
-A minimal gated delivery path that serves a static page and a data download to a named
-outside recipient. The owner wants it to become the platform's standard way to share pages,
-data or parts of the platform externally. The first payload is a static sample site (HTML,
-JS, CSS, images, PDFs) that is still being edited.
+These stand unless the owner says otherwise. They were decisions in earlier revisions (original id in brackets).
+
+- **Environment** [D2]: staging, the only platform environment in v1 (D-059 §9). Cost of that: this is the first hostname in the staging VPC not behind the `*.staging` Access application, so the service gets no path to RDS or any module.
+- **Stamping** [D5]: `distribution` metadata in the JSON download plus a visible line on the page. PDF metadata is the first piece to drop if effort is short.
+- **Scanners and forwarding** [D6]: the click completes only in the browser that asked for the link; any other browser must re-enter the token.
+- **Store** [D7]: DynamoDB, new, so the internet-facing task has no network path to the shared RDS.
+- **Token** [D9]: expires in 7 days; three link emails; link valid 24 h.
+- **Retention** [D10]: accounts, tokens, releases and served material kept; audit 2 years; what a stranger typed (address, name) 90 days; links and sessions 30 days after expiry.
+- **Uptime** [D11]: desired count 0 except while a token can still be activated or a session is live.
+- **Issuing** [D14]: only to a person recorded on the account; an address outside the account's domains needs an explicit override. Proposed in the earlier spec, not in the brief.
+- Choosing the names and mailboxes [D8] is an owner task in the checklist (9.1), not a decision.
+
+## 3. What was asked
+
+A minimal gated path that serves a static page and a data download to a named outside recipient. The owner wants it to become the standard way to share externally. The first payload is a static sample site that is still being edited.
 
 | # | Requirement |
 |---|---|
-| R1 | A nondescript page on the arclight-complex domain: a logo and three fields (token, name, email). No product, recipient or codename in the title, URL or copy |
-| R2 | If the token is valid for that address, email the address a link. The same neutral response whether or not the details match |
+| R1 | A nondescript page on the arclight-complex domain: logo and three fields (token, name, email). No product, recipient or codename in title, URL or copy |
+| R2 | If the token is valid for that address, email it a link. The same neutral response either way |
 | R3 | Rate-limit attempts |
-| R4 | The link lands on a page that needs a click to start the session. A GET must not consume it (mail scanners open links first). The hour starts at the click |
-| R5 | For one hour the session serves the page and allows the download, then ends |
-| R6 | Tokens are per recipient, bound to the address, with an expiry and a use count, and revocable |
-| R7 | Every asset (data, images, PDFs) sits behind the session. No public object URLs. `no-store` and `noindex` |
-| R8 | Served content makes no third-party requests |
-| R9 | Log who, when, source IP and what was downloaded |
-| R10 | Stamp the download with the recipient and the issue time |
+| R4 | The link's page needs a click. A GET must not consume it (scanners). The hour starts at the click |
+| R5 | One hour of page and download, then it ends |
+| R6 | Tokens per recipient, bound to the address, with expiry and use count, revocable |
+| R7 | Every asset behind the session; no public object URLs; `no-store`, `noindex` |
+| R8 | No third-party requests |
+| R9 | Log who, when, source IP, what was downloaded |
+| R10 | Stamp the download with the recipient and issue time |
 | R11 | The sending domain has aligned SPF, DKIM and DMARC |
 | R12 | The payload is pinned to an exact commit or hash at release |
 
-## D1. Ownership
+## 4. D1. Ownership
 
-**Overcast cannot own the logic.** The charter: "Modules own what runs. Overcast owns where
-it runs" (`docs/CHARTER.md:13`). Overcast does not own "Domain logic, seam contracts, API
-design" (l.32) and must not become "A module (no API, no seam contracts, no domain nouns)"
-(l.39). The platform record says the same: "Overcast is not a product module — it has no
-domain nouns, no seam contracts, no API" (Complex `platform/DECISIONS.md` l.1077 at `48c1715`).
-Tokens, links, sessions, accounts and an audit trail are application behaviour with domain
-nouns and an HTTP API.
+**Why Overcast cannot own the logic.** "Modules own what runs. Overcast owns where it runs" (`docs/CHARTER.md:13`). Overcast does not own "Domain logic, seam contracts, API design" (l.32) and must not become "A module (no API, no seam contracts, no domain nouns)" (l.39). Tokens, sessions, accounts and an audit trail are domain nouns with an HTTP API.
 
-**What Overcast does own here:** "Frontend web application deployment (S3 + CloudFront or
-Fargate)" (`docs/CHARTER.md:21`) and "All domain management (Cloudflare DNS, ACM certificates,
-SSL/TLS configuration)" (l.22). So Overcast hosts it, names it and provisions the
-infrastructure its mail goes through; it does not write its request handling.
+**What Overcast does own here.** "Frontend web application deployment (S3 + CloudFront or Fargate)" (l.21) and "All domain management (Cloudflare DNS, ACM certificates, SSL/TLS configuration)" (l.22). It hosts, names and provisions; it writes no request handling. Dockerfiles stay in the application's repository (l.41).
 
-### Option (a): a small hosted application on Overcast's substrate (recommended)
+**(a) A hosted application (recommended).** A new private repository holds the code, Dockerfile, tests and operator tool. Precedent is O-012: Backstage is hosted "as a prototype platform application, not a module and not a separate tenant", by owner ruling, with no D-series needed (`docs/DECISIONS.md:151`, `:161`).
+- For: the smallest blast radius (own tables, bucket, mail identity and security group; nothing shared with Core's identity plane). It meets every requirement and A3, A4.
+- Against: a new repository and image; security-sensitive code outside Core's review chain.
+- Limit: O-012 covers hosting one application, not "the platform's standard". Governance is Complex's (`docs/CHARTER.md:30`). Accounts (A3) are the part most likely to move to Core one day, so they are kept separate from the serving path.
 
-A new private repository holds the application code, its Dockerfile, its tests and its
-operator tool ("Dockerfiles stay in module repos", `docs/CHARTER.md:41`). Overcast provides
-the ECS service, the load-balancer rule, the certificate, DNS, the mail identity, the data
-tables, the payload bucket and the egress (everything under [Design](#design)).
+**(b) Core.** Core has the vocabulary (`external_client`, D-030; an `external_consumer` plane) but no way to admit by out-of-band token plus proof of a mailbox. That is platform design (D-070 §2, D-073 §1), not an implementation detail, and "Core-brokered login is not available in v1" (`docs/DECISIONS.md:156`). Wholly in Core, it puts an unauthenticated public path on the service that signs every platform token. Most of the work (serving, stamping, mail) is not identity. Option (a) can later hand its token check to Core without changing its public behaviour.
 
-The precedent is **O-012**: Backstage is "hosted by Overcast on AWS as a **prototype platform
-application**, not a module and not a separate tenant", by owner ruling, with Complex told
-and "no D-series decision … required for Overcast to proceed" (`docs/DECISIONS.md:151`,
-`:161`).
-
-- **For:** the smallest blast radius of the three (its own tables, bucket, mail identity and
-  security group, nothing shared with Core's identity plane). It ships on its own cadence. It
-  can meet every requirement and both later rulings (A3, A4).
-- **Against:** a new repository and image to look after, and a second set of
-  security-sensitive code outside Core's review chain.
-- **What O-012 does and does not cover.** It covers Overcast hosting one application on the
-  owner's word. It does not make that application "the platform's standard way to share":
-  platform governance belongs to Complex (`docs/CHARTER.md:30`). The recommendation is
-  therefore **(a) for the first share now, and the owner asks Complex whether the standard
-  needs a D-series decision** before a second payload source, a caller from another module,
-  or a platform principal depends on it.
-- **A3 sharpens this.** Accounts with organisations, domains and people are a small directory
-  of outside parties. That is more domain model, so further from Overcast, and it is the part
-  most likely to belong with Core one day. It is kept in its own table, which the serving
-  task cannot read, so it can move without touching the serving path.
-
-### Option (b): the logic in Core
-
-Core already owns tokens, identity, OIDC and the scope grant.
-
-- **Core's vocabulary has room for outside parties**: the principal-type enum includes
-  `external_client` (D-030, Complex `platform/DECISIONS.md` l.310) and there is an
-  `external_consumer` principal plane (l.422). So (b) is the natural long-term home for *who
-  the outside parties are*.
-- **What is missing for this flow** is everything between that vocabulary and a working
-  path: a way to admit someone by an out-of-band token plus proof of a mailbox, with no
-  account and no login; a scope and a surface for "one hour of this release". D-070 §2 makes
-  "the Core scope grant … the admission decision for a seam operation", and D-073 §1 sets
-  "One authorization model for every Core-JWT caller" (l.1418, l.1485). Neither forbids an
-  outside party; both mean that doing this in Core is a platform design task (identity
-  contract, permission vocabulary), not an implementation detail.
-- **Core cannot broker it today.** "Core-brokered login is not available in v1 (Core is not
-  an OpenID provider)" (`docs/DECISIONS.md:156`).
-- **Done wholly in Core, it widens the identity plane's public surface.** Every Core hostname
-  sits behind the `*.staging` Access application (live read-out below), and an outsider flow
-  served by Core needs an unauthenticated public path into the service that signs every
-  platform token.
-- **A split is possible and is the stronger form of (b):** a public application handles the
-  pages, mail and rendering, and asks Core privately whether to admit. Core then stays off
-  the internet. It is not recommended now only because that Core integration does not exist;
-  it is the shape option (a) can grow into.
-- **Most of the work is not identity.** Serving a pinned static site, stamping downloads and
-  sending mail are not Core's job.
-
-Not recommended for v1. If Core later admits external parties this way, the hosted
-application can hand its token and account checks to Core without changing its public
-behaviour.
-
-### Option (c): managed edge only (Cloudflare Access)
-
-Overcast would only configure: a self-hosted Access application on the page's hostname, a
-per-address Include rule, one-time PIN login, a one-hour session. Checked against the flow:
+**(c) Cloudflare Access alone.** It does not fit:
 
 | Requirement | Access with one-time PIN | Fit |
 |---|---|---|
-| R1: logo and three fields (token, name, email) | The login page takes a logo, header, footer and colour; "custom sign-in forms are not supported", so no token or name field. Sign-in runs on `<team>.cloudflareaccess.com` | **No** |
-| R2: email a link; neutral response | The mail carries a code **and** a link. The page "will always say A code has been emailed to you" and blocked addresses get no mail | Neutral: yes. Mail: Cloudflare's |
-| R4: a `GET` must not consume | Cloudflare's own page warns that mail-security tools following the link use the code up. A PIN lasts 10 minutes | **No** |
-| R5, A1: one hour, once | A one-hour session can be set. The recipient can always request a new PIN and sign in again; there is no single-use or counted policy | **No** ("once" cannot be enforced) |
-| R6: per-recipient token with expiry and use count | An Include rule lists exact addresses. No expiry date or use count on a rule | **Partly** |
-| R9: who, when, IP, what was downloaded | Authentication logs: address, IP, country, time (no user agent). **Kept 24 hours on the Free plan.** Per-request logs are listed as Enterprise-only (Cloudflare's Logpush page is less definite) | **No** |
-| R10: stamped download | Nothing at the edge can stamp; the origin must | **No** |
-| R11: our domain's SPF, DKIM, DMARC | Mail comes from `noreply@notify.cloudflare.com`; no documented way to change it | **No** |
-| Seats | Each recipient takes one of 50 Free seats until removed | Operational |
+| R1 token and name fields | No custom sign-in forms; sign-in runs on Cloudflare's domain | No |
+| R4 GET must not consume | Scanners following the link use the code up; PIN lasts 10 min | No |
+| R5/A1 one hour, once | One-hour session possible; the recipient can always sign in again | No |
+| R6 expiry and use count | Exact addresses yes; no expiry or count on a rule | Partly |
+| R9 audit | Auth logs kept 24 h on Free; per-request logs Enterprise | No |
+| R10 stamp | The edge cannot stamp | No |
+| R11 our SPF/DKIM/DMARC | Mail comes from Cloudflare's sender | No |
+| A3, A4 | No counterpart | No |
 
-Sources: Cloudflare's One-time PIN, session management, custom pages, Access authentication
-logs, log retention and seat management documentation, read 2026-11-10.
+D-074 §6 also rules it out as the control: "Edge authentication is never the control … defense in depth only". And DR-21 is open: a zone in another Cloudflare account can reach the staging ALB and skip Access (`docs/PROJECT_STATE.md:151`). Source: Cloudflare documentation read 2026-11-10.
 
-**D-074 §6 also argues against the edge as the only control:** "Edge authentication is never
-the control. An edge gate (for example Cloudflare Access) is defense in depth only" (Complex
-`platform/DECISIONS.md` l.1542). That decision is written for module surfaces, and names the
-control as the module's own credential check or the Core scope. Options (a) and (b) are those
-two forms; (c) is neither. DR-21 gives the practical reason: a zone from another Cloudflare
-account can reach the staging ALB and skip the Access application
-(`docs/PROJECT_STATE.md:151`).
+Rejected runtimes for (a): Cloudflare Workers (a platform Overcast does not run; logs outside AWS) and Lambda@Edge (egress O-017 cannot constrain).
 
-Option (c) is viable only if the owner relaxes R1, R4, R5, R6, R9, R10 and R11. A3 and A4
-(accounts, reissue against kept material) have no counterpart in Access at all.
-
-### Rejected runtimes for option (a)
-
-- **Cloudflare Worker with KV or D1:** application code on a platform Overcast does not run
-  today (the service registry records an empty Workers listing); logs and audit would live
-  outside AWS.
-- **CloudFront with Lambda@Edge:** edge functions log to the region of the edge location, and
-  a function outside a VPC has internet egress that O-017 cannot constrain.
-
-## D2. Environment
-
-**Staging.** "For v1, staging is production (D-059 §9)" (Complex `platform/DECISIONS.md`
-l.1052). The prod root holds only the substrate Backstage runs on, "not a production
-environment awaiting apply" (`CLAUDE.md`, O-016); it has no ECS cluster and no database.
-Staging has the cluster, the endpoints, the protected CloudTrail (O-015) and the O-017 egress
-pattern this needs.
-
-**What that costs.** This would be the **first hostname in the staging VPC that is not behind
-the `*.staging` Access application**. Backstage is the only other Access-free application in
-the account, and it sits in the prod VPC (O-012 D19). An internet-facing application in the
-staging VPC must therefore have no security-group path to anything holding operational
-material. That is why D7 recommends DynamoDB over the shared RDS, and why the design gives the
-service no path to Core, ShuttleForge, Nerfherder or RDS (see
-[Network](#network-and-egress-o-017), including what it can still reach).
-
-D-059 §8 still applies: no automatic deploys; the owner's go per release. Every name in the
-design derives from `var.environment` (INV-001); `staging` below is the value, not a literal.
-
-## Verified reuse
+## 5. Verified state
 
 Read 2026-11-10 from code at `08ec540` and live, read-only.
 
-| Component | Verified state | Evidence | Use here |
-|---|---|---|---|
-| Staging ALB `arclight-staging` | Internet-facing; 443 with `ELBSecurityPolicy-TLS13-1-2-2021-06`; 80 redirects to 443; default action 404 "Not Found" | `terraform/modules/alb/main.tf:72-85` (`internal = false`), `:91-121`; live `describe-listeners`, `describe-rules` | Host the page behind one new host-header rule |
-| ALB rules | Live priorities: ShuttleForge 2, Core 10, default. The module sets no priority (`alb/main.tf:157-172`); Core sits at 10 by hand (`docs/PROJECT_STATE.md:163-166`, `:182`) | live `describe-rules` | Our rule lives in the root with an explicit priority (Backstage pattern, `terraform/envs/backstage/alb.tf:5-44`) |
-| ALB ingress | Cloudflare's 15 IPv4 and 7 IPv6 ranges only (O-005) | `terraform/envs/staging/main.tf:46-71`, `alb/main.tf:13-55` | Unchanged. DR-21 applies (D15) |
-| ALB access logs | Off | live `access_logs.s3.enabled false`; no `access_logs` in `alb/main.tf:72-85` | Nothing secret may sit in a URL that a later change could log |
-| ALB attributes | XFF `append`; invalid header fields not dropped; idle timeout 3600 s (`alb/main.tf:78`) | live attributes | Client IP comes from `CF-Connecting-IP`; the application enforces its own response deadline |
-| Staging 443 certificate | `*.staging.arclight-complex.net` only; **no SNI certificates** | live `describe-listener-certificates`; no `aws_lb_listener_certificate` in the repo | Attach a second certificate |
-| First-level wildcard | `*.arclight-complex.net` + apex, ISSUED, AMAZON_ISSUED, renewal eligible; in use by the prod ALB and Backstage's CloudFront; requested out of band, read through data sources (`terraform/envs/prod/main.tf:40-44`, `terraform/envs/backstage/downloads.tf:11-15`) | live `acm describe-certificate` | Attach to the staging 443 listener as SNI. **No new certificate, so no new Certificate Transparency entry names the page** |
-| Fargate module | `internet_egress` default false (O-017); creates no target group or listener rule; registers Cloud Map; `desired_count` is Terraform-managed (`main.tf:95`, `:146-148`) | `terraform/modules/ecs-service-fargate/variables.tf:96-102`, `main.tf:21-68` | The service, with `internet_egress = false` |
-| Interface endpoints (staging) | `ecr.api`, `ecr.dkr`, `logs`, `secretsmanager`; S3 gateway on the private route tables. **None carries an endpoint policy** | live `describe-vpc-endpoints`; `terraform/modules/vpc/main.tf:152-219` | Reuse ECR, Logs, S3, Secrets Manager |
-| SES API endpoint | `com.amazonaws.us-east-1.email`: all six AZs; private DNS covers `email.us-east-1.amazonaws.com` and `email.us-east-1.api.aws`; endpoint policies supported. `email-smtp` is **not offered in us-east-1b**, one of staging's two AZs | live `describe-vpc-endpoint-services` | Add `email` to `extra_interface_endpoints` (`terraform/envs/staging/main.tf:83-85`). API, not SMTP |
-| Endpoint security group | Inline ingress 443 from the private app subnet CIDRs | `terraform/modules/vpc/main.tf:136-150` | No change; our group adds egress to it (NF pattern, `terraform/envs/staging/nerfherder.tf:49-67`) |
-| DynamoDB | Only `arclight-terraform-locks` exists; no DynamoDB endpoint in the VPC | live `list-tables`, `describe-vpc-endpoints` | New tables and a gateway endpoint (D7) |
-| SES | **Sandbox** (`ProductionAccessEnabled: false`, 200 per 24 h, 1 per second); **no identities**; account suppression list on for bounces and complaints | live `sesv2 get-account`, `list-email-identities` | New domain identity; production access is an owner step (D13) |
-| Mail DNS, `arclightlabs.io` (the mail domain, A5) | Zone on Cloudflare CF-01. MX to Microsoft 365; SPF `include:spf.protection.outlook.com -all`; DKIM `selector1` and `selector2` CNAMEs to Microsoft; DMARC `p=none` with a report mailbox on the domain | live public DNS (1.1.1.1); Cloudflare API (record names and types) | A dedicated subdomain for this sender; the apex records are not touched |
-| Mail DNS, `arclight-complex.net` | **No MX, no TXT (no SPF), no `_dmarc`**; Email Routing off | live public DNS; Cloudflare API | Hosting only (A5). D12 locks it against spoofing |
-| Mail DNS, `ansanalytics.com` | DNS at WordPress.com, not Cloudflare, with no management connection (`docs/service_registry.md:58`). MX to Microsoft 365, but SPF lists only WordPress's sender, no DKIM at `selector1`, DMARC `p=none` | live public DNS | **Not used.** Outside Overcast's DNS, and not aligned today |
-| Cloudflare zone `arclight-complex.net` | Full (strict); Universal SSL covers `*.arclight-complex.net`; 9 records, none for mail | Cloudflare API, read-only token | One proxied record for the page |
-| Zone settings that alter responses | **Email Address Obfuscation on**; **Network Error Logging on** (live `Nel` and `Report-To` headers naming `a.nel.cloudflare.com`); Automatic HTTPS Rewrites on; Rocket Loader off; Always Online off; browser cache TTL 14 400 s; **minimum TLS 1.0**; Always Use HTTPS off | Cloudflare API; `curl -sI` on an existing proxied hostname | Rules for the hostname (see [Edge](#edge-cloudflare)) |
-| Web Analytics, Zaraz, Speed Brain | **Unreadable** with the read-only token (error 10000). Cloudflare documents Web Analytics (since 2025-10-15) and Speed Brain as on by default for Free zones | Cloudflare API; Cloudflare documentation | Treated as on until the owner reads the dashboard; blocked at the origin regardless |
-| Cache, configuration and rate-limit rules | None exist (phase entrypoints absent) | Cloudflare API | New, scoped to the hostname |
-| Access | Applications: `*.staging.arclight-complex.net` (24 h session; policies: one address, a "Cloudflare Login" login method, the `staging-automation` service token) and a Pages preview app. IdPs: one-time PIN, Cloudflare. No Entra | Cloudflare API, read-only token | **Not used.** The page hostname must match no Access application |
-| Cloudflare write token | Scoped to `arclight-complex.net` only; DNS, zone settings, SSL and transform rules there | Operator's note of 2026-11-10 (not re-tested here) | Needs `arclightlabs.io` DNS and three more permissions; the owner has offered to extend it (plan P0) |
-| Deploy workflow | `deploy-service.yml`'s manual trigger offers `core` and `shuttleforge` only (`repository_dispatch` takes any module name); it verifies the digest, then `/ready` through the public hostname with Access headers | `.github/workflows/deploy-service.yml:7-13`, `:24-25`, `:209-257` | Manual deploys for v1; the workflow cannot deploy this service by design (see IAM) |
-| CI plan | Supplies `TF_VAR_core_image_tag` from a repository **variable**, which the public job log prints in clear, and `TF_VAR_alarm_email` from a **secret**, which it masks (run 42885203378). A new variable without a default fails the plan | `.github/workflows/terraform-plan.yml:35-37`, `:67` | The names come in as repository **secrets** |
-| Push roles | Hard-coded list in `iam-github-oidc`; staging is its only caller. Adding a repository also widens the CI deploy role's `ECRVerifyImage` list in place (`main.tf:122-130`) | `terraform/modules/iam-github-oidc/main.tf:289-343`; `terraform/envs/staging/main.tf:161` | One entry for the new repository |
-| Hosted-application pattern | Backstage: own root, own target group, explicit listener priority, standalone ALB egress rule | `terraform/envs/backstage/alb.tf:5-44`, `network.tf:86-95` | Same shape, inside the staging root |
+| Thing | State | Use here |
+|---|---|---|
+| Staging ALB `arclight-staging` | Internet-facing; 443 (`ELBSecurityPolicy-TLS13-1-2-2021-06`), 80 redirects, default 404; ingress from Cloudflare ranges only (O-005); live rule priorities 2 (ShuttleForge) and 10 (Core); access logs off; idle timeout 3600 s | One host rule at explicit priority 20 (Backstage pattern, `terraform/envs/backstage/alb.tf:5-44`) |
+| Certificate | The 443 listener has `*.staging.arclight-complex.net` only. The first-level wildcard `*.arclight-complex.net` is ISSUED and already used by the prod ALB and Backstage | Attach it as SNI. No new certificate, so no Certificate Transparency entry names the page |
+| Fargate module | `internet_egress` default false (O-017); creates no target group or rule; `desired_count` Terraform-managed | As is |
+| VPC endpoints (staging) | `ecr.api`, `ecr.dkr`, `logs`, `secretsmanager`, S3 gateway; none has an endpoint policy. No DynamoDB endpoint. SES API endpoint `com.amazonaws.us-east-1.email` is available in all AZs (`email-smtp` is missing from us-east-1b, so API not SMTP) | Add a DynamoDB gateway endpoint; for D13 option 2, add `email` to `extra_interface_endpoints` (`terraform/envs/staging/main.tf:83-85`) |
+| SES | Sandbox (`ProductionAccessEnabled: false`, 200 per 24 h, 1 per second); no identities; account suppression list on | D13 |
+| Mail DNS `arclightlabs.io` | Cloudflare CF-01. MX Microsoft 365; SPF `include:spf.protection.outlook.com -all`; DKIM `selector1`/`selector2`; DMARC `p=none` | The sending domain (A5). Apex records untouched |
+| Mail DNS `arclight-complex.net` | No MX, no SPF, no `_dmarc` | Hosting only (A5); D12 locks it |
+| Mail DNS `ansanalytics.com` | DNS at WordPress.com, no management connection (`docs/service_registry.md:58`); not aligned today | Not used |
+| Cloudflare zone `arclight-complex.net` | Full (strict); Universal SSL covers the first-level wildcard; no cache, configuration or rate-limit rules exist | Hostname-scoped rules (6.2) |
+| Zone settings that alter responses | Email Address Obfuscation on; Network Error Logging on (live `NEL` and `Report-To` naming `a.nel.cloudflare.com`); Automatic HTTPS Rewrites on; browser cache TTL 14,400 s; minimum TLS 1.0; Always Use HTTPS off. Web Analytics, Zaraz and Speed Brain unreadable with the read-only token (error 10000) | Treated as on; switched off or overridden for the page host |
+| Access | One application, `*.staging.arclight-complex.net` | Not used. The page host is first-level, so it matches no Access application |
+| Cloudflare write token | Scoped to `arclight-complex.net` only (operator's note, not re-tested) | Needs extending (9.1) |
+| CI plan | Repository **variables** print in clear in public job logs (`TF_VAR_core_image_tag`); **secrets** are masked (`TF_VAR_alarm_email`); verified, run 42885203378. A new variable without a default fails the plan | Names go in secrets |
+| Deploy workflow | `deploy-service.yml` offers `core` and `shuttleforge` only | Manual deploys for v1 |
+| Push roles | Hard-coded list in `iam-github-oidc`; adding a repository widens the CI deploy role's image-read list in place (`main.tf:122-130`) | One expected in-place update |
+| RDS and `dbbootstrap` | Shared by every module | Not reused: an internet-facing task would get a 5432 path to the server holding every module's database (DR-17) |
 
-Not reused, deliberately:
-- **RDS** (see D7), and with it **`dbbootstrap`** (DR-17 makes its image hard to change).
-- **Secrets Manager** holds at most one value here: D15's origin secret, as a shell
-  (INV-004). Everything else is reached with the task role, and every token, nonce and
-  session identifier is stored only as a hash.
+## 6. Design
 
-## Design
+### 6.1 Shape and flow
 
 ```
 recipient ──HTTPS──▶ Cloudflare (proxied; cache bypass; no injection; adds the origin secret)
@@ -250,973 +122,224 @@ recipient ──HTTPS──▶ Cloudflare (proxied; cache bypass; no injection; 
                         │  8080 (health checks: 8081)
                         ▼
           bandersnatch task (Fargate, private app subnets, no internet egress)
-             │ DynamoDB (gateway)   │ S3 payload (gateway)   │ SES API (interface)   │ Logs, ECR (interface)
+             │ DynamoDB (gateway)   │ S3 payload (gateway)   │ mail (D13)   │ Logs, ECR (interface)
 ```
 
-### Edge (Cloudflare)
+1. The operator creates the account and person, publishes a release, issues a token, and gives the token to the recipient by a channel other than email.
+2. The recipient opens `<page-host>` and enters token, name and email. The answer is always the same and neutral.
+3. If the token is valid for that exact address, a mail with a link goes to that address.
+4. The link's page shows one button. Loading it changes nothing. Pressing it starts the hour, in the same browser that asked, or in another after re-entering the token.
+5. For one hour the session serves the pinned site and the stamped download. Then it ends.
+6. The operator flags the release inaccessible, sets desired count 0 and exports the account report.
 
-- One **proxied** record `<page-host>` → the staging ALB's DNS name. A **first-level** name
-  under `arclight-complex.net`, so it falls outside the `*.staging` Access application and is
-  covered by Universal SSL. It must match no Access application (AT-18).
-- **The origin is the first layer for everything below.** It sends
-  `Cache-Control: no-store, no-transform`. Cloudflare documents that `no-store` is never
-  cached at the edge and that `no-transform` stops both the email-obfuscation rewrite and the
-  Web Analytics beacon. The rules are the second layer, and AT-5b and AT-6 test the result
-  as the browser receives it, because some of this is documented rather than proven.
-- **Cache rule:** bypass cache for the hostname, browser TTL "respect origin". (`.pdf` is on
-  Cloudflare's cached-by-default list, and the zone's 4-hour Browser Cache TTL overrides a
-  lower origin `max-age`.)
-- **Configuration rule for the hostname:**
-  - Email Address Obfuscation **off** (it rewrites every address in HTML, which would mangle
-    the visible stamp);
-  - **Real User Monitoring off** (the Web Analytics beacon loads from
-    `static.cloudflareinsights.com`, a third-party request, R8);
-  - Automatic HTTPS Rewrites off, Rocket Loader off.
-- **Response-header rule for the hostname: remove `NEL` and `Report-To`.** With them, a
-  browser that hits a network error reports it to `a.nel.cloudflare.com`: a request to
-  another host that R8 does not allow. (Turning Network Error Logging off for the whole zone
-  is the alternative.)
-- **Request-header rule for the hostname: set the origin secret** (D15).
-- **Rate-limiting rule** on `POST` for the hostname. The Free plan gives the zone one rule
-  (per IP, 10-second window and block). It is spent here to protect the single unextendable
-  hour from a flood; the application's own limits remain the control.
-- **Speed Brain** prefetches same-site links. The application refuses any request marked
-  `Sec-Purpose: prefetch`, so a prefetch can never count as a view or a download.
-- **Compression.** `no-transform` also stops Cloudflare compressing, so the application
-  compresses text responses itself.
-- **HTTPS only.** Always Use HTTPS is zone-wide and off, and Full (strict) forwards a
-  plain-HTTP request to the origin over HTTP. The ALB's port-80 listener already answers 301
-  to HTTPS, mailed links are always `https`, and the application sends HSTS.
-- **Not ours to set:** Cloudflare answers `/cdn-cgi/*` itself, and its own error and
-  challenge pages (like the ALB's 503 when the service is off) carry none of our headers and
-  none of our content.
-- **Minimum TLS** is zone-wide (1.0 today). Raising it is in the unmerged
-  `cloudflare-adoption` branch: an observation here, not part of this change.
+### 6.2 What Overcast provides
 
-### Origin (ALB)
+- **Edge (Cloudflare), scoped to the hostname.** One proxied first-level record to the ALB. A cache rule (bypass; `.pdf` is cached by default and the zone's 4 h browser TTL would override). A configuration rule (Email Address Obfuscation, Real User Monitoring, Automatic HTTPS Rewrites and Rocket Loader off). A response-header rule removing `NEL` and `Report-To`. A request-header rule setting the origin secret (D15). The zone's one free rate-limit rule on `POST` (per IP, 10 s). Cloudflare's own `/cdn-cgi/*` and error pages are not ours to set. Zone minimum TLS and Always Use HTTPS are observations, not part of this change.
+- **ALB.** `aws_lb_listener_certificate` for the existing wildcard; a target group (`ip`, HTTP 8080); one rule, priority 20, `Host = <page-host>`. The health check is on port 8081 `/ready`, which no listener forwards to, so health is not public.
+- **Service.** Fargate 0.25 vCPU / 0.5 GB, `internet_egress = false`, desired count a variable (default 0), non-root, read-only root file system, no ECS Exec (O-018 posture).
+- **Network.** Ingress from the ALB group on 8080 and 8081. Egress on 443 to the endpoint group (ECR, Logs, Secrets Manager, and SES `email` under D13 option 2), to the S3 prefix list and to the DynamoDB prefix list. Nothing to the internet, RDS, Core, ShuttleForge or Nerfherder, except the Microsoft egress of D13 option 1. Residual: the shared endpoints carry no endpoint policy (`docs/proposals/nf-egress-lockdown.md:286-293`), tracked as DR-24.
+- **Stores.** The DynamoDB tables the application names (6.4), with deletion protection and point-in-time recovery. One payload bucket: private, Block Public Access, versioning, deletes denied to everyone, no overwrite of an existing key, no lifecycle rule, `prevent_destroy`. No presigned URLs.
+- **IAM.** The task can read tokens and releases, write its own links, sessions, counters and audit events, read the payload bucket, and send as the one configured address. It cannot create a token, write a release or the bucket, or touch accounts. The role names (`arclight-bandersnatch-task-<env>`, `-exec-<env>`) fall outside the CI deploy role's `PassRole` patterns (`iam-github-oidc/main.tf:132-138`), so CI cannot run a task as this service. The application's repository gets a push role, `main` only. Operators run the tool from their own machines with administrator credentials; the token plaintext never reaches AWS.
+- **Secrets.** One shell for D15's value, written by the owner (INV-004); one more for the mailbox credential under D13 option 1. Names derive from `var.environment` (INV-001).
+- **Interface handed to the application.** Ports 8080 (traffic) and 8081 (health); `/ready` = process up and DynamoDB reachable; configuration by environment (host, sender, reply-to, wording, table names, bucket, mail settings, region, origin secret); image `arclight/bandersnatch`, tag `v1-<sha>`, deployed by digest; JSON logs on stdout to `/arclight/staging/bandersnatch`.
 
-- `aws_lb_listener_certificate`: the existing `*.arclight-complex.net` certificate (data
-  source, as prod and Backstage read it) on the staging 443 listener. The listener's default
-  certificate stays `*.staging`.
-- A target group (`ip`, HTTP 8080) and **one listener rule with an explicit priority** (20,
-  which is free: the live rules sit at 2 and 10), condition `Host = <page-host>` only. Order
-  does not matter, because the three host conditions are disjoint.
-- **Health on its own port.** The target group's health check goes to port **8081**, path
-  `/ready`. No listener forwards to 8081, so health is unreachable from the internet whatever
-  `Host` is sent. `/ready` reports only "process up, DynamoDB reachable".
-- Standalone ALB security-group egress rules to the service on 8080 and 8081 (Backstage
-  pattern), and matching ingress on the service's group.
-- The application's public routes on 8080 are exactly `/`, `/a/*`, `/v/*`, `/d/*` and
-  `/robots.txt`. Everything else is the neutral 404.
+### 6.3 Application requirements
 
-### Origin authentication (D15)
+Normative for the application. They are held here only until the application's own repository exists, and move there then; Overcast owns infrastructure, not application logic (`docs/CHARTER.md:43`).
 
-DR-21: the ALB admits every Cloudflare address, so a zone in someone else's Cloudflare
-account can be pointed at it. On that path our zone's rules do not run, and `CF-Connecting-IP`
-is whatever that zone's configuration makes it (Cloudflare documents it as alterable inside a
-zone's own Workers, and removable by a managed transform). The gate itself would hold, since
-it does not depend on the IP. What fails is: per-IP limits (an attacker picks their own key,
-or forges the recipient's to lock them out), and the source IP in the audit log (R9).
+- **Neutral response (R2).** Every submission gets the same status, headers and body whether or not the details match. The mail is sent after the response.
+- **Rate limit (R3).** Per IP, 5 per 15 minutes and 20 per day, 429 whatever was submitted. This is the only limit that refuses, so nobody can lock a recipient out and the limit is no oracle. Client IP is `CF-Connecting-IP`.
+- **Exact binding (A2).** The address is trimmed and lower-cased; nothing else is folded. The name is recorded, never validated, never echoed.
+- **Link (R4).** A GET or HEAD on the link never changes state and returns the same page for any link. The click is a POST. It starts the session only with the binding cookie from the browser that asked, or with the token re-entered. A newer link supersedes an older one. A link is valid 24 h. Why: a scanner that presses buttons, or anyone the mail is forwarded to, has neither factor.
+- **Once, one hour (A1).** One activation per token, with no setting for it. The session ends 3600 s after the click; no refresh, no sliding expiry. Token expiry bounds when a session may start, not when it ends.
+- **A lost response or a double click must not burn the only activation.** The same proof within the hour gets the same session back, never a new hour.
+- **A failed send must not cost the recipient a link.** Three link emails per token.
+- **Revocation (R6).** Revoking a token, revoking a session, suspending an account or flagging a release inaccessible takes effect at the next request.
+- **Everything behind the session (R7).** Only paths in the pinned manifest are served. Without a valid session every path is the same neutral 404. Public routes are `/`, `/a/*`, `/v/*`, `/d/*` and `/robots.txt`.
+- **Headers on every response.** `Cache-Control: no-store, no-transform`; `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet`, plus the robots meta tag and a disallow-all `robots.txt`; `Referrer-Policy: same-origin`; HSTS; `nosniff`; a CSP with no host outside `'self'`, `frame-ancestors 'none'`, `form-action 'self'`. The session cookie is `__Host-`, `Secure`, `HttpOnly`.
+- **No third-party requests (R8).** `no-transform` stops Cloudflare's email-obfuscation rewrite and analytics beacon (the edge rules are the second layer). The application compresses its own text responses, because `no-transform` stops Cloudflare doing it. Requests marked `Sec-Purpose: prefetch` are refused.
+- **CSRF that works with real browsers.** Every POST and every download requires `Sec-Fetch-Site: same-origin`; a POST also requires `Origin` equal to the page origin; `null` is never accepted. This is why the referrer policy is `same-origin`: under `no-referrer` browsers send `Origin: null` on form posts and every real submission would be refused.
+- **Host and origin.** Only `Host = <page-host>` is served. Mail links are built from configuration, never from the request. The origin secret is required if D15 is approved (neutral 404 without it).
+- **Wording.** Everything the recipient sees is neutral, chosen by the owner, supplied as configuration, and never contains the codename. The click page says the hour is single and cannot be paused or repeated.
+- **Tokens.** 130 random bits (26 Crockford base32 characters), generated on the operator's machine, shown once. Only hashes of tokens, links and cookies are stored; none is logged.
+- **Stamping (R10).** The JSON download is the pinned original with a `distribution` object (bound address, token issue time, session start, release id and manifest hash, a distribution id) inserted as the first member, every other byte unchanged. The bytes are the same for every request in a session. HTML pages carry a visible line (address, issue date, short reference). PDF metadata is optional (section 2). Metadata can be stripped; the audit log and the visible line are what attribute a leak.
+- **Pinning (R12).** A release is an immutable directory with a manifest (each file's path, SHA-256, size and type; the source commit; a clean-tree flag). The release id is the first 16 hex characters of the manifest's SHA-256. The tool refuses a dirty tree. The application verifies the manifest and file hashes before serving and refuses a release that does not match. Each token carries its release's manifest hash.
+- **Release lint.** Rejects any URL loaded from another host, source maps, absolute local paths, the codename, dotfiles and service workers. Reports internal names, identifiers, addresses and phone numbers for the owner's sign-off.
+- **Audit (R9).** Who (bound address; name as typed), when (UTC), source IP, and what (every path served, every download with its stamped hash). Two copies: the audit table and CloudWatch Logs. Reports say "accessed under the token issued to", not "read by".
+- **Operator tool.** Account create/assign/suspend/show, issue, revoke, session revoke, release lint/publish/set-access, report by account, audit export.
 
-| Option | Effect | Cost |
+### 6.4 Records
+
+- `accounts`: the organisations, domains and people the owner tracks sharing by (A3). Records for tracking, not credentials. The serving task cannot read it.
+- `releases`: each published release, its manifest hash and its accessible flag (A4).
+- `tokens`: what was granted, to which address, for which release, until when; its use count and revocation.
+- `links` / `sessions`: the emailed link and the one session it starts.
+- `limits`: per-IP counters.
+- `audit`: every event.
+
+The exact table list is the application's to settle; Overcast provisions what it names. Accounts, tokens and releases are kept; links and sessions expire by TTL.
+
+### 6.5 Mail (D12, D13)
+
+Amazon SES starts in a sandbox that can only mail verified addresses, and verifying the recipient would make AWS email them. Lifting it (production access) takes AWS about a day. So the mail path is the owner's choice:
+
+| Option | Takes | Cost |
 |---|---|---|
-| **1. Shared-secret header (recommended)** | Our zone's request-header rule sets a random value; the application returns the neutral 404 without it. Only traffic through our zone reaches the logic, so `CF-Connecting-IP` is Cloudflare's own value (Cloudflare refuses a client-supplied one with Error 1000) | One Secrets Manager shell, value written by the owner (INV-004), read by the execution role; one Cloudflare rule. Rotation is two values accepted during the change |
-| 2. Wait for DR-21 | Client certificates on the origin pull close this for every staging hostname | The first share waits on DR-21's spec, plan and apply |
-| 3. Accept it | Nothing to build | Forgeable rate-limit keys and logged IPs for anyone with their own Cloudflare zone, and a lockout lever against a recipient whose IP is known |
+| **1. Microsoft 365 (recommended for the first share)** | It already serves `arclightlabs.io` with aligned SPF and DKIM. No DNS change, no wait | The task needs a stored credential for one sending mailbox, and internet egress to Microsoft: an explicit exception to the no-egress default (O-017) |
+| 2. Amazon SES on a subdomain of `arclightlabs.io` | Through a VPC endpoint: no egress, no stored credential. The better long-term setup | Six DNS records and production access (about a day) |
+| 3. No automated mail | The application shows the operator the link and he sends it from his own mailbox | A manual step per link; mail to the bound address is not enforced by the application |
 
-Option 1 is an interim. When DR-21 lands, the header and its shell are removed.
+In every option the sender is under `arclightlabs.io` (A5): a no-reply address, a neutral display name, and `Reply-To` to a mailbox the owner reads. The message is plain text with a minimal HTML alternative: the link, how long it is valid, and that the hour starts at the button. No images, no tracking.
 
-### Application behaviour
+D12 applies whichever option is chosen: zone `arclight-complex.net` gets apex TXT `v=spf1 -all` and `_dmarc` TXT `v=DMARC1; p=reject; sp=reject`.
 
-Normative for the application, and **temporary in this repository**. When the application's
-repository exists, every application norm moves there: this section, the data model,
-stamping, the release tool's rules and the operator tool. This document then keeps what
-Overcast owns: ports, health, configuration, resources and IAM, network and egress, DNS and
-mail provisioning, and rollback. The charter forbids Overcast becoming "A shadow
-platform spec" (`docs/CHARTER.md:43`); specifying another repository's internals here is the
-same hazard, accepted only until that repository exists.
+Residual: the sender and the link are on different domains, and a first mail from a new sender can look like phishing to a corporate gateway. The token hand-over tells the recipient to expect it.
 
-**Every response the application generates carries:**
-- `Cache-Control: no-store, no-transform`, `Pragma: no-cache`, `Expires: 0`.
-- `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet`; HTML also carries the robots meta
-  tag; `/robots.txt` disallows everything.
-- **`Referrer-Policy: same-origin`.** Nothing is sent to any other origin, so the page's
-  address never reaches a link target. (`no-referrer` would be wrong here: under it browsers
-  send `Origin: null` on form posts, and the CSRF check below would refuse every real
-  submission.)
-- `X-Content-Type-Options: nosniff`; `Strict-Transport-Security: max-age=31536000`;
-  `Permissions-Policy` denying every feature; `Cross-Origin-Opener-Policy: same-origin`;
-  `Cross-Origin-Resource-Policy: same-origin`.
-- `Content-Security-Policy`: `default-src 'none'; frame-ancestors 'none'; base-uri 'none';
-  form-action 'self'` plus the narrow `'self'` grants each page type needs. Payload pages
-  get a per-release policy computed by the release tool, with no host outside `'self'` and
-  `connect-src 'none'`.
+**Option 2 in detail.** A dedicated subdomain `<mail-domain>`; no apex record changes.
 
-**Every request is checked, in this order, before anything is counted or looked up:**
-1. `Host` is `<page-host>` (compared case-insensitively, port ignored); otherwise 404. Mail
-   links are built from configuration, never from the request.
-2. The origin secret is present and correct (D15); otherwise 404.
-3. `CF-Connecting-IP` is present and well-formed; otherwise 404. IPv6 clients are keyed by
-   their /64.
-4. `Sec-Purpose: prefetch` is refused.
-5. For every `POST`, and for `/d/*`: `Sec-Fetch-Site` is `same-origin`, and on a `POST`
-   `Origin` equals `https://<page-host>`. `null` is never accepted. Otherwise 403, whatever
-   was submitted. This stops other sites, including sibling subdomains that browsers treat
-   as same-site, from posting the forms or forcing a download.
-6. Request headers and form fields are capped in size.
+| Record | Where | Value |
+|---|---|---|
+| SES domain identity | SES us-east-1 | `<mail-domain>`, Easy DKIM, RSA 2048 (DKIM aligned) |
+| 3 DKIM CNAMEs | Zone `arclightlabs.io`, DNS-only | `<sel>._domainkey.<mail-domain>` → `<sel>.dkim.amazonses.com` |
+| Custom MAIL FROM | SES | `bounce.<mail-domain>`, on MX failure: **reject message** (SPF aligned, relaxed) |
+| MX | Same zone | `bounce.<mail-domain>` → `10 feedback-smtp.us-east-1.amazonses.com` |
+| SPF | Same zone | `bounce.<mail-domain>` TXT `v=spf1 include:amazonses.com -all` |
+| DMARC | Same zone | `_dmarc.<mail-domain>` TXT `v=DMARC1; p=reject; adkim=s; aspf=r; rua=mailto:<report mailbox on arclightlabs.io>` |
 
-All wording the recipient sees (title, form labels, the neutral sentences, the mail) is
-neutral, chosen by the owner and held with the names (D8). This document describes it and
-does not quote it.
+- "Reject message" matters: otherwise SES silently falls back to its own MAIL FROM and SPF stops aligning. SES aligns SPF relaxed only, so `aspf=s` would break it. No null MX on the From subdomain (RFC 7505).
+- Sending is SESv2 `SendEmail` through the `email` interface endpoint with the task role. No SMTP credentials. A configuration set with CloudWatch metrics; alarms on bounces, complaints and send volume; click tracking off.
+- Until production access is granted, staging acceptance uses the owner's own verified address.
 
-#### Landing page and submission
+## 7. The first payload: findings the owner must act on
 
-- `GET /`: one self-contained HTML response (logo inline, CSS inline under a hash, no
-  script). Three fields: token, name, email. One button. One line saying access is logged.
-- **Normalisation:** email trimmed and lower-cased (no dot or plus folding); token stripped of
-  spaces and hyphens and upper-cased (Crockford base32: `O`→`0`, `I`/`L`→`1`); name trimmed,
-  control characters removed, capped at 200 characters. **The name is recorded, not
-  validated, and is never echoed into a page or a mail.**
-- **Rate limits:**
-  - **Per IP:** 5 per 15 minutes and 20 per day across both forms. Over the limit: 429 with a
-    fixed body, **whatever was submitted**. This is the only limit that refuses.
-  - **Per submitted address** (5 failures an hour) and **across the service** (100 an hour):
-    these **count and alarm, and never change the response**. A refusal there would do
-    nothing useful (a failed submission already sends no mail), would let anyone lock a
-    recipient out, and would tell someone holding a token which address it belongs to.
-- **Validity:** the token's hash exists; the token is not revoked, not expired and its account
-  not suspended; it is bound to the submitted address; it has an activation and a link email
-  left; and its release is flagged accessible.
-- **If valid** (one DynamoDB transaction, with condition checks on the grant and the
-  release): reserve a link email, record a new link as the token's only current link (older
-  unconsumed links are superseded), write the audit event. The mail is handed to an in-process queue and sent
-  after the response.
-- **Always:** a 200 with one fixed neutral body, the **binding cookie** (called `B` here;
-  32 random bytes, `__Host-` prefix, `Secure; HttpOnly; SameSite=Strict; Path=/;
-  Max-Age=86400`), and an audit event carrying the internal outcome. A browser that already
-  presents a well-formed `B` keeps it (the same value is set again), so a double click or a
-  corrected typo does not leave it holding a cookie that matches no link.
-- **Equal responses:** status, headers and body are byte-identical apart from the cookie value
-  (same length). Every response to a submission is held to a **floor of 1.0 s plus 0-200 ms
-  of jitter** from receipt, so database work and mail hand-off cannot be timed.
-- **The mail budget, as invariants.** These are what must hold; AT-8 checks them, not the
-  mechanism.
-  1. A mail counts against the budget when SES accepts it, and exactly once.
-  2. A reservation whose mail was never sent stops counting two minutes after it was made.
-     The recipient is never left with the budget spent and no mail.
-  3. No send attempt starts more than 60 seconds after its reservation, queue time
-     included, and none is retried after an unknown outcome (SES has no idempotency key, so
-     a retry could deliver twice).
-  4. The recipient receives at most the budget, plus one mail for each abrupt task stop or
-     unknown SES outcome. Each of those alarms. There is no smaller fixed bound.
-- **One construction that satisfies them** (the application may choose another that passes
-  AT-8). The token's state holds `sent_links`, the set of link hashes SES has accepted, and
-  `pending_sends`, the reservations with their times. The budget in use is the size of the
-  first plus the reservations younger than two minutes. Reserving is conditional on the
-  state's version number, so two submissions racing for the last mail cannot both take it.
-  Recording an accepted send adds its hash to the set: unconditional, idempotent, and
-  retried until it succeeds, so a write that collides with another transaction is never
-  dropped and a late one cannot charge a slot someone else reserved. Because everything is
-  on the token's own state, a link superseded before either mail went out is covered with
-  no search of the `links` table. The nonce is never stored: an unsent link is abandoned,
-  not resent. On a stop signal the task drains its queue, and its stop timeout is at least
-  90 seconds so that it can.
+One HTML entry page (a single-page application), 10 scripts, 7 stylesheets, one self-hosted font, 28 images and 10 PDFs: 57 files, 40.3 MB. No fetch, XHR, storage, cookies, analytics or remote fonts. File-level evidence is in the owner's private receipt.
 
-#### Link and activation
+1. **The download is built in the browser.** The button assembles the JSON from data embedded in the page. The server never sees a download, so it can neither stamp nor log it (blocks R9, R10). The button must become a link to `/d/<file>`; the copy button goes, or is accepted as unstamped.
+2. **D3b: the page's data bundle discloses more than either JSON.** About half a megabyte goes to every recipient's browser: personal and contact data and reproduced source text (displayed); internal record identifiers (displayed); an internal system name and several kinds of never-displayed field (working notes, follow-up lists, how sources were obtained, identifiers the page says are suppressed, one image shipped but never shown).
+3. **D4: the map calls `tile.openstreetmap.org`** (self-hosted Leaflet 1.9.4). Each tile request gives a third party the recipient's IP, the page's origin and the area viewed. The page as built must not ship.
 
-- The link is `https://<page-host>/a/<nonce>`, where the nonce is 32 random bytes (base64url).
-  Only `SHA-256(nonce)` is stored, as is `SHA-256(B)`.
-- **`GET /a/<nonce>` never changes state.** It returns the same static page for any nonce,
-  valid or not: one button, and a neutral line saying that pressing it starts a single hour
-  which cannot be paused or repeated, so press it when ready; and that on another device
-  the access code will be asked for. It writes a `link_opened` audit event (IP, user agent)
-  when the nonce matches, which is how scanner pre-fetches show up. `HEAD` is treated the
-  same way.
-- **`POST /a/<nonce>`** (the click) starts the session when all hold:
-  - the nonce is the token's current link, unconsumed and less than 24 h old;
-  - the token is not revoked or expired, its account is not suspended, its release is flagged
-    accessible, and it has an **activation** left. The link-email budget is **not** checked
-    here: the link in the last permitted mail must still work after that mail has used the
-    budget up;
-  - **binding (D6):** the request carries the cookie `B` whose hash was recorded with this
-    link, **or** the form carries this link's own token. If both are present the cookie is
-    used.
-- Without `B` the click page answers with one field asking for the access code. So the
-  recipient who requests and clicks in the same browser just clicks; on another device they
-  type the token once more.
-- On success, one DynamoDB transaction (idempotent on a client request token, so a retried
-  write cannot count twice) marks the link consumed, counts the activation, records the
-  session and writes the audit event. The response sets the session cookie (called `S` here;
-  `__Host-` prefix, `Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age` set to the seconds
-  remaining) and redirects (303) to `/v/`.
-- **Re-attaching, never restarting.** If the link is already consumed and its session is
-  still inside its hour, a `POST` that proves a binding factor gets that same session back.
-  This covers a response lost on a mobile network, a double click, and a mail app's
-  built-in browser handing over to the real one. Without it the only activation could be
-  spent with nothing to show for it. It is still one session and one hour (A1).
-- **The session, as invariants.** These are what must hold; AT-4, AT-5 and AT-21 check them,
-  not the mechanism.
-  1. **One session per token, with one authority.** Its start is written once, by the
-     activation transaction. No other path reads the clock to set it, and its end is always
-     its start plus 3600 s. Its revocation lives in the same place.
-  2. **Every identifier answers to that authority on every request.** Revoking the session,
-     or its end passing, stops every identifier it has or will ever have.
-  3. **An identifier is only handed out in answer to a `POST` that proves a binding factor
-     for that link**, and each hand-out is logged. It cannot be computed from the link
-     alone, from anything stored, or by anyone but the server.
-  4. **The same proof gets the same cookie.** A retry, a double click or responses arriving
-     out of order never leave a browser holding a dead identifier while the session lives.
-  5. **At most two identifiers** exist per session: one for the binding cookie and one for
-     the token (normalised, so its spelling cannot multiply them).
-  6. **Re-attaching needs everything serving needs:** the session unrevoked and inside its
-     hour, the token unrevoked, the account not suspended, the release accessible.
-- **One construction that satisfies them** (the application may choose another that passes
-  the tests). The consumed **link record is the session's authority**: it holds the
-  session's start, its revocation, a random 32-byte salt and up to two identifier hashes.
-  An identifier is `HMAC-SHA-256(key = nonce, message = label ‖ kind ‖ salt ‖ factor)`: the
-  kind is `cookie` or `token`, and the factor is `B`'s bytes or the normalised token. It is
-  computed only from what the request carries, never from a stored hash. The salt means
-  nobody without the database can derive it; the nonce means nobody with only the database
-  can. Registering the second identifier is one transaction: condition checks on the grant
-  and the release, and a conditional update of the link (consumed, unrevoked, inside its
-  hour, that slot empty or already equal). A lookup record maps each identifier's hash to
-  its link, and the serving check reads the link for the start and the revocation.
-- Anything else: one neutral page saying the link can no longer be used.
+   | Option | Takes | Notes |
+   |---|---|---|
+   | **1. Static map image (recommended)** | One image with the markers, made at release time, credited "© OpenStreetMap contributors"; map library deleted | Smallest change; about 150 KB of script removed; loses pan and zoom |
+   | 2. Self-hosted tiles | A bounded tile set shipped in the release | OSM's servers may not be bulk-downloaded; needs own rendering or a licensed source |
+   | 3. Remove the map | Delete the button and code | Other location content remains |
 
-Why D6 rather than a bare click:
-- Some mail-security products render links in a sandbox and press buttons. A bare-click
-  design would start the recipient's only session inside the scanner, spending the
-  activation and handing the scanner a live cookie for an hour.
-- `B` exists only in the browser that submitted the form, and the token only with the
-  recipient. A scanner, or anyone the mail is forwarded to, has neither.
-- The cost is one extra field when the recipient changes device between asking and clicking.
+4. **A possible second published copy.** The site's repository carries a configuration file for an external hosting service pointing at the build output. The owner confirms the site is published nowhere else, or the gate is moot.
+5. **Dirty tree.** At inspection files were being edited, and the entry page references two files that do not exist yet. The pin is taken only from a clean commit.
+6. The site redistributes third-party documents and credited commercial imagery; redistribution rights are the owner's call. The existing handover archive and its guide (local paths, internal names, commit hashes) are not part of this delivery.
 
-Why `Lax` for `S` and `Strict` for `B`: `B` is only ever needed on a `POST` from our own page.
-`S` must survive the recipient clicking the mailed link again from webmail (a cross-site
-navigation): with a live session, `GET /` and `GET /a/*` redirect to `/v/`. `Lax` sends the
-cookie only on top-level `GET`s, none of which changes anything, and `/d/*` additionally
-requires a same-origin request.
-
-The nonce sits in the path, not the fragment: some link-rewriting gateways mishandle
-fragments. The application never logs it, the referrer policy keeps it inside our own
-origin, and ALB access logs are off; if they are ever turned on, `/a/` must be excluded.
-
-#### Session
-
-- Every `/v/*` and `/d/*` request needs an identifier that leads to a session which has
-  started (its start is not in the future, and not after its token's expiry), whose end
-  (its start plus 3600 s, computed and never read from a stored field) is in the future,
-  which has not been revoked, whose token is not revoked, whose account is not suspended and
-  whose release is flagged accessible. (The token's budgets are checked at submission and
-  activation, not during the hour.) Session, token and release are read consistently on
-  every request, so revoking any of them takes effect at the next request. Suspending an
-  account reaches each of its tokens within seconds (see Data model).
-- **Revoking a session** (the operator's `session revoke`) marks the session's authority.
-  Every identifier, including one not yet handed out, stops with it.
-- No sliding expiry, no refresh, no second session from the same link. A1: extension means a
-  new token.
-- No valid session: the neutral 404 for every path, so the asset tree cannot be probed.
-- `/v/<path>` serves only paths listed in the pinned release manifest, with the manifest's
-  content type. HTML pages carry the visible stamp and a refresh timed to the session's end,
-  so an open tab does not outlive the hour.
-- `/d/<file>` serves the stamped data download with `Content-Disposition: attachment` and a
-  neutral file name.
-- A response still being sent when the hour ends is cut off: the application sets its own
-  write deadline at the session's end (the ALB's idle timeout is an hour).
-- The client IP and user agent are recorded at activation and on every request. **IP changes
-  are logged, not enforced** (recipients on mobile networks change address); the one-hour
-  bound and revocation contain a stolen cookie instead.
-
-#### Accounts and tokens
-
-**Accounts (A3).** An account is what the owner tracks sharing by. It can be assigned any
-number of **organisations**, **domains** and **people** (a name and an address each). Every
-token is issued under exactly one account, to one person on it. An account answers "what have
-we shared with them, who opened it, and when": its tokens, their sessions and downloads, and
-the releases involved.
-
-- Accounts are **records for tracking, not credentials**. A domain on an account admits
-  nobody (A2: a token binds to one exact address).
-- **D14 (proposed here, not in the brief).** The issuing tool refuses an address that is not
-  a person on the account. If the address's domain is not one of the account's domains it
-  asks for an explicit override, so a mistyped or personal address is caught before a token
-  exists. It also checks the address against the SES suppression list.
-- An account can be **suspended**: its tokens refuse within seconds.
-- Account data identifies outside people. It lives only in the `accounts` table, which the
-  serving task cannot read, and never in git.
-
-**Tokens.**
-- 130 random bits as 26 Crockford base32 characters, shown in groups. The plaintext is
-  generated on the operator's machine, shown once, and given to the recipient **through a
-  different channel from the mail** (phone, Signal, in person), with a word that a mail from
-  our sender will follow. Only `SHA-256(token)` is stored. 130 random bits need no pepper:
-  there is nothing to brute-force offline.
-- Fields: account, bound address (normalised, validated against a strict address grammar at
-  issue), release, a short **purpose** note (why this party is getting this, and in what
-  capacity), issued at and by, expires at (default 7 days), `max_link_requests` (default 3),
-  revoked at, by and why.
-- **One activation per token, always (A1).** There is no setting for it: the use count R6
-  asks for is `activations_used`, which goes from 0 to 1 and no further. More access means a
-  new token. Several sessions on one token would be a new ruling, not a configuration.
-- **Expiry bounds when a session may start, not when it ends.** A token that expires at
-  10:00 can be activated at 09:59, and that session runs its full hour.
-- **Reissue (A4)** is a new token under the same account for the same release. The old token's
-  record stays, so the account shows both. Token records are kept, not deleted: they hold a
-  hash, not the token.
-- The security model is **two factors held by the recipient**: the token (out-of-band
-  channel) and control of the mailbox. Either alone starts nothing.
-
-### Data model
-
-**D7: DynamoDB, recommended.** Eight on-demand tables, point-in-time recovery on, deletion
-protection on, AWS-owned encryption.
-
-| Table | Key | Attributes | Kept |
-|---|---|---|---|
-| `accounts` | `account_id` + `item` (`META`, `ORG#…`, `DOMAIN#…`, `PERSON#<address>`) | label, state (`active`, `suspended`), notes; per assignment: who added it and when | Until the owner removes the account |
-| `releases` | `release_id` | `manifest_sha256`, **`access`** (`accessible`, `inaccessible`), source repository and commit, published at and by, access changes (at, by, why) | **Always** (A4) |
-| `tokens` (the grant; **written only by operators**) | `token_hash`; index on `account_id` | `token_id`, `account_id`, `email`, `release_id`, `manifest_sha256`, `purpose`, `issued_at`, `issued_by`, `expires_at`, `max_link_requests`, `account_suspended`, `revoked_at`, `revoked_by`, `revoke_reason` | With the account (A3) |
-| `token_state` (the counters; created by the operator at issue, updated by the task) | `token_hash` | `activations_used`, `sent_links`, `pending_sends`, `version`, `current_link_hash` | With the account (A3) |
-| `links` | `nonce_hash` | `token_hash`, `binding_hash`, `created_at`, `expires_at`, `consumed_at`, `session_started_at`, `session_revoked_at`, `session_salt`, `id_cookie_hash`, `id_token_hash`, `ses_message_id` | TTL: `expires_at` + 30 d |
-| `sessions` (a lookup; the link is the authority) | `session_hash` | `nonce_hash`, `binding_kind` (`cookie`, `token`) | TTL: the link's `expires_at` + 30 d |
-| `limits` | `key` (`ip#…`, `email#…`, `global#…` with the window) | `count` | TTL: window end + 1 h |
-| `audit` | `event_id` (128 random bits); index on `account_id` | `at`, `event`, `outcome`, `account_id`, `token_id`, `session_id`, `release_id`, `manifest_sha256`, `ip`, `forwarded_for`, `cf_ray`, `user_agent`, `submitted_email`, `submitted_name`, `path`, `bytes`, `sha256`, `distribution_id`, `ses_message_id` | TTL per event class (D10) |
-
-- **A token is two records: what was granted, and the task's own counters.** `tokens` holds
-  who, what, until when and whether it is revoked or suspended; only operators write it.
-  `token_state` holds the counters, which the task updates (only where the operator created
-  the record at issue). Every submission and activation is one transaction: a **condition
-  check** on the grant (not revoked, not expired, account not suspended), a condition check
-  on the release, and a conditional update of the state. A revocation that lands mid-click
-  therefore wins. (An attribute-level allowlist on a single record cannot do this: DynamoDB
-  applies such a list to the attributes a condition reads as well as those it writes, and
-  requires the key in it, so the guards and the protection would exclude each other.)
-- **What that split does and does not buy.** A compromised task cannot change who a token
-  is for, what it serves, when it expires or whether it is revoked. It can still write its
-  own counters, links and session records, because IAM cannot constrain the values it
-  writes. So "once" (A1) is enforced by the application's code, not by IAM. Two things bound
-  the damage: the serving check accepts no session that started after its token expired and
-  none older than an hour, so a forged one dies with the token; and the answer to a
-  suspected compromise is to **revoke every token the task could have seen**, not only to
-  redeploy (RB2).
-- The task tells a transaction conflict from a failed condition and retries the former; the
-  operator tool retries its own writes the same way.
-- **The serving task reads `releases` and cannot write it; it has no access to `accounts`.**
-  Suspending an account is the operator tool writing the account's state first, then
-  stamping `account_suspended` on each of the account's tokens and repeating until a
-  consistent read of the table (not the index) finds none unstamped. **Issuing is a transaction with a condition check on the account's
-  state**, so a token cannot be issued into a suspended account, and one issued a moment
-  before the suspension is caught by the repeat.
-- **A release's `access` flag is a condition of every submission and activation, and is read
-  on every request.** Flagging a release inaccessible stops every session on it at the next
-  request and changes no object's bytes.
-- Supersession costs no extra write: activation requires `nonce_hash == token_state.current_link_hash`.
-- Single use and counts are `ConditionExpression`s inside `TransactWriteItems`, so two
-  concurrent clicks cannot both start a session.
-- **The audit table is write-only for the task, not tamper-proof:** it may only `PutItem`
-  there (no get, query, scan, update or delete), so it cannot read or list events. It
-  chooses each event's key, though, so a compromised task could overwrite events it wrote
-  itself. **The copy in CloudWatch Logs, which the task cannot alter, is the evidence of
-  record**; a disagreement between the two copies is itself evidence. From the moment a task
-  is compromised it can also write false lines or withhold true ones in both copies:
-  CloudWatch protects what was written before.
-- Audit events: `submit`, `rate_limited` (one per key per window, with a count), `mail_sent`,
-  `mail_failed`, `link_opened`, `activation_refused`, `session_started`,
-  `session_reattached`, `asset_served`, `download`, `session_ended`, and the operator events
-  `account_created`, `account_changed`, `token_issued`, `token_revoked`, `session_revoked`,
-  `release_published`, `release_access_changed`.
-- Tokens, nonces, binding cookies, session identifiers and the origin secret are never
-  stored or logged in plaintext, and neither are `Cookie` or `Referer` header values (the
-  second can carry the nonce). Logs carry `token_id` and `session_id` (random, non-secret
-  identifiers) instead. AT-25 searches for all of them.
-- **Tracking view:** the operator tool's `report --account <id>` joins the account, its
-  tokens and its audit events: who was issued what, which links were opened and from where,
-  each session's start and end, each file served and each stamped download.
-
-**Why not the staging RDS (the reuse option):**
-- An internet-facing task would get a security-group path (5432) to the Postgres server that
-  holds Core's, ShuttleForge's and Nerfherder's databases.
-- It needs a new `dbbootstrap` mode (an image change; DR-17(a): CI cannot push it), three
-  secret shells, a migration task family and an app role.
-- Postgres grants can make the audit table insert-only, but an owner-role migration can undo
-  that; DynamoDB's IAM boundary is outside the application's reach.
-- RDS would give SQL for investigations. At this volume the audit table is small enough to
-  export and query offline.
-
-### Mail path
-
-**Sender (A5).** A dedicated subdomain `<mail-domain>` of **`arclightlabs.io`**, with a
-no-reply address, a neutral display name and a `Reply-To` pointing at a mailbox the owner
-reads, so a recipient who replies "it does not open" reaches someone. A subdomain keeps this
-sender apart from corporate mail: **no record at the `arclightlabs.io` apex changes**.
-
-| Record | Where | Value | Purpose |
-|---|---|---|---|
-| SES domain identity | SES us-east-1 | `<mail-domain>`, Easy DKIM, RSA 2048 | DKIM `d=<mail-domain>`: **aligned** |
-| 3 DKIM CNAMEs | Cloudflare zone `arclightlabs.io`, DNS-only | `<sel>._domainkey.<mail-domain>` → `<sel>.dkim.amazonses.com` | DKIM verification |
-| Custom MAIL FROM | SES | `bounce.<mail-domain>`, **behaviour on MX failure: reject message** | Envelope sender under our domain: SPF **aligned** (relaxed) |
-| MX | Same zone | `bounce.<mail-domain>` → `10 feedback-smtp.us-east-1.amazonses.com` | Required by custom MAIL FROM |
-| SPF | Same zone | `bounce.<mail-domain>` TXT `v=spf1 include:amazonses.com -all` | SPF for the envelope sender |
-| DMARC | Same zone | `_dmarc.<mail-domain>` TXT `v=DMARC1; p=reject; adkim=s; aspf=r; rua=mailto:<report mailbox on arclightlabs.io>` | Policy; strict DKIM alignment; reports |
-| D12, hosting domain lockdown | Cloudflare zone `arclight-complex.net` | Apex TXT `v=spf1 -all`; `_dmarc` TXT `v=DMARC1; p=reject; sp=reject` | Nobody can send as the hosting domain. Safe: it sends no mail (A5) |
-
-- "Reject message" on MX failure matters: otherwise SES silently falls back to its own
-  `amazonses.com` MAIL FROM, and SPF stops aligning.
-- **Reports go to a mailbox on `arclightlabs.io`**, the same organisational domain, so no
-  cross-domain authorisation record is needed.
-- **No null MX on the From subdomain.** RFC 7505 lets receivers reject mail whose From domain
-  publishes one. The `Reply-To` handles replies.
-- **Configuration set** (neutral name; SES strips it before sending) with reputation metrics
-  and a CloudWatch **metrics** destination for sends, deliveries, bounces, complaints and
-  rejects; alarms on bounces, complaints and sends above 50 an hour. Per-message outcome in
-  the audit trail is the application's own `mail_sent` event with the SES message id. A
-  per-message delivery log (an EventBridge destination) is a follow-up. Email feedback
-  forwarding is off.
-- **Sending path:** the task calls the SESv2 `SendEmail` API through the `email` interface
-  endpoint with its task role. No SMTP credentials, no IAM user, no access keys. (SMTP needs
-  long-lived IAM user keys, and its endpoint is missing from one of staging's AZs.)
-- **Sandbox (D13).** In the sandbox SES delivers only to verified addresses. Verifying the
-  recipient's address would make AWS email them a verification request, which is
-  unacceptable. Production access must be granted before the real send; staging acceptance
-  can use the owner's own verified address. If AWS refuses the request, the fallback is the
-  alternative below.
-- **Message:** plain text with a minimal HTML alternative; neutral subject and copy; the
-  link, how long the link stays valid, and that the hour starts at the button, not when the
-  mail arrives. No images, no tracking pixels, click tracking disabled (it would rewrite
-  the link through an AWS host).
-- **Residual: sender and link are on different domains** (`arclightlabs.io` and
-  `arclight-complex.net`), and a first message from a new subdomain containing little but a
-  link resembles phishing to some corporate gateways. The token hand-over warns the recipient
-  to expect it; P5 shows how it lands in a real mailbox.
-
-**Alternative considered: send through Microsoft 365**, which already serves
-`arclightlabs.io` with aligned SPF and DKIM. Not recommended: the task would need internet
-egress to Microsoft (against O-017's default), a stored credential, and a tenant-level mail
-permission able to send as any corporate mailbox.
-
-Checked against AWS's documentation (the sandbox state and the absence of identities were
-also read live):
-- SES documents SPF alignment through a custom MAIL FROM as **relaxed only**; `aspf=s` would
-  break it. DKIM aligns strictly because the identity verified is the exact From domain.
-- AWS's documented SPF value ends `~all`. `-all` is used because nothing but SES sends as
-  the bounce subdomain, which must carry exactly one MX and be used for nothing else.
-- `Feedback-ID` and `Message-ID` show that the message went through Amazon SES.
-- SES reviews an account at a 5 % bounce or 0.1 % complaint rate. At this volume one bounce
-  matters, so D14's checks on the address are also a deliverability control.
-
-### Payload release, pinning and the JSON choice
-
-**A release** is an immutable directory in the payload bucket:
-- `releases/<release_id>/manifest.json`: every file's path, SHA-256, size and content type;
-  the source repository, **commit** and a clean-tree flag; the build command; the CSP for the
-  release; the creation time and operator; the owner's sign-off of the lint's review list.
-- `releases/<release_id>/files/…`: the files, byte-identical to the build output.
-- `release_id` is the first 16 hex characters of the manifest's SHA-256. The full hash is the
-  pin.
-
-**Pinning is enforced three times:**
-1. The release tool refuses a dirty source tree, an untracked build output, a file outside
-   the manifest, and any lint failure (below).
-2. The `releases` table, which only administrators can write, holds each release's manifest
-   hash. Before serving a release the application fetches its manifest, checks the hash, then
-   fetches and hashes every file into a local cache. **Any mismatch: that release is not
-   served and an alarm fires.** Other releases and the service's health are unaffected.
-3. Each token carries its `manifest_sha256`; a session serves only that release.
-
-**Served material is never retired (A4).**
-- A release is immutable. Publishing writes new keys only; the bucket policy requires
-  `If-None-Match` on every write, so an existing key cannot be overwritten.
-- Ending a share flags the release `inaccessible`. The objects, the manifest and the
-  `releases` record stay as they were served, so "what exactly did they get" keeps its
-  answer: the pinned originals are kept indefinitely. Reproducing one recipient's *stamped*
-  copy also needs that session's stamp fields. Those are in the audit log for its two years,
-  and in the account report the owner exports after each share (plan P6), which is the
-  long-lived record. A reissued token serves the same pinned release.
-- **Inaccessible also means the task can no longer fetch it.** The task's read permission
-  depends on an object tag that only the operator tool sets when it flags a release, and the
-  task drops its local copy when it sees the flag change. This stops later reads from S3; it
-  cannot undo what a task that was already compromised had cached while the release was
-  accessible. Tags change no bytes and no versions. The tool flips the `releases` flag
-  first, which the application obeys at once, then tags every object including the
-  manifest; tagging many objects is not atomic, so the step can be re-run until complete.
-- Reissue is two deliberate steps: flag the release `accessible`, issue a token. Both are
-  audited.
-- The bucket enforces retention: versioning on (and its suspension denied), no lifecycle rule
-  (and adding one denied, because lifecycle expiry ignores a bucket policy's delete denial),
-  `s3:DeleteObject` and `s3:DeleteObjectVersion` denied to every principal, `prevent_destroy`.
-  **Object Lock in governance mode** is the stronger form, as O-015 used for CloudTrail; it is
-  chosen at bucket creation, and is recommended with a retention period the owner picks (D10).
-- There is no delete command in the tool. An edited site is a **new** release with a new
-  hash; the earlier one stays.
-
-**The release linter rejects:** any URL the browser would load from another host (scripts,
-styles, fonts, images, tiles, `fetch`/XHR targets, CSS `url()` and `@import`); source maps
-and `sourceMappingURL`; absolute local paths; the codename; a reference to a local file that
-does not exist; any dotfile; any file the entry page cannot reach; service workers; and a
-JSON download whose root already has a `distribution` member.
-
-It **reports for the owner's sign-off**, recorded in the manifest: plain hyperlinks, and
-every internal system name, internal record identifier, email address and phone number it
-finds. Those are editorial calls, not lint failures.
-
-#### The first payload, as inspected
-
-Read-only inspection, 2026-11-10. Described by category only; the file-level evidence,
-counts and hashes are in the owner's private receipt.
-
-- **Shape:** one HTML entry page (a single-page application), 10 scripts, 7 stylesheets, one
-  self-hosted font, 28 images, 10 PDFs. 57 files, 40.3 MB; the largest is 10.4 MB.
-- **Source control:** the site directory is its own git repository (no remote); its parent
-  directories are not repositories. The build output is tracked. **At inspection the tree
-  was dirty and changing:** files were edited while it was being read, and the entry page
-  references two files that do not exist yet. The pin is that repository's commit plus the
-  manifest hash, taken only from a clean tree.
-- **Runtime behaviour:** no `fetch`, XHR, WebSocket, service worker, storage, cookie, form,
-  iframe or `eval`. No inline script, so `script-src 'self'` holds; one inline `style`
-  attribute to move into a stylesheet.
-- **No analytics, CDN, remote font or source-map file.** One `sourceMappingURL` comment (in
-  the map library) points at a file that is not shipped.
-
-#### Payload findings the owner must see
-
-1. **The data download is not a file (blocks R9 and R10 as built).** The page's download
-   button assembles the JSON in the browser from data already embedded in the page, and
-   saves it locally. The server never sees a download: it can neither stamp nor log it. A
-   "copy" button puts the same unstamped text on the clipboard. **The payload must change:**
-   the button becomes a link to `/d/<file>`, and the copy button goes or is accepted as
-   unstamped.
-2. **D3b: the page's data bundle is the larger disclosure, whichever JSON ships.** Every
-   recipient's browser receives one data script of about half a megabyte. Beyond what either
-   JSON question covers, it holds:
-   - personal and contact data about named individuals, and reproduced source text, which
-     the page displays;
-   - internal record identifiers, which the page displays;
-   - an internal system name, and **several kinds of field the page never displays**:
-     working notes, follow-up lists, how sources were obtained, identifiers the page's own
-     text says are suppressed, and one image that is shipped but never shown.
-   The compact JSON is "least data out the door" only if this bundle is reduced to match.
-   Recommended: strip every never-displayed field and every internal name and identifier
-   before the first release, and have the owner confirm that the displayed personal data is
-   meant to leave.
-3. **A second copy elsewhere would make this gate moot.** The site's repository carries a
-   configuration file for an external hosting service, pointing it at the build output, and
-   that file is inside an existing release archive. The release tool excludes dotfiles. The
-   owner should confirm the site is not published anywhere else.
-4. **Third-party material.** The site redistributes third-party documents in full, captured
-   web pages and commercially sourced imagery carrying a vendor's credit. Redistribution
-   rights are the owner's call, not an infrastructure question.
-5. **An existing handover archive** beside the site has the same issues plus a guide
-   containing absolute local paths, internal system names and commit hashes. It is not part
-   of this delivery and should not become one as it stands.
-
-#### D3. Which JSON ships
+**D3. Which JSON ships.**
 
 | | Compact example | Full export |
 |---|---|---|
-| Size | Under 4 KB on disk; 4.5 KB as the page saves it (same data, pretty-printed) | About 730 KB, plus a 33 KB schema |
-| Shape | 10 tables, 14 rows, 66 distinct fields | 17 tables, 1,842 rows, 150 distinct fields |
-| Named individuals and their contact data | **None** | **Present, at scale** |
-| Precise locations | **None** | Present |
-| Source references | Placeholders; the mapping is held privately | Internal record identifiers, and identifiers of a kind the page itself says it suppresses |
-| Analyst content | A handful of claims and rationales | Hundreds of assessments, rationales, limitations and qualifications |
-| Self-description | Declares itself a proposed sample with export-local identifiers | — |
-| Schema | Not needed to read it | Root forbids additional properties; its identifier names the producing organisation; descriptions state modelling and analysis rules |
-| URLs, local paths, tool names | None | None in the export and schema. The companion guide has local paths, internal system names and commit hashes |
+| Size | Under 4 KB | About 730 KB, plus a 33 KB schema |
+| Shape | 10 tables, 14 rows, 66 fields | 17 tables, 1,842 rows, 150 fields |
+| Named individuals and contact data | None | Present, at scale |
+| Precise locations | None | Present |
+| Source references | Placeholders | Internal identifiers, including a kind the page says it suppresses |
+| Analyst content | A handful of claims | Hundreds of assessments and rationales |
 
-The compact example is not a row-subset of the full export: it is a re-keyed, hand-picked
-extract with its own identifiers. The counts behind each row are in the private receipt.
+Ship the compact example: it was built as the sample and says so. If the recipient needs the structure, ship the schema with it (identifier neutralised, `distribution` allowed). The compact file is "least data out" only if the bundle (finding 2) is reduced to match.
 
-**Recommendation: ship the compact example.**
-- The full export puts personal and contact data about many named people, precise locations,
-  internal identifiers and the analysis method into one machine-readable file that leaves
-  the platform.
-- It re-exposes identifiers the page states are suppressed, so shipping it would contradict
-  the page.
-- The compact file was built as the sample and says so.
-- If the recipient's stated purpose needs the structure, ship the **schema with the compact
-  example** (its identifier neutralised, and a `distribution` property added so the stamped
-  file still validates). That shows the full shape without the full data.
-- The full export only on a specific, stated need, as its own release with its own review.
+## 8. Threats
 
-### Third-party calls and the map
+| Threat | Control | Residual |
+|---|---|---|
+| Scanner pre-fetch | A GET never consumes; the click needs the binding cookie or the token | A button-pressing sandbox reaches only the token field |
+| Token guessing | 130-bit tokens, per-IP limit, neutral answers | None practical |
+| Using the form to mail-bomb or lock out a recipient | Mail only to the bound address of a valid token, three per token; only the per-IP limit refuses | — |
+| Enumeration by response differences | Identical responses; mail after the response | — |
+| Link forwarding | The link alone is not enough; single use | A recipient who forwards link and token shares access; the audit log shows the second IP |
+| Session theft | `__Host-`, `HttpOnly`, `Secure` cookie; strict CSP; one hour; revocable | Malware on the recipient's machine |
+| Cache and indexing | `no-store`, cache-bypass rule, `noindex` | — |
+| Third-party requests | Lint, CSP, `no-transform`, edge rules | A PDF viewer following a link inside a PDF |
+| Public object URLs | Private bucket, no presigned URLs; the application streams every byte | — |
+| Origin bypass (DR-21) | The origin secret (D15) | Until then, forgeable rate-limit keys and logged IPs |
+| CSRF, forced download, clickjacking | `Sec-Fetch-Site` and `Origin`; no state change on GET; `frame-ancestors 'none'` | — |
+| Spoofed mail | `p=reject` on the sending subdomain (D13 option 2) and on the hosting domain (D12) | Lookalike domains; the corporate apex stays `p=none` |
+| Application compromise | No internet egress, no path to RDS or any module, narrow IAM | Data can still leave through the unpoliced shared AWS endpoints (and the Microsoft egress under D13 option 1). The response is revoke everything and desired count 0, not a redeploy |
+| Exposure through this public repository | Names, wording and pins kept out of git and CI logs | No control depends on the design being secret |
 
-**Flag: the page as built must not ship.** One host is contacted automatically:
-`tile.openstreetmap.org`.
+What cannot be undone: content already downloaded and mail already sent.
 
-- A self-hosted copy of Leaflet 1.9.4 requests raster tiles from it when the recipient opens
-  the page's map. One live map with fixed markers; a second map exists in the code but can
-  never start.
-- No bounds or minimum zoom are set and scroll-zoom is on, so the recipient can pan anywhere.
-- **What each tile request tells a third party:** the recipient's IP address, this page's
-  origin (as referrer), and the tile coordinates, which reveal the area being looked at.
-- No other automatic third-party request exists. User-clicked links: the map's attribution
-  links, and link annotations inside one PDF. The referrer policy keeps the page's address
-  out of the first; a PDF viewer's behaviour is its own.
+## 9. Plan
 
-| Option | What it takes | Third-party requests | Notes |
+### 9.1 Owner checklist (P0)
+
+- Rule on D1, D3, D3b, D4, D12, D13 and D15. Overcast records the outcome as **O-019** in `docs/DECISIONS.md`. Under D1, ask Complex whether a platform standard needs a D-series.
+- Choose, and keep out of git: the public hostname, mail subdomain (option 2), page title and wording, sender display name, reply-to mailbox and DMARC report mailbox (both on `arclightlabs.io`). They go in the gitignored `terraform.tfvars` and in repository **secrets** (not variables) for `terraform-plan.yml`. The Terraform variables are `sensitive`, have no default, and appear in no resource address, name or tag.
+- Create the application's private repository.
+- Confirm the site is published nowhere else (finding 4).
+- D13 option 1: create the sending mailbox and write its credential into the secret shell.
+- D13 option 2: submit the SES production-access request (console or `aws sesv2 put-account-details`). Draft use case: transactional only; single-use access links to named business contacts who have just requested one; no marketing, no lists; under 50 a day; the suppression list and alarms handle bounces.
+- Cloudflare:
+
+| What | Where | Why |
+|---|---|---|
+| Write token: add zone `arclightlabs.io` with DNS: Edit | API Tokens → the Terraform token | The six mail records (D13 option 2 only) |
+| Write token: on `arclight-complex.net` add Cache Rules: Edit, Config Rules: Edit, Zone WAF: Edit | Same token | Cache, configuration and rate-limit rules |
+| Read-only token: add Cache Rules: Read, Config Rules: Read, Zone WAF: Read; Web Analytics and Zaraz read if offered | The read-only token | Read-back |
+| Is Web Analytics automatic setup on? | Dashboard: Web Analytics | Injects a third-party beacon; blocked either way |
+| Is anything configured in Zaraz? | Dashboard, the zone | Same |
+| Is Speed Brain on? | Dashboard: Speed | Prefetches links; refused either way |
+| Two mailboxes on `arclightlabs.io` | Microsoft 365 | Reply-to and DMARC reports |
+
+### 9.2 Phases
+
+| Phase | Who | What | Gate |
 |---|---|---|---|
-| **1. Static map image (recommended)** | The payload replaces the map with one image showing the markers, made at release time, with the "© OpenStreetMap contributors" credit in its caption. The map library, its stylesheet and the dead second map are deleted | None | Smallest change and smallest surface: about 150 KB of script removed, and the stray source-map comment goes with it. Loses pan and zoom, which fixed markers hardly need |
-| 2. Self-hosted tiles | A bounded tile set for the area and a few zoom levels, shipped inside the release and served behind the session; bounds and zoom limits set to match | None | OpenStreetMap's tile servers may not be bulk-downloaded for this, so the tiles must come from our own rendering or a licensed source: a new toolchain for one map |
-| 3. Remove the map | Delete the button and the map code | None | The rest of the page's location content remains |
+| P0 | Owner | Rulings, names, Cloudflare access, mail prerequisite | O-019 recorded |
+| P1 | Overcast | Mail path per D13 | T10 |
+| P2 | App | Application and operator tool | App's own tests and review |
+| P3 | Overcast | Substrate on staging, desired count 0 | Expected plan; T11 |
+| P4 | Payload, operator | First release: map, download, bundle, JSON, pin | Lint clean; owner's sign-off |
+| P5 | All; owner as test recipient | End-to-end acceptance on staging | Every test; owner's sign-off |
+| P6 | Owner | First live share | Owner's go; under D13 option 2, SES production access |
 
-The release linter fails any build that still names a tile host, so the choice cannot be
-skipped by accident.
+- P1 and P2 run in parallel after P0. The ECR repository and push role (P3a) come before P2's first push.
+- **P1, option 1:** the credential shell and the Microsoft egress rule; nothing in DNS but D12. **Option 2**, in this order, which yields T10's negatives for free: identity and DKIM first, send test 1 (SPF not aligned yet); add the custom MAIL FROM before its MX, send test 2 (SES refuses); add MX and SPF, send test 3 (all aligned). Additions only; nothing at the apex.
+- **P3 expected plan:** additions, plus **one in-place update** (the CI deploy role's image-read list gains the repository). No change to any Core, ShuttleForge, Nerfherder, RDS, listener-default or existing endpoint resource; the prod and Backstage roots plan "No changes". The vpc module's new endpoint options default off. `scripts/plan_guard.py`, then applied locally by an administrator on the owner's go (DR-1).
+- **P4:** payload fixes per section 7, commit clean, lint, the owner signs the lint's review list, publish inaccessible. The release id and hashes go to the owner's private receipt, never this repository.
+- **P5:** deploy by digest; a test account with the owner as its only person; run the tests; the owner reads the mail in a real mailbox; then flag inaccessible and desired count 0.
+- **P6:** create the account, flag the release accessible, issue, hand the token over by another channel, desired count 1 (the variable first, then the service: an apply with the variable at 0 would stop a live share). Afterwards flag inaccessible, count 0, export the account report. Never while a session is live.
+- No automatic deploys (D-059 §8); the owner's go per release. Review per `docs/REVIEW_PROCESS.md` before any apply.
+- Follow-ups, none gating: DR-21 replaces the origin secret; endpoint policies on the shared endpoints (DR-24); CloudTrail data events for operator actions; the Cloudflare Terraform root adopts the records and rules; `deploy-service.yml` learns this service; PDF watermarking; a platform home (Complex's answer under D1); a move from D13 option 1 to option 2.
 
-### Stamping
+## 10. Acceptance tests
 
-**Specified: embedded metadata in the data download, plus visible marks on pages.**
+Each claim has one negative that must fail, proving the check can tell the difference. "App" runs in the application's suite with a real headless browser; "S" runs on staging.
 
-1. **JSON download (embedded metadata).** The served file is the pinned original with a
-   `distribution` object inserted textually as the first member of the root object, so every
-   other byte of the original is unchanged. Its fields: the bound address, the token's issue
-   time, the session's start time, the release id and manifest hash, and a `distribution_id`.
-2. **HTML pages (visible).** A plain-text line inserted before `</body>`: the bound address,
-   the issue date and a short reference. It survives screenshots and printing.
-3. **PDFs (embedded metadata).** An incremental update adds the same fields to the document
-   information dictionary and XMP. The original bytes remain the file's prefix.
-
-- **The stamp is fixed for a session and a file**, not per request: every field is known at
-  activation, and `distribution_id` is derived from the session and the path. Repeated and
-  ranged requests therefore return identical bytes, and the SHA-256 of the stamped file goes
-  into the `download` and `asset_served` audit events.
-- **Escaping is by format** (JSON string, HTML text, PDF string, XML). The only variable
-  text is the bound address, which the operator entered and the tool validated; nothing a
-  visitor typed is ever stamped.
-- Metadata can be stripped by anyone who wants to. The audit log, the out-of-band token and
-  the visible line are what attribute a leak; the embedded stamp is the cheap, honest label.
-  Robust invisible fingerprinting and visible per-page PDF watermarks are out of scope for v1.
-
-Notes from the payload inspection:
-- **Precondition:** the page's client-side download becomes a link to `/d/<file>` (payload
-  finding 1). Until it does, there is no server-side download to stamp or log.
-- The page is a single-page application with one HTML entry page, so the visible line is one
-  insertion. Whether it stays visible inside a full-viewport application is checked by eye
-  in P5.
-- If the schema is ever shipped beside the compact example, the shipped schema must allow
-  the `distribution` property.
-- **What the stamp does not cover:** the same data remains readable, unstamped, inside the
-  page's data script. The stamp marks the file handed over as "the download"; the page
-  content is attributed by the audit log and the visible line.
-- The PDFs are third-party originals; an incremental update leaves their existing content
-  intact.
-
-### Logging and retention
-
-- **Who:** the token's bound address (authoritative) and the submitted name (as typed).
-  **When:** UTC timestamps on every event. **Source IP:** `CF-Connecting-IP`, recorded with the
-  raw `X-Forwarded-For` chain and `CF-Ray`; trustworthy because only our own zone's traffic
-  reaches the logic (D15). **What:** every path served, its size and hash, and every
-  download's stamped hash and `distribution_id`.
-- **Two copies:** the DynamoDB `audit` table and CloudWatch Logs `/arclight/staging/bandersnatch`
-  (structured JSON).
-- **What the record shows, and what it does not.** It shows access and transfers observed
-  under an issued token, from an address, at a time. It does not show which person read the
-  material or kept it: a mailbox can be shared or handled by an assistant, a scanner can open
-  a link, and a download can be cut off at the hour. Reports should say "accessed under the
-  token issued to", not "read by".
-- **D10, retention (recommended):**
-  - accounts and their tokens: kept until the owner removes the account (A3);
-  - `releases` records and served material: kept (A4);
-  - audit events: 2 years in both copies (a leak can surface months later);
-  - **failed submissions by strangers:** the audit item, with the address and name they
-    typed, expires after 90 days (a shorter TTL on that event class); the CloudWatch line for
-    such an event carries the outcome, time and IP only, never the typed address or name;
-  - links and sessions: deleted 30 days after expiry by TTL (the audit events are the durable
-    record); rate-limit keys after an hour;
-  - point-in-time recovery adds up to 35 days to every figure above.
-- Accounts hold outside people's names and addresses. Erasing one person's records on request
-  touches token and audit records, so it is an owner decision, not an automated command.
-- **Operator actions are self-reported in v1:** the tool writes its own audit events, under
-  administrator credentials. An independent record (CloudTrail data events on these tables
-  and this bucket) is a follow-up, and DR-3 notes one administrator has no MFA.
-
-### Network and egress (O-017)
-
-The service's security group, complete:
-
-| Direction | Peer | Port | Why |
-|---|---|---|---|
-| Ingress | Staging ALB security group | 8080, 8081 | Traffic and health checks |
-| Egress | Endpoint security group (`module.vpc.sg_vpc_endpoints_id`) | 443 | ECR api/dkr, Logs, Secrets Manager (D15's one value, at task start), **SES `email` (new)** |
-| Egress | S3 prefix list (`module.vpc.s3_prefix_list_id`) | 443 | ECR layers; the payload bucket |
-| Egress | DynamoDB prefix list (**new gateway endpoint**) | 443 | The tables |
-
-- `internet_egress = false`. **No egress to the internet, RDS, Core, ShuttleForge or
-  Nerfherder.** The task needs nothing else to start or run (no STS call: the task role's
-  credentials come from the container credential endpoint).
-- **New VPC endpoints:** the `email` interface endpoint (two AZs, private DNS, the existing
-  endpoint group) and a DynamoDB gateway endpoint on the private app route table. Both are
-  VPC-wide. Nothing in the account uses SES or DynamoDB from the VPC today.
-- **Both new endpoints get an endpoint policy from the start:** this account's principals and
-  this account's resources only.
-- **No internet egress is not the same as no way out.** The existing S3, Logs, ECR and
-  Secrets Manager endpoints carry no endpoint policy, and a prefix-list rule reaches the
-  whole service: a compromised task holding an attacker's own AWS credentials could write to
-  the attacker's bucket through the S3 gateway. `docs/proposals/nf-egress-lockdown.md:286-293`
-  records the same residual for Nerfherder. Policies on the shared endpoints affect every
-  staging service, so they are a debt item, not part of this change.
-- No ECS Exec, no task-level shell (the O-018 posture). Non-root user, read-only root file
-  system, a writable temporary volume for the verified payload cache.
-
-### IAM
-
-- **Task role** `arclight-bandersnatch-task-staging`, every statement conditioned on the
-  relevant VPC endpoint (`aws:SourceVpce`), so its credentials are useless elsewhere:
-  - `tokens`: `GetItem` and `ConditionCheckItem` only. **The task cannot mint a token, or
-    change one's address, release, expiry, limits or revocation.**
-  - `token_state`: `GetItem`, `UpdateItem`.
-  - `links`: `GetItem`, `PutItem`, `UpdateItem`. `sessions`: `GetItem`, `PutItem`. `limits`:
-    `UpdateItem`.
-  - `releases`: `GetItem`, `Scan`, `ConditionCheckItem`. `audit`: `PutItem` only.
-    **Nothing on `accounts`.** No `Query` or `DeleteItem` anywhere.
-  - `s3:GetObject` on `<bucket>/releases/*`, only for objects tagged accessible. No tagging
-    and no reads of a specific object version.
-  - `ses:SendEmail` on the identity and the configuration set, with `ses:FromAddress` equal
-    to the configured sender. (`aws:SourceVpce` on SES is a global condition key and fails
-    closed if it does not apply; P3 probes it before anything depends on it.)
-- **Execution role** `arclight-bandersnatch-exec-staging`: ECR pull for its repository,
-  `logs:CreateLogStream` and `logs:PutLogEvents` on its log group, `GetSecretValue` on D15's
-  one secret.
-- **These names deliberately fall outside the CI deploy role's `PassRole` patterns**
-  (`arclight-ecs-*-<env>`, `arclight-*-task-role-<env>`; `iam-github-oidc/main.tf:132-138`).
-  The CI role, and anything dispatched to `deploy-service.yml`, therefore cannot run a task
-  as this service and read its tables or bucket. DR-17(c) is not extended to recipient data;
-  deploys are manual until the owner decides otherwise.
-- **Payload bucket policy:** deny non-TLS; deny `GetObject` to anyone but the task role and
-  the named administrator principals; deny `PutObject`, tagging and policy-relevant
-  configuration to anyone but the administrator principals, and `PutObject` without
-  `If-None-Match` to everyone; **deny deletes to everyone** (A4). Block Public Access on,
-  `BucketOwnerEnforced`, SSE-S3, versioning on. No presigned URLs are ever issued.
-- **Push role** for the application's repository, `main` only, scoped to its ECR repository
-  (an entry in `local.ecr_push_roles`).
-- **Operators** manage accounts, issue, revoke, publish and flag releases from their own
-  machines with their administrator credentials through the application's tool (DynamoDB,
-  S3 and SES read APIs only). No one-off ECS task, so the recipient's address and the token
-  hash never sit in `RunTask` overrides in CloudTrail. The token plaintext never reaches AWS.
-
-## Threat model
-
-| # | Threat | Controls | Residual | Test |
+| # | Claim | Positive | Discriminating negative | Where |
 |---|---|---|---|---|
-| T1 | **Scanner pre-fetch** consumes the link or starts the session | `GET` never changes state; activation is a `POST`; binding cookie or token required (D6); prefetch refused | A sandbox that presses buttons reaches only the access-code form | AT-3, AT-4 |
-| T2 | **Token guessing** | 130-bit tokens; per-IP limit; neutral answers; failures per address alarm | None practical | AT-7 |
-| T3 | **Mail abuse and lockout**: using the form to mail-bomb someone, or to block a recipient | Mail goes only to the bound address of a valid token; three link emails per token, spent only on accepted sends; no limit that an outsider can trip against a recipient | The recipient can receive up to three link emails, plus one for each abrupt task stop or unknown mail outcome | AT-7, AT-8 |
-| T4 | **Enumeration through response differences** (status, body, headers, timing, cookies, limits) | Identical status, headers and body; cookie always set; 1.0 s floor with jitter; mail sent after the response; the only refusing limit ignores what was submitted | Statistical timing attacks need many samples, which the per-IP limit caps | AT-1 |
-| T5 | **Link forwarding** | Link alone is not enough (binding or token); single use; superseded by the next link; one-hour session | A recipient who forwards both the link and the token shares access; the audit log shows the second IP. A shared browser profile holding the binding cookie and the link (in its history) can start the session for 24 hours | AT-4 |
-| T6 | **Session theft** | `__Host-` cookie, `HttpOnly`, `Secure`, `SameSite=Lax`; strict CSP; no third-party code; one hour; revocable; identifiers handed out only to a proven binding factor | Malware on the recipient's machine. A stolen cookie cannot be re-keyed: revoking it ends the recipient's only hour, and they need a reissue | AT-4, AT-11, AT-12, AT-25 |
-| T7 | **Cache leakage** (Cloudflare, browser, proxies) | `no-store` everywhere; cache-bypass rule; no service worker; the page reloads at expiry | Content already on screen can be saved while the session lasts | AT-5b |
-| T8 | **Public object URLs** | Private bucket, Block Public Access, restrictive bucket policy, no presigned URLs, the application streams every byte | None | AT-9 |
-| T9 | **Indexing** | `X-Robots-Tag`, robots meta, `robots.txt` | A link pasted publicly by the recipient: the page needs a session anyway | AT-5b |
-| T10 | **Third-party requests** leaking the recipient's IP or the page's existence | Release linter; CSP with no remote host; `no-transform`; injection and error-reporting headers removed at the edge | A PDF viewer following a link inside a PDF | AT-5b, AT-6 |
-| T11 | **Origin bypass** (DR-21: another account's zone reaching the ALB) | The origin secret (D15); every control is in the application | Until D15 or DR-21: forgeable rate-limit keys and logged IPs | AT-19, AT-23 |
-| T12 | **Host header and link injection** | Host allowlist; mail links built from configuration | None | AT-16b |
-| T13 | **Application compromise** | No internet egress; no path to RDS or any module; IAM limited to its tables, tagged releases and one sender, and bound to the VPC endpoints; endpoint policies on the new endpoints | Data can still leave through the unpoliced shared AWS endpoints, or by mail as our sender (send alarm). The task writes its own counters and session records, so "once" is enforced in code: after a suspected compromise every token it could have seen is revoked | AT-5, AT-15, AT-17 |
-| T14 | **Operator machine or account compromise** | Token plaintext only on the operator's machine and the out-of-band channel | Operator actions are self-reported; one administrator has no MFA (DR-3) | — |
-| T15 | **Spoofed mail** phishing the recipient with a lookalike link | `p=reject` on the sending subdomain and (D12) the hosting domain | Lookalike domains we do not own; the corporate apex stays at `p=none` | AT-14 |
-| T16 | **CSRF, forced downloads and clickjacking** | `Sec-Fetch-Site` and `Origin` on every `POST` and on downloads; no state change on any `GET`; `frame-ancestors 'none'` | None | AT-12 |
-| T17 | **Replay of an activation** | Conditional, idempotent transaction; a consumed link only re-attaches its own live session | None | AT-4 |
-| T18 | **Payload tampering or loss** | Three-point pin; no overwrite, no delete, no lifecycle; the task cannot write `releases` or the bucket | An administrator can still publish a wrong release (that is the release review's job) | AT-10 |
-| T19 | **Exposure through this public repository** | Neutral names; names, wording and pins out of git and out of CI logs; no control depends on the design being secret | The codename and design are public (see Hygiene) | AT-16, AT-16c |
-| T20 | **A lost response burns the only activation** | Re-attach within the hour | A recipient who loses both the cookie and the token needs a reissue | AT-4 |
+| T1 | Neutral response; exact address (R2, A2) | Valid, wrong-token, wrong-address, expired and revoked submissions return the same status, headers and body; the bound address in another letter case gets a link | Another address at the same domain, or a plus-tagged variant, gets no mail; the comparison harness fails on a build that changes one body byte | App; S |
+| T2 | A GET never consumes; the link alone is not enough (R4) | Ten GETs and a HEAD from a cookieless client leave the link usable; the original browser's click starts the session; another browser is asked for the token and accepts the right one | A POST from the cookieless client with no token starts nothing | App; S |
+| T3 | Once, one hour (R5, A1) | Serves at start + 59 min 50 s; after a simulated lost response the same proof returns the same session and end time | Refuses at + 60 min 1 s; a second link request after activation sends no mail and starts no session; the first link is refused once a second was requested | App (clock); S (real wait, once) |
+| T4 | Revocation is immediate (R6, A4) | A reissued token against a re-flagged release serves the same pinned bytes | After token revoke, session revoke or flag-inaccessible, the live session's next request gets the neutral 404; object versions are unchanged | App; S |
+| T5 | Everything behind the session, pinned (R7, R12) | With a session every manifest path returns its pinned hash | Every path returns the neutral 404 with no cookie or an expired one; an anonymous S3 request gets 403; a release with one flipped byte is refused; `https://<page-host>/ready` is 404 | App; S |
+| T6 | Nothing cacheable, indexable or third-party, as received through Cloudflare (R7, R8) | A headless browser with a live session loads every page; every request goes to the page host; every response carries `no-store`, `noindex` and `Referrer-Policy: same-origin` | No response carries `NEL` or `Report-To`; a repeated PDF request never shows `cf-cache-status: HIT`; a fixture page with a remote image fails the crawl; lint rejects a tile URL | App; S |
+| T7 | A rate limit that is no oracle and no lockout (R3) | The sixth submission from one IP in 15 minutes gets 429 | The sixth carrying a valid token also gets 429 and no mail; after six failures for the recipient's address from other IPs, the rightful submission still gets its link; (D15) a request without the origin secret gets 404 and is not counted | App |
+| T8 | The CSRF check works with real browsers | A real browser submitting the real form succeeds | A POST with `Origin: null`, a foreign origin, or without `Sec-Fetch-Site: same-origin` gets 403 and changes nothing | App |
+| T9 | Stamped and logged (R9, R10) | The download's `distribution` carries the bound address and issue time; removing it reproduces the pinned original byte for byte; the account report shows submission, mail, link opens, session start and end, each path and the stamped hash | A download under a token issued to a different address never contains the first address; a request with a forged `X-Forwarded-For` is logged with the client's real IP | App; S |
+| T10 | Mail is aligned (R11) | The received mail shows `spf=pass`, `dkim=pass` with `header.d` equal to the From domain, and `dmarc=pass`; no apex record changed. Option 2: this is test 3, with `p=reject` in DNS | Option 2: test 1 (no custom MAIL FROM) fails the same alignment check; test 2 (MAIL FROM set, MX absent) is refused by SES | S (P1) |
+| T11 | No path out; neighbours unchanged (O-017) | From a probe task in the service's group, DynamoDB, S3, ECR, Logs and the chosen mail path connect; the page host returns the landing page and is not redirected to Access | 443 to the internet, 5432 to RDS and 443 to Core's NLB time out; `core.staging…` is still redirected to Access, and rules 2 and 10 and the default certificate are unchanged | S (P3, P5) |
+| T12 | Nothing identifying leaks (R1, public repository) | — | A search of the access pages, headers, cookie names, file name and the received mail for the codename, product, modules, recipient and subject finds nothing; a search of every commit on the branch, the plan job's log and the pull request for the hostname, mail subdomain, mailboxes and release hashes finds nothing; a seeded string makes each search fail | App; S |
 
-## Blast radius
+Not testable: the recipient's real mail gateway is first met in P6. That is why the token re-entry, the same-session retry and three link emails exist.
 
-**On the platform:**
-- **Staging ALB:** one listener certificate and one host rule with an explicit priority. Host
-  conditions do not overlap with `core.staging…` or `shuttleforge.staging…`; adding an SNI
-  certificate leaves the default certificate unchanged. A mistake here could misroute
-  staging traffic, so AT-18 checks Core's path and both existing rules before and after.
-- **VPC:** two new VPC-wide endpoints (`email`, DynamoDB gateway), each with a policy. They
-  change how SES and DynamoDB API names resolve and route from every staging subnet. No
-  staging workload calls either today.
-- **IAM:** adding the ECR repository widens the CI deploy role's image-read list by one
-  repository, in place.
-- **Cluster:** one more service; 0.25 vCPU / 0.5 GB while running.
-- **DNS:** new records only. In `arclightlabs.io`, the corporate mail and web domain: six
-  records under one new subdomain, nothing at the apex. In `arclight-complex.net`: the page
-  record, and D12's two records.
-- **Cloudflare zone `arclight-complex.net`:** five rules scoped to one hostname, including
-  the zone's only free rate-limiting rule.
-- **SES production access** is account-wide: afterwards any principal with `ses:SendEmail`
-  can mail anyone. Today only administrators hold that permission.
-- **No change** to Core, ShuttleForge, Nerfherder, RDS, the Access application, the prod root
-  or the Backstage root.
+## 11. Rollback
 
-**If the application is compromised:** the attacker gets the accessible releases (going out
-anyway, but to the wrong party), the bound addresses and hashes in its tables, and SES
-sending as one address, rate-alarmed. It has no security-group path to any module or to RDS.
-It can still move data out through AWS's own service endpoints (see Network), and it can
-write its own counters and session records (see Data model): redeploying is not enough, and
-every token it could have seen is revoked.
+- **RB0, stop one recipient:** revoke the token. Seconds.
+- **RB1, stop one release:** flag it inaccessible. Seconds; the material is untouched.
+- **RB2, stop everything:** revoke all; desired count 0 (CLI and the variable). The ALB answers 503. One minute. This, not a redeploy, is the response to a suspected compromise.
+- **RB3, unpublish:** remove the proxied DNS record. Minutes.
+- **RB4, remove the exposure:** destroy the service, listener rule, certificate attachment, mail identity or credential, push role, DNS records and Cloudflare rules, the `email` endpoint last. One apply.
+- **Records and served material stay** (A3, A4). The bucket, the tables, the log group and the image repository survive RB4 at a few cents a month. Deleting them is a separate, explicit owner decision, never a rollback.
+- Between shares the service sits at desired count 0, so the resting state is RB2.
 
-**What cannot be undone:** content already downloaded by the recipient, and mail already sent.
+## 12. Cost and observations
 
-## Rollback
+**Cost.** About **$15 a month idle** under D13 option 2 (the `email` interface endpoint in two AZs, about $14.60); options 1 and 3 do not build that endpoint. Fargate adds about $9 if the service ran all month (about **$24** in all under option 2). DynamoDB, S3, SES ($0.10 per 1,000), a secret ($0.40) and logs are cents; the DynamoDB gateway endpoint is free.
 
-| Level | Action | Effect | Time |
-|---|---|---|---|
-| RB0, stop one recipient | Tool: `revoke --token <id>` | Token, links and its sessions refuse at the next request | Seconds |
-| RB1, stop one release | Tool: `release set-access --inaccessible` | Every session on that material refuses at the next request; the task loses read access; the material is untouched | Seconds |
-| RB2, stop everything | Tool: `revoke --all`; desired count to 0 (CLI, and the Terraform variable). **This, not a redeploy, is the response to a suspected compromise of the task** | Every request gets the ALB's 503; no token or session the task wrote can be used later | 1 minute |
-| RB3, unpublish | Remove the proxied DNS record | The hostname stops resolving to us | Minutes |
-| RB4, remove the exposure | Targeted destroy of the service, listener rule, listener certificate, SES identity and configuration set and push role; remove the mail and page records and the Cloudflare rules; the `email` endpoint last | Nothing is reachable or sendable. **The payload bucket, every table, the log group and the image repository stay** (A3, A4; a repository holding images cannot be destroyed by Terraform as the module stands, and images expose nothing) | One apply |
-| RB5, remove the records | Not a rollback: the owner's separate, explicit decision. Export first; lift deletion protection and the bucket's protections by hand | Accounts, tokens, audit and served material are gone | Deliberate |
+**Blast radius.** One SNI certificate and one host rule on the staging ALB. VPC-wide endpoints nothing else uses. Under option 2, SES production access is account-wide: afterwards any principal with `ses:SendEmail` can mail anyone (today only administrators hold it). Under option 1, one task with egress to Microsoft and a mailbox credential. No change to Core, ShuttleForge, Nerfherder, RDS, the Access application, prod or Backstage.
 
-- RB4 leaves the records and the served material in place at a few cents a month, so removing
-  the exposure never costs the history. Tables have deletion protection and the bucket has
-  `prevent_destroy`, so Terraform cannot take them by accident.
-- **D11:** between shares the service runs at desired count 0, so the default state is RB2.
-  Desired count is a Terraform variable (default 0). Starting a share sets it to 1 in the
-  local variables file and by CLI; **a staging apply with the variable still at 0 would stop
-  a share in progress**, so the share runbook sets the variable first.
-- Per-phase rollback is in the plan.
-
-## Public-repository hygiene
-
-- **Out of git, and out of anything this public repository prints:** the recipient's name,
-  address and organisation; tokens; payload contents and subject; the payload repository's
-  name and path; **the public hostname, the mail subdomain, the mailboxes, and every piece of
-  wording the recipient sees** (title, form text, neutral sentences, mail text, cookie names,
-  download file name); release ids and manifest hashes, which appear inside every stamped
-  download and would tie a recipient's file to this repository.
-- **How Terraform gets the names:** variables with no default, marked `sensitive`, from a
-  gitignored `terraform.tfvars` locally and from repository **secrets** in
-  `terraform-plan.yml`. A repository *variable* is printed in clear in this repository's
-  public job logs (verified: run 42885203378 prints `TF_VAR_core_image_tag` and masks
-  `TF_VAR_alarm_email`). Neither name may appear in a resource address, a resource name or a
-  tag.
-- **Why keep them out:** the hostname is in public DNS, but not in Certificate Transparency
-  (the wildcard covers it). Publishing it, or any exact phrase from the page or the mail,
-  would let anyone, including the recipient, search for it and land on this repository's
-  description of what the page is for.
-- **What this does not hide:** the parent domains are public here, the hostname can be found
-  by DNS guessing or by a mail gateway submitting the link to a URL scanner, and the design
-  is public. No control depends on any of that staying secret.
-- **The codename in a public repository is acceptable.** "Bandersnatch" names an internal
-  design. It must never reach a response, a mail, a cookie, a file name or a header the
-  recipient sees; AT-16 searches every response and the received mail for it. Internal AWS
-  names (service, tables, log group) may carry it: the recipient never sees them.
-- **R1's neutrality applies to the access pages and the mail, not to the payload.** The
-  payload is about its subject, and its stamp carries the recipient's own address by design.
-  AT-16c checks the access pages, the mail, the headers and the names for the product, the
-  modules, the recipient and the subject.
-- This document's own detail about the first payload is held to categories. The file-level
-  evidence is in the owner's private receipt.
-
-## Cost
-
-About **$15 a month when idle** (the `email` interface endpoint in two AZs, about $14.60) and
-about **$24 if the service ran all month** (Fargate 0.25 vCPU / 0.5 GB adds about $9). D11
-keeps it near the idle figure. DynamoDB on demand, S3, SES ($0.10 per 1,000 mails), one
-secret ($0.40) and logs are cents. The DynamoDB gateway endpoint is free. A one-AZ `email`
-endpoint halves the endpoint cost at the price of an AZ dependency; not recommended.
-
-## Observations in passing (not in scope)
-
-Recorded so they are not lost; none is changed by this work. DR-24 in
-`docs/PROJECT_STATE.md` points here.
-
-- `podbay.staging.arclight-complex.net` is still a proxied CNAME, though Podbay was removed
-  (O-011). It resolves to our ALB's default 404, so it is not a takeover risk.
-- The `*.staging` Access application has an Allow policy for a "Cloudflare Login" login
-  method. What that admits (members of the account, or any Cloudflare user) was not verified.
-- The `arclight-complex.net` zone: minimum TLS 1.0, Always Use HTTPS off, Network Error
-  Logging on, Email Address Obfuscation on.
-- `arclightlabs.io`'s DMARC is `p=none`: corporate mail is aligned but nothing is enforced.
-- `ansanalytics.com`'s SPF does not list Microsoft 365, which receives its mail, and no DKIM
-  is published at Microsoft's default selector. Mail sent as that domain from Microsoft 365
-  probably fails SPF (inferred from DNS; no message header was examined).
-- The staging VPC's interface and gateway endpoints carry no endpoint policies.
-
-## Review record
-
-**Internal review, 2026-11-10** (three independent passes on the first draft, `02c4a93`;
-every finding was re-checked against code, live state or documentation before it was
-accepted):
-
-| Finding | From | Disposition |
-|---|---|---|
-| `Referrer-Policy: no-referrer` makes browsers send `Origin: null` on form posts, so the CSRF check would refuse every real submission | security, citations | **Accepted:** `same-origin`, plus `Sec-Fetch-Site`; `null` never accepted |
-| Limits that refuse only failed submissions turn the status code into a validity oracle, and let a token holder find the address | security, citations | **Accepted:** only the per-IP limit refuses; the others count and alarm |
-| `CF-Connecting-IP` cannot be trusted on DR-21's path | security | **Accepted:** D15 (origin secret); header required; IPv6 by /64; checks before counting |
-| The single activation can be burned by a lost response or a double click; release and account state were not activation conditions | security | **Accepted:** re-attach within the hour; idempotent transaction; both states are conditions |
-| "No internet egress" was presented as "no way out"; the endpoints carry no policy | security, citations | **Accepted:** residual rewritten; policies on the two new endpoints; shared endpoints registered as debt |
-| Repository variables print in public CI logs, which would leak the hostname | citations | **Accepted (verified, run 42885203378):** secrets, `sensitive`, never in a resource address |
-| Verbatim page and mail wording, and release hashes, would tie the page to this repository | citations | **Accepted:** removed; described instead; pins stay private |
-| A deny-delete bucket policy does not stop lifecycle expiry or overwrites | security | **Accepted:** lifecycle and versioning changes denied; `If-None-Match` required; Object Lock recommended |
-| The task could mint tokens (`PutItem`), read withdrawn releases, and be run by the CI deploy role | security, citations | **Accepted:** no `PutItem` on `tokens`; tag-gated reads; role names outside the `PassRole` patterns |
-| `/ready` relied on a `Host` comparison; "every accessible release" was not implementable with the stated permissions; one bad release would fail the whole service | security, citations | **Accepted:** health on its own port; `Scan` on `releases`; per-release failure |
-| A failed or lost mail spent a link request | security | **Accepted:** spent only on accepted sends |
-| A per-request stamp breaks ranged requests and reproducibility | security | **Accepted:** stamp fixed per session and file |
-| Cloudflare adds `NEL` / `Report-To` (verified live), may prefetch (Speed Brain), and stops compressing under `no-transform` | security, citations | **Accepted:** headers removed at the edge; prefetch refused; the application compresses |
-| A 90-day drop inside a 2-year log group has no mechanism; SES's CloudWatch destination is metrics, not logs | security, citations | **Accepted:** per-class TTL; the log line omits the typed address and name; per-message delivery log is a follow-up |
-| Option (b) overstated: Core's vocabulary already has `external_client` and `external_consumer`; D-074 §6 "rules out" was too strong; O-012 does not cover a platform standard | citations | **Accepted:** reworded; the standard goes to Complex as a question |
-| Rollback levels reused the requirement ids R1-R4 | citations | **Accepted:** RB0-RB5 |
-| Acceptance tests that could not run at their phase, contradicted stamping, or had no discriminating negative | security, citations | **Accepted:** see the plan's table |
-| `ansanalytics.com` was never addressed; D14 was not in the brief; no pointer in `PROJECT_STATE.md` | scope | **Accepted:** reuse row; D14 labelled as proposed here; pointer and DR-24 added |
-| A null MX on the From subdomain | security | **Declined:** RFC 7505 lets receivers reject mail from such a domain; a `Reply-To` is used instead |
-| CloudTrail data events for an independent record of operator actions | security | **Deferred** to the plan's follow-ups: it changes the shared account trail |
-
-Also during drafting, from the owner: A3, A4 and A5, and the offer to extend the Cloudflare
-tokens (plan P0).
-
-**Automated review on the pull request, 2026-11-10** (Codex, four passes on successive
-commits from `b2d52b0`; each finding checked against the text and accepted):
-
-| Finding | Disposition |
-|---|---|
-| Activation reused submission's checks, including "a link email left", so the link in the last permitted mail could never activate | **Accepted:** activation and session checks are now listed separately and exclude the mail budget; AT-8 tests the third mail's link |
-| AT-16 searched every response, including the payload itself, for the payload's subject and the recipient, so a correct release would fail it | **Accepted:** AT-16 is the codename everywhere; AT-16c is product, modules, recipient and subject on the access pages and the mail only |
-| (on `50b96cf`) A task killed with mail queued keeps the budget spent, and nothing durable records the pending send | **Accepted:** reservations are durable and one unconfirmed after two minutes no longer counts. The nonce is still never stored |
-| (on `f9a9567`) A reservation superseded by a later submission before either mail went out could not be found again | **Accepted:** reservations moved from the link record to the token (`pending_sends`), so one read sees them all; budget updates are versioned |
-| (on `f9a9567`) AT-9 required a 404 for another release's session on every path, which fails when two releases share a path | **Accepted:** the test asserts that another release's session never receives this release's bytes |
-| (on `cd6b508`) The serving and re-attach checks ignored a session's own revocation | **Accepted:** both check it; `session revoke` marks the session's identifiers and the link; AT-21 tests it |
-| (on `cd6b508`) An attribute allowlist on `tokens` would deny the conditional writes it was meant to permit (DynamoDB applies it to attributes a condition reads, and requires the key) | **Accepted:** the token is split into an operator-written grant and a task-written state record; guards are condition checks on the grant inside the transaction |
-| (on `50b96cf`) AT-4 required 49 of 50 concurrent clicks to be refused, but the re-attach rule lets bound requests succeed | **Accepted:** AT-4 asserts one activation and one end time; and a ten-second retirement was added for racing responses, **later replaced** by the derived identifier (external review, below) |
-
-**External reviews, 2026-11-10** (run on the owner's direction through the codex CLI, read-only,
-against `f9a9567`; each finding was checked against the text or the code before acceptance).
-Verdicts: **codex-1** (correctness) GO-WITH-CHANGES, no P1; **codex-2** (architecture) NO-GO as
-written on one point, the ownership recommendation GO; **hotpants** (domain) NO-GO as written
-on the same point.
-
-| Finding | From | Disposition |
-|---|---|---|
-| **P1.** A configurable `max_activations` let one token buy a second hour, against A1 | codex-2, hotpants | **Accepted:** one activation per token is fixed; the setting and its field are gone |
-| Shutdown "at the token's expiry" could cut a session started just before it | codex-1, hotpants | **Accepted:** expiry bounds when a session may start; shutdown waits for the hour (plan P6, AT-5) |
-| A ten-second retirement does not survive responses arriving out of order | codex-1 | **Accepted, with a different mechanism:** the session identifier is derived from the nonce and the binding factor, so every response to a browser carries the same cookie and nothing is retired |
-| RB4 cannot destroy an image repository that holds images | codex-2 | **Accepted (verified, `terraform/modules/ecr/main.tf:1-12`):** RB4 keeps it |
-| Core need not be exposed publicly: a public application with private Core admission is a stronger option (b) | codex-2 | **Accepted:** stated under option (b) |
-| The move to the application's repository must cover every application norm, not one section | codex-2 | **Accepted** |
-| The click page does not warn that the hour is single and unrepeatable | hotpants | **Accepted:** required on the page and in the mail |
-| "Always" overstated the evidence horizon; the 90-day figure hid two-year IP retention | hotpants | **Accepted:** originals indefinitely, stamp fields two years and in the exported report; D10 says both figures |
-| The record shows access under a token, not who read it; record purpose and capacity | hotpants | **Accepted:** stated under Logging; a purpose note on each token |
-| "Write-only" audit and tag-gated reads were described as stronger than they are | codex-1 | **Accepted:** both qualified |
-| Account suspension racing an issue was unspecified | codex-1 | **Accepted:** issuing checks the account's state in its transaction |
-| AT-23 passed a verifier that accepts any header; AT-10, AT-13 and AT-21 fixtures; missing negatives for several threats | codex-1 | **Accepted:** see the plan's table (AT-4, AT-5, AT-5b, AT-7, AT-9, AT-10, AT-13, AT-14, AT-15, AT-17, AT-20, AT-21, AT-23, and the new AT-24) |
-| Citation locators; "four" Cloudflare rules where there are five; the per-request logging claim | codex-1, codex-2 | **Accepted:** corrected |
-| Is this over-built for one recipient and one hour? | (asked of codex-2 and hotpants) | **Not raised:** both judged accounts, immutable releases and the test count proportionate; the only cut either asked for was the multiple-activation setting |
-
-**Delta review of revision 2, 2026-11-10** (`f9a9567..90d6dbe`, at the owner's request: codex-1
-through the codex CLI, and an independent internal security pass; both GO-WITH-CHANGES).
-codex-1 mapped 33 earlier findings as resolved, four as partly resolved and one as open by
-design (the endpoint-policy check that needs a second AWS account).
-
-| Finding | From | Disposition |
-|---|---|---|
-| The second session identifier had no atomic contract with revocation, and could be given a fresh hour by a careless implementation | codex-1 (P2), internal (P1) | **Accepted:** the session has one authority; its start is written once; registering an identifier is a guarded transaction; AT-4, AT-5, AT-21 |
-| "The task cannot change … how many times" was untrue: IAM cannot constrain written values, so a compromised task can reset counters or forge a session record | internal (P1) | **Accepted:** stated plainly; the serving check bounds a forged session; revoke-all is the response to a compromise (T13, RB2) |
-| A mail confirmed late could charge a slot already reused, stranding the recipient; "at most one extra mail" was wrong; a lost SES response or a dropped write also leaked budget | codex-1 (P2), internal (P2) | **Accepted:** four invariants; a set of sent links recorded idempotently; no attempt after 60 s; no retry on an unknown outcome; the bound restated (T3, AT-8) |
-| The derived identifier's construction was unspecified, and a holder of link and token could compute it offline and ride along unlogged | internal (P2) | **Accepted:** an HMAC with a per-link salt, computed only from the request; every hand-out is a logged `POST` again |
-| AT-24 scanned one commit, so something added and removed would pass | codex-1 (P2), internal | **Accepted:** every commit, ref and job summary, before the first push |
-| Tests that pass against broken builds (a different valid token; a fresh hour by the other factor; revoke that marks only rows; a lagging index); no test for plaintext secrets at rest | internal (P2), codex-1 | **Accepted:** AT-4, AT-5, AT-8, AT-20, AT-21 tightened; AT-25 added |
-| A fresh binding cookie on every submission; suspension order; tagging order; conflict handling; the never-log list; no positive control for the RDS and Core probes | internal (P3), codex-1 | **Accepted** |
-
-**Why two mechanisms are now stated as invariants.** The session identifiers and the mail
-accounting were revised in three successive rounds, and each fix opened a new gap that the
-next review found. The pattern is the hazard this document already names: it was specifying
-another repository's internals on paper, without code or tests to ground them. Both are now
-written as invariants, which is what the acceptance tests check, each with one construction
-offered and marked as the application's to settle in its own repository.
-
-Not re-reviewed: the changes made in response to the delta review.
+**Observations in passing** (not in scope; DR-24 in `docs/PROJECT_STATE.md` points here). `podbay.staging.arclight-complex.net` is still a proxied CNAME (Podbay removed, O-011) and resolves to the ALB's 404. The `*.staging` Access application allows a "Cloudflare Login" method; what it admits is unverified. Zone `arclight-complex.net` has minimum TLS 1.0, Always Use HTTPS off, NEL on and Email Address Obfuscation on. `arclightlabs.io` DMARC is `p=none`. `ansanalytics.com` SPF does not list Microsoft 365 and has no DKIM at the default selector (inferred from DNS). The staging VPC endpoints carry no endpoint policies.
