@@ -1,9 +1,9 @@
 # Bandersnatch: gated delivery to a named outside recipient (spec)
 
-Status: **Revision 2, draft for the owner's review. Spec only: nothing is built, applied,
-sent or published.** Revision 2: the internal review, the external reviews (codex-1, codex-2,
-hotpants) and the automated pull-request review are folded in (see "Review record"). The
-phased plan and its acceptance tests are in
+Status: **Revision 3, draft for the owner's review. Spec only: nothing is built, applied,
+sent or published.** The internal review, the external reviews (codex-1, codex-2, hotpants),
+the automated pull-request review and a delta review of revision 2 are folded in (see "Review
+record"). The phased plan and its acceptance tests are in
 [bandersnatch-plan.md](bandersnatch-plan.md).
 
 Request: the owner, 2026-11-10 (condensed in "What was asked"). Branch `spec/bandersnatch`,
@@ -387,33 +387,40 @@ does not quote it.
 - **Validity:** the token's hash exists; the token is not revoked, not expired and its account
   not suspended; it is bound to the submitted address; it has an activation and a link email
   left; and its release is flagged accessible.
-- **If valid** (one DynamoDB transaction, with condition checks on the grant and the release): count the
-  link request, record a new link as the token's only current link (older unconsumed links
-  are superseded), write the audit event. The mail is handed to an in-process queue and sent
+- **If valid** (one DynamoDB transaction, with condition checks on the grant and the
+  release): reserve a link email, record a new link as the token's only current link (older
+  unconsumed links are superseded), write the audit event. The mail is handed to an in-process queue and sent
   after the response.
-- **Always:** a 200 with one fixed neutral body, a fresh random **binding cookie** (called
-  `B` here; 32 random bytes, `__Host-` prefix, `Secure; HttpOnly; SameSite=Strict; Path=/;
-  Max-Age=86400`), and an audit event carrying the internal outcome.
+- **Always:** a 200 with one fixed neutral body, the **binding cookie** (called `B` here;
+  32 random bytes, `__Host-` prefix, `Secure; HttpOnly; SameSite=Strict; Path=/;
+  Max-Age=86400`), and an audit event carrying the internal outcome. A browser that already
+  presents a well-formed `B` keeps it (the same value is set again), so a double click or a
+  corrected typo does not leave it holding a cookie that matches no link.
 - **Equal responses:** status, headers and body are byte-identical apart from the cookie value
   (same length). Every response to a submission is held to a **floor of 1.0 s plus 0-200 ms
   of jitter** from receipt, so database work and mail hand-off cannot be timed.
-- **A link request is only spent when SES accepts the mail, and every reservation lives on
-  the token.** `link_requests_used` counts accepted sends only. The submission's transaction
-  adds the new link to the token's `pending_sends` (its hash and the time). When SES accepts
-  the message, the entry is removed and the count goes up by one; if the send fails after
-  retries (capped at 60 s) the entry is removed and `mail_failed` alarms. On a stop signal
-  the task drains its queue first.
-- **A task that dies with mail queued cannot tidy up, so the budget check ignores what it
-  left.** The budget is accepted sends plus pending entries younger than two minutes. Older
-  entries were never confirmed: they do not count, and the next submission removes them.
-  Because every reservation is on the token itself, this also covers a link that a later
-  submission superseded before either mail went out, with no search of the `links` table.
-  An abrupt stop therefore costs the recipient one retry, never a link from the budget. The
-  nonce is still never stored: an unsent link is simply abandoned. (If the task died after
-  SES accepted but before recording it, the recipient can receive one mail more than the
-  budget. That is the safe direction.)
-- **Budget updates are conditional on the state record's version number**, so two submissions
-  racing for the last permitted mail cannot both reserve it.
+- **The mail budget, as invariants.** These are what must hold; AT-8 checks them, not the
+  mechanism.
+  1. A mail counts against the budget when SES accepts it, and exactly once.
+  2. A reservation whose mail was never sent stops counting two minutes after it was made.
+     The recipient is never left with the budget spent and no mail.
+  3. No send attempt starts more than 60 seconds after its reservation, queue time
+     included, and none is retried after an unknown outcome (SES has no idempotency key, so
+     a retry could deliver twice).
+  4. The recipient receives at most the budget, plus one mail for each abrupt task stop or
+     unknown SES outcome. Each of those alarms. There is no smaller fixed bound.
+- **One construction that satisfies them** (the application may choose another that passes
+  AT-8). The token's state holds `sent_links`, the set of link hashes SES has accepted, and
+  `pending_sends`, the reservations with their times. The budget in use is the size of the
+  first plus the reservations younger than two minutes. Reserving is conditional on the
+  state's version number, so two submissions racing for the last mail cannot both take it.
+  Recording an accepted send adds its hash to the set: unconditional, idempotent, and
+  retried until it succeeds, so a write that collides with another transaction is never
+  dropped and a late one cannot charge a slot someone else reserved. Because everything is
+  on the token's own state, a link superseded before either mail went out is covered with
+  no search of the `links` table. The nonce is never stored: an unsent link is abandoned,
+  not resent. On a stop signal the task drains its queue, and its stop timeout is at least
+  90 seconds so that it can.
 
 #### Link and activation
 
@@ -422,8 +429,9 @@ does not quote it.
 - **`GET /a/<nonce>` never changes state.** It returns the same static page for any nonce,
   valid or not: one button, and a neutral line saying that pressing it starts a single hour
   which cannot be paused or repeated, so press it when ready; and that on another device
-  the access code will be asked for. It writes a `link_opened` audit event (IP, user agent) when the
-  nonce matches, which is how scanner pre-fetches show up. `HEAD` is treated the same way.
+  the access code will be asked for. It writes a `link_opened` audit event (IP, user agent)
+  when the nonce matches, which is how scanner pre-fetches show up. `HEAD` is treated the
+  same way.
 - **`POST /a/<nonce>`** (the click) starts the session when all hold:
   - the nonce is the token's current link, unconsumed and less than 24 h old;
   - the token is not revoked or expired, its account is not suspended, its release is flagged
@@ -431,30 +439,48 @@ does not quote it.
     here: the link in the last permitted mail must still work after that mail has used the
     budget up;
   - **binding (D6):** the request carries the cookie `B` whose hash was recorded with this
-    link, **or** the form carries the token itself.
+    link, **or** the form carries this link's own token. If both are present the cookie is
+    used.
 - Without `B` the click page answers with one field asking for the access code. So the
   recipient who requests and clicks in the same browser just clicks; on another device they
   type the token once more.
 - On success, one DynamoDB transaction (idempotent on a client request token, so a retried
-  write cannot count twice) marks the link consumed, counts the activation, creates the
+  write cannot count twice) marks the link consumed, counts the activation, records the
   session and writes the audit event. The response sets the session cookie (called `S` here;
   `__Host-` prefix, `Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age` set to the seconds
   remaining) and redirects (303) to `/v/`.
-- **The session identifier is derived, not drawn:** `S = SHA-256(nonce, binding factor)`,
-  where the binding factor is the cookie `B` or the token, whichever the request proved. The
-  nonce is 32 random bytes, so `S` cannot be guessed; and only someone holding the link
-  **and** a binding factor can compute it, which is exactly who may start the session.
 - **Re-attaching, never restarting.** If the link is already consumed and its session is
-  still inside its hour and has not been revoked, a `POST` that passes the binding check
-  gets that same session back, with the same end time (the activation budget is not checked
-  again, since no new activation happens). Because `S` is derived, **every successful
-  response to the same browser carries the same cookie**: a double click, a retry, or
-  responses arriving out of order cannot leave the browser with a dead identifier, and
-  nothing is rotated or retired. A session can have at most two identifiers, one per
-  binding factor (the first browser's cookie; the token typed on another device). This
-  covers a response lost on a mobile network, a double click, and a mail app's built-in
-  browser handing over to the real one. Without it the only activation could be spent with
-  nothing to show for it. It is still one session and one hour (A1).
+  still inside its hour, a `POST` that proves a binding factor gets that same session back.
+  This covers a response lost on a mobile network, a double click, and a mail app's
+  built-in browser handing over to the real one. Without it the only activation could be
+  spent with nothing to show for it. It is still one session and one hour (A1).
+- **The session, as invariants.** These are what must hold; AT-4, AT-5 and AT-21 check them,
+  not the mechanism.
+  1. **One session per token, with one authority.** Its start is written once, by the
+     activation transaction. No other path reads the clock to set it, and its end is always
+     its start plus 3600 s. Its revocation lives in the same place.
+  2. **Every identifier answers to that authority on every request.** Revoking the session,
+     or its end passing, stops every identifier it has or will ever have.
+  3. **An identifier is only handed out in answer to a `POST` that proves a binding factor
+     for that link**, and each hand-out is logged. It cannot be computed from the link
+     alone, from anything stored, or by anyone but the server.
+  4. **The same proof gets the same cookie.** A retry, a double click or responses arriving
+     out of order never leave a browser holding a dead identifier while the session lives.
+  5. **At most two identifiers** exist per session: one for the binding cookie and one for
+     the token (normalised, so its spelling cannot multiply them).
+  6. **Re-attaching needs everything serving needs:** the session unrevoked and inside its
+     hour, the token unrevoked, the account not suspended, the release accessible.
+- **One construction that satisfies them** (the application may choose another that passes
+  the tests). The consumed **link record is the session's authority**: it holds the
+  session's start, its revocation, a random 32-byte salt and up to two identifier hashes.
+  An identifier is `HMAC-SHA-256(key = nonce, message = label ‖ kind ‖ salt ‖ factor)`: the
+  kind is `cookie` or `token`, and the factor is `B`'s bytes or the normalised token. It is
+  computed only from what the request carries, never from a stored hash. The salt means
+  nobody without the database can derive it; the nonce means nobody with only the database
+  can. Registering the second identifier is one transaction: condition checks on the grant
+  and the release, and a conditional update of the link (consumed, unrevoked, inside its
+  hour, that slot empty or already equal). A lookup record maps each identifier's hash to
+  its link, and the serving check reads the link for the start and the revocation.
 - Anything else: one neutral page saying the link can no longer be used.
 
 Why D6 rather than a bare click:
@@ -477,15 +503,16 @@ origin, and ALB access logs are off; if they are ever turned on, `/a/` must be e
 
 #### Session
 
-- Every `/v/*` and `/d/*` request needs a session whose hash exists, whose end time (start +
-  3600 s, fixed) is in the future, which has not been revoked, whose token is not revoked,
-  whose account is not suspended and whose release is flagged accessible. (The token's own expiry and budgets are checked at
-  submission and activation, not during the hour.) Token and release are read consistently on
-  every request, so revoking a token or flagging a release takes effect at the next request. Suspending an account reaches each of its tokens within
-  seconds (see Data model).
-- **Revoking a session** (the operator's `session revoke`) marks both of that session's
-  possible identifiers, and its link. The serving check reads the first; the re-attach check
-  reads the second, so a revoked session cannot be picked up again under a new identifier.
+- Every `/v/*` and `/d/*` request needs an identifier that leads to a session which has
+  started (its start is not in the future, and not after its token's expiry), whose end
+  (its start plus 3600 s, computed and never read from a stored field) is in the future,
+  which has not been revoked, whose token is not revoked, whose account is not suspended and
+  whose release is flagged accessible. (The token's budgets are checked at submission and
+  activation, not during the hour.) Session, token and release are read consistently on
+  every request, so revoking any of them takes effect at the next request. Suspending an
+  account reaches each of its tokens within seconds (see Data model).
+- **Revoking a session** (the operator's `session revoke`) marks the session's authority.
+  Every identifier, including one not yet handed out, stops with it.
 - No sliding expiry, no refresh, no second session from the same link. A1: extension means a
   new token.
 - No valid session: the neutral 404 for every path, so the asset tree cannot be probed.
@@ -549,25 +576,35 @@ protection on, AWS-owned encryption.
 | `accounts` | `account_id` + `item` (`META`, `ORG#…`, `DOMAIN#…`, `PERSON#<address>`) | label, state (`active`, `suspended`), notes; per assignment: who added it and when | Until the owner removes the account |
 | `releases` | `release_id` | `manifest_sha256`, **`access`** (`accessible`, `inaccessible`), source repository and commit, published at and by, access changes (at, by, why) | **Always** (A4) |
 | `tokens` (the grant; **written only by operators**) | `token_hash`; index on `account_id` | `token_id`, `account_id`, `email`, `release_id`, `manifest_sha256`, `purpose`, `issued_at`, `issued_by`, `expires_at`, `max_link_requests`, `account_suspended`, `revoked_at`, `revoked_by`, `revoke_reason` | With the account (A3) |
-| `token_state` (the counters; written by the task) | `token_hash` | `activations_used`, `link_requests_used`, `pending_sends`, `version`, `current_link_hash` | With the account (A3) |
-| `links` | `nonce_hash` | `token_hash`, `binding_hash`, `created_at`, `expires_at`, `consumed_at`, `session_hash`, `session_revoked_at`, `ses_message_id` | TTL: `expires_at` + 30 d |
-| `sessions` | `session_hash` | `token_hash`, `nonce_hash`, `started_at`, `expires_at`, `ip`, `user_agent`, `revoked_at`, `binding_kind` (`cookie`, `token`) | TTL: `expires_at` + 30 d |
+| `token_state` (the counters; created by the operator at issue, updated by the task) | `token_hash` | `activations_used`, `sent_links`, `pending_sends`, `version`, `current_link_hash` | With the account (A3) |
+| `links` | `nonce_hash` | `token_hash`, `binding_hash`, `created_at`, `expires_at`, `consumed_at`, `session_started_at`, `session_revoked_at`, `session_salt`, `id_cookie_hash`, `id_token_hash`, `ses_message_id` | TTL: `expires_at` + 30 d |
+| `sessions` (a lookup; the link is the authority) | `session_hash` | `nonce_hash`, `binding_kind` (`cookie`, `token`) | TTL: the link's `expires_at` + 30 d |
 | `limits` | `key` (`ip#…`, `email#…`, `global#…` with the window) | `count` | TTL: window end + 1 h |
 | `audit` | `event_id` (128 random bits); index on `account_id` | `at`, `event`, `outcome`, `account_id`, `token_id`, `session_id`, `release_id`, `manifest_sha256`, `ip`, `forwarded_for`, `cf_ray`, `user_agent`, `submitted_email`, `submitted_name`, `path`, `bytes`, `sha256`, `distribution_id`, `ses_message_id` | TTL per event class (D10) |
 
-- **A token is two records, so the task can count without being able to change what was
-  granted.** `tokens` holds who, what, until when, how many times, and whether it is revoked
-  or suspended; only operators write it. `token_state` holds the counters, which the task
-  updates. Every submission and activation is one transaction: a **condition check** on the
-  grant (not revoked, not expired, account not suspended), a condition check on the release,
-  and a conditional update of the state. A revocation that lands mid-click therefore wins.
-  (An attribute-level allowlist on a single record cannot do this: DynamoDB applies such a
-  list to the attributes a condition reads as well as those it writes, and requires the key
-  in it, so the guards and the protection would exclude each other.)
+- **A token is two records: what was granted, and the task's own counters.** `tokens` holds
+  who, what, until when and whether it is revoked or suspended; only operators write it.
+  `token_state` holds the counters, which the task updates (only where the operator created
+  the record at issue). Every submission and activation is one transaction: a **condition
+  check** on the grant (not revoked, not expired, account not suspended), a condition check
+  on the release, and a conditional update of the state. A revocation that lands mid-click
+  therefore wins. (An attribute-level allowlist on a single record cannot do this: DynamoDB
+  applies such a list to the attributes a condition reads as well as those it writes, and
+  requires the key in it, so the guards and the protection would exclude each other.)
+- **What that split does and does not buy.** A compromised task cannot change who a token
+  is for, what it serves, when it expires or whether it is revoked. It can still write its
+  own counters, links and session records, because IAM cannot constrain the values it
+  writes. So "once" (A1) is enforced by the application's code, not by IAM. Two things bound
+  the damage: the serving check accepts no session that started after its token expired and
+  none older than an hour, so a forged one dies with the token; and the answer to a
+  suspected compromise is to **revoke every token the task could have seen**, not only to
+  redeploy (RB2).
+- The task tells a transaction conflict from a failed condition and retries the former; the
+  operator tool retries its own writes the same way.
 - **The serving task reads `releases` and cannot write it; it has no access to `accounts`.**
-  Suspending an account is the operator tool stamping `account_suspended` on each of the
-  account's tokens and repeating until a consistent read of the table (not the index) finds
-  none unstamped. **Issuing is a transaction with a condition check on the account's
+  Suspending an account is the operator tool writing the account's state first, then
+  stamping `account_suspended` on each of the account's tokens and repeating until a
+  consistent read of the table (not the index) finds none unstamped. **Issuing is a transaction with a condition check on the account's
   state**, so a token cannot be issued into a suspended account, and one issued a moment
   before the suspension is caught by the repeat.
 - **A release's `access` flag is a condition of every submission and activation, and is read
@@ -580,14 +617,18 @@ protection on, AWS-owned encryption.
   there (no get, query, scan, update or delete), so it cannot read or list events. It
   chooses each event's key, though, so a compromised task could overwrite events it wrote
   itself. **The copy in CloudWatch Logs, which the task cannot alter, is the evidence of
-  record**; a disagreement between the two copies is itself evidence.
+  record**; a disagreement between the two copies is itself evidence. From the moment a task
+  is compromised it can also write false lines or withhold true ones in both copies:
+  CloudWatch protects what was written before.
 - Audit events: `submit`, `rate_limited` (one per key per window, with a count), `mail_sent`,
   `mail_failed`, `link_opened`, `activation_refused`, `session_started`,
   `session_reattached`, `asset_served`, `download`, `session_ended`, and the operator events
   `account_created`, `account_changed`, `token_issued`, `token_revoked`, `session_revoked`,
   `release_published`, `release_access_changed`.
-- Tokens, nonces and session identifiers are never stored or logged in plaintext. Logs carry
-  `token_id` and `session_id` (random, non-secret identifiers) instead.
+- Tokens, nonces, binding cookies, session identifiers and the origin secret are never
+  stored or logged in plaintext, and neither are `Cookie` or `Referer` header values (the
+  second can carry the nonce). Logs carry `token_id` and `session_id` (random, non-secret
+  identifiers) instead. AT-25 searches for all of them.
 - **Tracking view:** the operator tool's `report --account <id>` joins the account, its
   tokens and its audit events: who was issued what, which links were opened and from where,
   each session's start and end, each file served and each stamped download.
@@ -695,7 +736,9 @@ also read live):
   depends on an object tag that only the operator tool sets when it flags a release, and the
   task drops its local copy when it sees the flag change. This stops later reads from S3; it
   cannot undo what a task that was already compromised had cached while the release was
-  accessible. Tags change no bytes and no versions.
+  accessible. Tags change no bytes and no versions. The tool flips the `releases` flag
+  first, which the application obeys at once, then tags every object including the
+  manifest; tagging many objects is not atomic, so the step can be re-run until complete.
 - Reissue is two deliberate steps: flag the release `accessible`, issue a token. Both are
   audited.
 - The bucket enforces retention: versioning on (and its suspension denied), no lifecycle rule
@@ -922,10 +965,12 @@ The service's security group, complete:
   - `tokens`: `GetItem` and `ConditionCheckItem` only. **The task cannot mint a token, or
     change one's address, release, expiry, limits or revocation.**
   - `token_state`: `GetItem`, `UpdateItem`.
-  - `links`, `sessions`: `GetItem`, `PutItem`, `UpdateItem`. `limits`: `UpdateItem`.
+  - `links`: `GetItem`, `PutItem`, `UpdateItem`. `sessions`: `GetItem`, `PutItem`. `limits`:
+    `UpdateItem`.
   - `releases`: `GetItem`, `Scan`, `ConditionCheckItem`. `audit`: `PutItem` only.
     **Nothing on `accounts`.** No `Query` or `DeleteItem` anywhere.
-  - `s3:GetObject` on `<bucket>/releases/*`, only for objects tagged accessible.
+  - `s3:GetObject` on `<bucket>/releases/*`, only for objects tagged accessible. No tagging
+    and no reads of a specific object version.
   - `ses:SendEmail` on the identity and the configuration set, with `ses:FromAddress` equal
     to the configured sender. (`aws:SourceVpce` on SES is a global condition key and fails
     closed if it does not apply; P3 probes it before anything depends on it.)
@@ -955,17 +1000,17 @@ The service's security group, complete:
 |---|---|---|---|---|
 | T1 | **Scanner pre-fetch** consumes the link or starts the session | `GET` never changes state; activation is a `POST`; binding cookie or token required (D6); prefetch refused | A sandbox that presses buttons reaches only the access-code form | AT-3, AT-4 |
 | T2 | **Token guessing** | 130-bit tokens; per-IP limit; neutral answers; failures per address alarm | None practical | AT-7 |
-| T3 | **Mail abuse and lockout**: using the form to mail-bomb someone, or to block a recipient | Mail goes only to the bound address of a valid token; three link emails per token, spent only on accepted sends; no limit that an outsider can trip against a recipient | The recipient can receive up to three link emails | AT-7, AT-8 |
+| T3 | **Mail abuse and lockout**: using the form to mail-bomb someone, or to block a recipient | Mail goes only to the bound address of a valid token; three link emails per token, spent only on accepted sends; no limit that an outsider can trip against a recipient | The recipient can receive up to three link emails, plus one for each abrupt task stop or unknown mail outcome | AT-7, AT-8 |
 | T4 | **Enumeration through response differences** (status, body, headers, timing, cookies, limits) | Identical status, headers and body; cookie always set; 1.0 s floor with jitter; mail sent after the response; the only refusing limit ignores what was submitted | Statistical timing attacks need many samples, which the per-IP limit caps | AT-1 |
-| T5 | **Link forwarding** | Link alone is not enough (binding or token); single use; superseded by the next link; one-hour session | A recipient who forwards both the link and the token shares access; the audit log shows the second IP | AT-4 |
-| T6 | **Session theft** | `__Host-` cookie, `HttpOnly`, `Secure`, `SameSite=Lax`; strict CSP; no third-party code; one hour; revocable | Malware on the recipient's machine | AT-11, AT-12 |
+| T5 | **Link forwarding** | Link alone is not enough (binding or token); single use; superseded by the next link; one-hour session | A recipient who forwards both the link and the token shares access; the audit log shows the second IP. A shared browser profile holding the binding cookie and the link (in its history) can start the session for 24 hours | AT-4 |
+| T6 | **Session theft** | `__Host-` cookie, `HttpOnly`, `Secure`, `SameSite=Lax`; strict CSP; no third-party code; one hour; revocable; identifiers handed out only to a proven binding factor | Malware on the recipient's machine. A stolen cookie cannot be re-keyed: revoking it ends the recipient's only hour, and they need a reissue | AT-4, AT-11, AT-12, AT-25 |
 | T7 | **Cache leakage** (Cloudflare, browser, proxies) | `no-store` everywhere; cache-bypass rule; no service worker; the page reloads at expiry | Content already on screen can be saved while the session lasts | AT-5b |
 | T8 | **Public object URLs** | Private bucket, Block Public Access, restrictive bucket policy, no presigned URLs, the application streams every byte | None | AT-9 |
 | T9 | **Indexing** | `X-Robots-Tag`, robots meta, `robots.txt` | A link pasted publicly by the recipient: the page needs a session anyway | AT-5b |
 | T10 | **Third-party requests** leaking the recipient's IP or the page's existence | Release linter; CSP with no remote host; `no-transform`; injection and error-reporting headers removed at the edge | A PDF viewer following a link inside a PDF | AT-5b, AT-6 |
 | T11 | **Origin bypass** (DR-21: another account's zone reaching the ALB) | The origin secret (D15); every control is in the application | Until D15 or DR-21: forgeable rate-limit keys and logged IPs | AT-19, AT-23 |
 | T12 | **Host header and link injection** | Host allowlist; mail links built from configuration | None | AT-16b |
-| T13 | **Application compromise** | No internet egress; no path to RDS or any module; IAM limited to its tables, tagged releases and one sender, and bound to the VPC endpoints; endpoint policies on the new endpoints | Data can still leave through the unpoliced shared AWS endpoints, or by mail as our sender (send alarm) | AT-15, AT-17 |
+| T13 | **Application compromise** | No internet egress; no path to RDS or any module; IAM limited to its tables, tagged releases and one sender, and bound to the VPC endpoints; endpoint policies on the new endpoints | Data can still leave through the unpoliced shared AWS endpoints, or by mail as our sender (send alarm). The task writes its own counters and session records, so "once" is enforced in code: after a suspected compromise every token it could have seen is revoked | AT-5, AT-15, AT-17 |
 | T14 | **Operator machine or account compromise** | Token plaintext only on the operator's machine and the out-of-band channel | Operator actions are self-reported; one administrator has no MFA (DR-3) | — |
 | T15 | **Spoofed mail** phishing the recipient with a lookalike link | `p=reject` on the sending subdomain and (D12) the hosting domain | Lookalike domains we do not own; the corporate apex stays at `p=none` | AT-14 |
 | T16 | **CSRF, forced downloads and clickjacking** | `Sec-Fetch-Site` and `Origin` on every `POST` and on downloads; no state change on any `GET`; `frame-ancestors 'none'` | None | AT-12 |
@@ -1000,7 +1045,9 @@ The service's security group, complete:
 **If the application is compromised:** the attacker gets the accessible releases (going out
 anyway, but to the wrong party), the bound addresses and hashes in its tables, and SES
 sending as one address, rate-alarmed. It has no security-group path to any module or to RDS.
-It can still move data out through AWS's own service endpoints (see Network).
+It can still move data out through AWS's own service endpoints (see Network), and it can
+write its own counters and session records (see Data model): redeploying is not enough, and
+every token it could have seen is revoked.
 
 **What cannot be undone:** content already downloaded by the recipient, and mail already sent.
 
@@ -1010,7 +1057,7 @@ It can still move data out through AWS's own service endpoints (see Network).
 |---|---|---|---|
 | RB0, stop one recipient | Tool: `revoke --token <id>` | Token, links and its sessions refuse at the next request | Seconds |
 | RB1, stop one release | Tool: `release set-access --inaccessible` | Every session on that material refuses at the next request; the task loses read access; the material is untouched | Seconds |
-| RB2, stop everything | Tool: `revoke --all`; desired count to 0 (CLI, and the Terraform variable) | Every request gets the ALB's 503 | 1 minute |
+| RB2, stop everything | Tool: `revoke --all`; desired count to 0 (CLI, and the Terraform variable). **This, not a redeploy, is the response to a suspected compromise of the task** | Every request gets the ALB's 503; no token or session the task wrote can be used later | 1 minute |
 | RB3, unpublish | Remove the proxied DNS record | The hostname stops resolving to us | Minutes |
 | RB4, remove the exposure | Targeted destroy of the service, listener rule, listener certificate, SES identity and configuration set and push role; remove the mail and page records and the Cloudflare rules; the `email` endpoint last | Nothing is reachable or sendable. **The payload bucket, every table, the log group and the image repository stay** (A3, A4; a repository holding images cannot be destroyed by Terraform as the module stands, and images expose nothing) | One apply |
 | RB5, remove the records | Not a rollback: the owner's separate, explicit decision. Export first; lift deletion protection and the bucket's protections by hand | Accounts, tokens, audit and served material are gone | Deliberate |
@@ -1150,5 +1197,26 @@ on the same point.
 | Citation locators; "four" Cloudflare rules where there are five; the per-request logging claim | codex-1, codex-2 | **Accepted:** corrected |
 | Is this over-built for one recipient and one hour? | (asked of codex-2 and hotpants) | **Not raised:** both judged accounts, immutable releases and the test count proportionate; the only cut either asked for was the multiple-activation setting |
 
-Not re-reviewed: the changes made in response to these findings. The derived session
-identifier in particular is new in this revision and has had no independent review.
+**Delta review of revision 2, 2026-11-10** (`f9a9567..90d6dbe`, at the owner's request: codex-1
+through the codex CLI, and an independent internal security pass; both GO-WITH-CHANGES).
+codex-1 mapped 33 earlier findings as resolved, four as partly resolved and one as open by
+design (the endpoint-policy check that needs a second AWS account).
+
+| Finding | From | Disposition |
+|---|---|---|
+| The second session identifier had no atomic contract with revocation, and could be given a fresh hour by a careless implementation | codex-1 (P2), internal (P1) | **Accepted:** the session has one authority; its start is written once; registering an identifier is a guarded transaction; AT-4, AT-5, AT-21 |
+| "The task cannot change … how many times" was untrue: IAM cannot constrain written values, so a compromised task can reset counters or forge a session record | internal (P1) | **Accepted:** stated plainly; the serving check bounds a forged session; revoke-all is the response to a compromise (T13, RB2) |
+| A mail confirmed late could charge a slot already reused, stranding the recipient; "at most one extra mail" was wrong; a lost SES response or a dropped write also leaked budget | codex-1 (P2), internal (P2) | **Accepted:** four invariants; a set of sent links recorded idempotently; no attempt after 60 s; no retry on an unknown outcome; the bound restated (T3, AT-8) |
+| The derived identifier's construction was unspecified, and a holder of link and token could compute it offline and ride along unlogged | internal (P2) | **Accepted:** an HMAC with a per-link salt, computed only from the request; every hand-out is a logged `POST` again |
+| AT-24 scanned one commit, so something added and removed would pass | codex-1 (P2), internal | **Accepted:** every commit, ref and job summary, before the first push |
+| Tests that pass against broken builds (a different valid token; a fresh hour by the other factor; revoke that marks only rows; a lagging index); no test for plaintext secrets at rest | internal (P2), codex-1 | **Accepted:** AT-4, AT-5, AT-8, AT-20, AT-21 tightened; AT-25 added |
+| A fresh binding cookie on every submission; suspension order; tagging order; conflict handling; the never-log list; no positive control for the RDS and Core probes | internal (P3), codex-1 | **Accepted** |
+
+**Why two mechanisms are now stated as invariants.** The session identifiers and the mail
+accounting were revised in three successive rounds, and each fix opened a new gap that the
+next review found. The pattern is the hazard this document already names: it was specifying
+another repository's internals on paper, without code or tests to ground them. Both are now
+written as invariants, which is what the acceptance tests check, each with one construction
+offered and marked as the application's to settle in its own repository.
+
+Not re-reviewed: the changes made in response to the delta review.
