@@ -41,6 +41,12 @@ module "shuttleforge_service" {
   cloud_map_namespace_id = module.ecs_cluster.cloud_map_namespace_id
   target_group_arn       = module.alb.target_group_arns["shuttleforge"]
   container_port         = 9000
+  # Internal TLS (D-077, P2): SF's three internal NLB groups. Each ARN goes through its listener
+  # so the service attaches only after the listener exists.
+  additional_load_balancers = [for p in ["9000", "9050", "9100"] : {
+    target_group_arn = aws_lb_listener.sf_internal[p].default_action[0].target_group_arn
+    container_port   = tonumber(p)
+  }]
   # O-017: ShuttleForge keeps internet egress (it is the platform's egress broker).
   internet_egress    = true
   desired_count      = var.shuttleforge_desired_count
