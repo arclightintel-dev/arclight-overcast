@@ -86,9 +86,10 @@ or have the service run migrations on boot.
   3. Run the workflow's checks by hand:
      - the running digest;
      - `/ready` 200 with body `ready`. A degraded task also returns 200.
-     - Until provider inventory exists, an empty ShuttleForge reports `degraded` by design.
-       In that case `/ready/detail` must pass `jq -e -f scripts/sf-first-admission.jq`: only
-       the empty-inventory snapshot warning, the exact pinned check set, `jwks` ok (DR-18).
+     - Only body `ready` passes. DR-18's empty-inventory allowance was removed on 2026-11-11, after
+       SF's Stage B1. An SF with no provider inventory reports `degraded` and fails this check;
+       for example, after B6's fixture teardown and before Stage C's live inventory. Deploy SF in
+       that window only on SF's own verification and the owner's go.
   4. Set `shuttleforge_desired_count = 1` in Terraform before any later apply.
      Otherwise the next apply scales it back to 0.
 

@@ -42,3 +42,13 @@ output "backstage_app_role_ids" {
   description = "Backstage app role IDs by role value (appRoleId for app-role assignments)."
   value       = { for key, role in azuread_application_app_role.backstage : key => role.role_id }
 }
+
+output "bandersnatch_mail_client_id" {
+  description = "Application (client) ID for Bandersnatch outbound mail (bandersnatch_graph_client_id in the staging root)."
+  value       = azuread_application_registration.bandersnatch_mail.client_id
+}
+
+output "bandersnatch_mail_service_principal_object_id" {
+  description = "Directory object ID of the Bandersnatch mail enterprise application (Exchange Online New-ServicePrincipal -ObjectId)."
+  value       = azuread_service_principal.bandersnatch_mail.object_id
+}

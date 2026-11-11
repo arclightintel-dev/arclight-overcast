@@ -72,6 +72,20 @@ Not referenced, because they have no stored version: `core-client-secret` and `p
 
 ---
 
+## Entry B1/B2: fixtures created and verified (SF-reported; owner's go in SF's session)
+
+- **B1, 2026-11-11 05:58:18Z.** Three SF operator calls, all `201`:
+  - provider `sf11-fixture-provider` (proxycheap, no vendor credentials), id `1`;
+  - DISCRETE endpoint `sf11-fixture-discrete-1` → `fixture-upstream.staging.internal.arclight-complex.net:8080`, id `1`;
+  - config `sf11-fixture-config` (upstream, direct binding to endpoint 1), id `1`.
+- **B2, 05:58:23Z.**
+  - `/api/status`: config 1 is in the running snapshot (eligible 1 of 1, `direct_binding`).
+  - `/ready/detail`: `status` `ready`, `snapshot` ok "version=3, configs=1, endpoints=1", all 13 checks `ok`, commit `55a2d20`.
+- The fixture endpoint was `active` by 05:59:03Z: the listener answered SF's probe.
+- Consequence: DR-18's empty-inventory deploy allowance was removed (PR #101). A healthy SF deploy passes on plain `ready`.
+
+---
+
 ## Entry B6: fixture teardown receipt
 
 Not yet written. Fields are per the spec: decision, UTC time, affected resources (including the

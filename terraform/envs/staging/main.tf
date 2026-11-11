@@ -274,14 +274,26 @@ resource "aws_secretsmanager_secret" "dbbootstrap_nf_pw" {
 # DB Bootstrap — SG egress rules (standalone, not inline)
 ################################################################################
 
-resource "aws_security_group_rule" "dbbootstrap_https_egress" {
+# D-078 / O-017 (owner, 2026-11-11): no internet egress. ECR pull, secrets injection and log
+# delivery go through the interface endpoints and the S3 gateway; psql goes to RDS (below).
+resource "aws_security_group_rule" "dbbootstrap_to_vpce_443" {
+  type                     = "egress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  security_group_id        = module.vpc.sg_dbbootstrap_id
+  source_security_group_id = module.vpc.sg_vpc_endpoints_id
+  description              = "DB bootstrap to interface endpoints (ECR, secrets, logs)"
+}
+
+resource "aws_security_group_rule" "dbbootstrap_to_s3_443" {
   type              = "egress"
   from_port         = 443
   to_port           = 443
   protocol          = "tcp"
   security_group_id = module.vpc.sg_dbbootstrap_id
-  cidr_blocks       = ["0.0.0.0/0"]
-  description       = "HTTPS for ECR pull, secrets injection, log delivery"
+  prefix_list_ids   = [module.vpc.s3_prefix_list_id]
+  description       = "DB bootstrap to S3 through the gateway endpoint (image layers)"
 }
 
 resource "aws_security_group_rule" "dbbootstrap_to_rds" {
