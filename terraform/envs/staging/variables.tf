@@ -127,13 +127,13 @@ variable "bandersnatch_image" {
 }
 
 variable "bandersnatch_mail_mode" {
-  description = "Mail path: graph (Microsoft 365; grants 443 to the internet), ses or log"
+  description = "Mail path: graph (Microsoft 365; grants 443 to the internet). ses is not wired yet: it needs the SES email interface endpoint first"
   type        = string
   default     = "graph"
 
   validation {
-    condition     = contains(["graph", "ses", "log"], var.bandersnatch_mail_mode)
-    error_message = "bandersnatch_mail_mode must be graph, ses or log."
+    condition     = var.bandersnatch_mail_mode == "graph"
+    error_message = "bandersnatch_mail_mode must be graph. The ses path has no network route until the SES email interface endpoint is added."
   }
 }
 
