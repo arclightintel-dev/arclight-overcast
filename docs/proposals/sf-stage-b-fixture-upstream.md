@@ -84,9 +84,13 @@ from its own plan.
 
 All probes run with `scripts/internal-tls-probe/run_probe.py` and are judged on each check's `pass`
 field.
-1. **Resolves and accepts repeatedly.** From SF's group, three `fixture-upstream…:8080:connect`
-   checks in one probe run. Three passes prove the `nc` loop re-listens; if busybox `nc` behaves
-   differently, a later check fails here.
+1. **Resolves and accepts repeatedly.** From SF's group, three **separate** probe runs, each with
+   one `fixture-upstream…:8080:connect` check, and each must pass.
+   - Three passes prove the `nc` loop re-listens; if busybox `nc` behaves differently, a later run
+     fails here.
+   - The runs are separate because `probe.py` keys results by the check string
+     (`checks[spec] = r`, `scripts/internal-tls-probe/probe.py:104`). Repeating the same check in one
+     run keeps only the last result (GitHub Codex review, PR #93).
 2. **Isolation.** From NF's group, `fixture-upstream…:8080:blocked`.
 3. **Survives restart.** Force a new deployment of `arclight-fixture-upstream-staging`, wait until
    stable, then repeat check 1. The name must resolve to the new task IP.
