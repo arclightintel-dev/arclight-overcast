@@ -83,6 +83,8 @@ module "vpc" {
   # Secrets Manager endpoint (spec nf-egress-lockdown.md, D1; owner: two AZs, 2026-11-10).
   # Private DNS makes it the only Secrets Manager path for every staging task.
   extra_interface_endpoints = ["secretsmanager"]
+  # Bandersnatch has no internet path to DynamoDB (bandersnatch.tf).
+  dynamodb_gateway_endpoint = var.bandersnatch_enabled
 }
 
 module "ecr" {

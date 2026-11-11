@@ -62,3 +62,8 @@ output "s3_prefix_list_id" {
   description = "Prefix list of the S3 gateway endpoint, for security-group egress rules"
   value       = aws_vpc_endpoint.s3.prefix_list_id
 }
+
+output "dynamodb_prefix_list_id" {
+  description = "Prefix list of the DynamoDB gateway endpoint, for security-group egress rules (null when the endpoint is off)"
+  value       = one(aws_vpc_endpoint.dynamodb[*].prefix_list_id)
+}

@@ -102,3 +102,93 @@ variable "core_image_tag" {
   }
 }
 
+################################################################################
+# Bandersnatch (bandersnatch.tf). The hostname, mail addresses and wording are never committed:
+# they come from the gitignored terraform.tfvars. Nothing but the ECR repository and push role
+# exists until bandersnatch_enabled is true.
+################################################################################
+
+variable "bandersnatch_enabled" {
+  description = "Create the Bandersnatch substrate (tables, bucket, roles, ALB rule, service)"
+  type        = bool
+  default     = false
+}
+
+variable "bandersnatch_desired_count" {
+  description = "Bandersnatch ECS service desired task count (0 except while a share is live)"
+  type        = number
+  default     = 0
+}
+
+variable "bandersnatch_image" {
+  description = "Bandersnatch image as repository@sha256:digest; empty registers a digest that cannot exist"
+  type        = string
+  default     = ""
+}
+
+variable "bandersnatch_mail_mode" {
+  description = "Mail path: graph (Microsoft 365; grants 443 to the internet), ses or log"
+  type        = string
+  default     = "graph"
+
+  validation {
+    condition     = contains(["graph", "ses", "log"], var.bandersnatch_mail_mode)
+    error_message = "bandersnatch_mail_mode must be graph, ses or log."
+  }
+}
+
+variable "bandersnatch_public_host" {
+  description = "Public hostname of the page, no scheme (terraform.tfvars only)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_graph_tenant_id" {
+  description = "Entra tenant of the sending application (graph mode)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_graph_client_id" {
+  description = "Entra application (client) id used for Graph sendMail (graph mode)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_mail_from" {
+  description = "Sender address"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_mail_from_name" {
+  description = "Sender display name"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_mail_reply_to" {
+  description = "Reply-To address"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_mail_subject" {
+  description = "Neutral subject line"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "bandersnatch_page_title" {
+  description = "Neutral page title"
+  type        = string
+  default     = ""
+  sensitive   = true
+}

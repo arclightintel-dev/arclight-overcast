@@ -106,6 +106,12 @@ variable "container_definitions" {
   type        = string
 }
 
+variable "ephemeral_volumes" {
+  description = "Names of task-level ephemeral volumes that the container definition mounts (Fargate has no tmpfs)"
+  type        = list(string)
+  default     = []
+}
+
 variable "health_check_grace_period_seconds" {
   description = "Seconds ALB waits before judging health during startup"
   type        = number
