@@ -298,9 +298,10 @@ locals {
     shuttleforge = {
       # GitHub names the repository arclightintel-dev/shuttleforge; the OIDC sub carries
       # the current name, so "arclight-shuttleforge" could never be assumed (2026-11-10).
+      # v1-operate only (SF DEBT #125, owner 2026-11-11): main never builds a deployable image.
       repo_name = "shuttleforge"
       ecr_repos = ["arclight/shuttleforge"]
-      refs      = ["main", "v1-operate"]
+      refs      = ["v1-operate"]
     }
     # O-013 (staging only; the prod root no longer uses this module after O-016).
     nerfherder = {
