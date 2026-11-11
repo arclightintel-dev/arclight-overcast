@@ -308,6 +308,12 @@ locals {
       ecr_repos = ["arclight/nerfherder"]
       refs      = ["main"]
     }
+    # Bandersnatch: needed before the application's first push, so not behind the staging flag.
+    bandersnatch = {
+      repo_name = "arclight-bandersnatch"
+      ecr_repos = ["arclight/bandersnatch"]
+      refs      = ["main"]
+    }
   }
 }
 
