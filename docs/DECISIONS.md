@@ -284,6 +284,22 @@ Saving about $72/month. A production deployment after v1 starts from D-056, not 
 
 **Why.** Enabling Exec would give SF's task a role with `ssmmessages` permissions and open an interactive path into the task that holds live provider credentials. That reverses SF's security posture for a debugging convenience.
 
+## O-019: Overcast hosts Bandersnatch, a gated delivery application
+
+**Authority**: the owner, 2026-11-10 and 2026-11-11, in Overcast's session: "Yes, build it" (accepting the recommendations of [the spec](proposals/bandersnatch.md)), "Yes, apply it" (the image repository and push role), "hit it" (merging #90), and "Yes, do that" (this record's flag and CI arrangement). | **Recorded**: 2026-11-11.
+
+Bandersnatch is a small application that serves a static page and a data download to one named outside recipient for one hour. Like Backstage (O-012) it is a **hosted application, not a module**: its code lives in its own private repository, and Overcast provides where it runs.
+
+**What Overcast provides, on staging:**
+- an image repository and a push role for the application's repository (applied 2026-11-11 02:05Z; trust corrected 02:10Z to that repository's immutable OIDC subject);
+- behind `bandersnatch_enabled`: seven DynamoDB tables, a DynamoDB gateway endpoint, a private payload bucket, two secret shells, roles, a log group, a security group, an SNI certificate and one rule (priority 20) on the staging listener, and the service at desired count 0.
+
+**Exception to O-017.** The service has outbound 443 to the internet, because its mail goes out through Microsoft 365 (owner's choice for the first share: no wait on Amazon SES production access). A security group cannot narrow this to Microsoft: the rule admits any HTTPS destination. It is one rule, `bsn_to_internet_443_graph`, present only in that mail mode. Moving to SES through a VPC endpoint removes it.
+
+**The flag is on in committed code.** The tables have deletion protection and the bucket `prevent_destroy`, so a plan with the flag off fails rather than destroys. To keep every checkout and CI plan working, `bandersnatch_enabled` defaults to true. The private values (hostname, mail addresses, wording) stay out of this public repository: locally in the gitignored `terraform.tfvars`, in CI as repository secrets. A checkout without them fails at plan with a clear message.
+
+**Not committed anywhere, by the owner's rule:** the recipient, the hostname, the mailbox, recipient-facing wording, release hashes.
+
 ## Core coordination disposition — not a new mechanism decision
 
 **Review date**: 2026-10-01 | **Recorded here**: 2026-10-03.
