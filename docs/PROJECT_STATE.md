@@ -276,11 +276,21 @@ Verified live after apply: the only ECS service is `arclight-core-staging`, stil
 Updated 2026-11-10. Each state change waits on the owner's go, given first-hand.
 
 1. **Core S-057, revision 20**: live and verified 2026-11-10 (all six steps; record above; rollback `:18`). Core writes the release records. S-055 (revision 18) preceded it.
-2. **Nerfherder N-G4**: N-G3 is done (2026-11-10). N-G4 registers the service on `sha256:ee9ebfe3…` (rollback `v1-105f121`), sets desired 1 and runs the readiness probe.
-   - **Unblocked by internal-TLS P3 (applied 2026-11-11, PR #89).** NF's S1 image (NF PR #55) refuses to start on `ENVIRONMENT=staging` with an `http` Core URL (exit 2, `host.hosted_configuration_refused`; NF, 2026-11-10).
-   - N-G4 registers from NF's latest ACTIVE revision, **`:3`**. It carries `https://core-internal…` and `https://shuttleforge-internal…:9000` and no plaintext flag.
-   - The direct NF→Core and NF→SF rules are gone, so NF reaches Core and SF only through the internal NLBs.
-   - After that: the owner's go. N-G4 is useful only once SF serves leases. NF's lease smoke must run under the egress lockdown before the first collection.
+2. **Nerfherder N-G4: DONE 2026-11-11** (NF's S3-S5; owner's go first-hand "1. yes"; PRs #92 and #95). NF is back at **0/0** until SF's Stage C.
+   - **S3 baseline** (RDS, 02:00:39-02:15:39Z): 6 connections, CPU at most 6.2%, about 185 MB freeable; `rds.force_ssl` = 1.
+   - **S4:** revision **`:4`** = base `:3` (P3's `https` URLs, no plaintext flag) on `sha256:ee9ebfe3…` (`v1-59a9ede`); field walk: image only. The service was switched at desired 0, then set to desired 1 at 02:15:52Z.
+     - Desired 1 and the alarm's actions were set through the API, matching config in PR #92. This deviates from the apply-only path because Bandersnatch's resources sat in staging state unmerged (PR #90); the plan read "No changes" after #90 merged.
+     - Task `8cdf2bce…` started 02:16:28Z, HEALTHY.
+     - Core logged `POST /oauth/token 200` from NF's task IP at 02:16:23Z (over `core-internal`; the direct rules are gone).
+     - The in-VPC probe returned `/ready` 200 `ready`. Every check was `ok`: database, config, schema, `host_lease` held, `plaintext_internal_http` "https only", the Core token endpoint and ShuttleForge.
+     - The running-task alarm went ALARM → OK with no action fired.
+   - **S5** (force-new-deployment, 02:19:13Z): the old task stopped 02:20:14Z (exit 0, about a 50 s drain); the new task `074b1ccb…` was created at 02:20:16Z (stop before start) and was HEALTHY at 02:20:46Z. It minted a token at 02:20:42Z. No alarm.
+   - **Soak**, 02:16-04:59Z (about 2.7 h; the timer died in a session restart, so it ran past the 1 h minimum):
+     - RDS: 10-12 connections (NF adds about 6), CPU at most 9.5%, **freeable memory down to about 138 MB**. Watch it on db.t3.micro at Stage C.
+     - NF: CPU at most about 13% of 1024 units, memory about 150 MB.
+     - Core E7 inventory (task `0109a1a0…`, `:20`): 38 `token.issued` (service, success) since 02:15Z, 0 authority-changing events, RESULT OK. Hashed evidence `overcast-e7-nf-tokens.hashed.txt` (sha256 `78f813fe…`).
+   - **Back to 0** by Terraform (PR #95), 04:59:54Z: 2 changed (desired 0, alarm actions off). The service keeps referencing `:4`. The post-apply plan reads "No changes".
+   - **Next for NF:** S6-S12 (bootstrap and the Runs) after SF's Stage C, on the owner's go. NF's lease smoke must run under the egress lockdown before the first collection.
 3. **ShuttleForge**: SF.11 A1-A5 are done (2026-11-10; record above). SF runs r6 **`:5`** on `sha256:f57384de…` at desired 1 (internal-TLS P3, 2026-11-11). It fetches JWKS over `core-internal` and advertises `https://shuttleforge-internal…:9050`. Stage A CLOSED (SF PR #47, `7599a6d`). Next: Stage B entry, after SF's item 24. Stage C's internal-TLS items are done: SF on an `https` revision with `jwks` `ok`, and the direct rules removed. Stage C still needs SF's httpx re-confirmation against the pushed CI image and C-G7's operational evidence. Pending the owner's go: DEBT #125 (drop `main` from SF's push-role trust).
 4. **Cloudflare Terraform**: spec an isolated root (provider v5) adopting the arclight-complex.net staging records and the Access app, then DR-21 origin client certificates.
 5. **Owner**: confirm the `arclight-prod-alarms` subscription email (DR-19); decide whether to take a live `SHOW max_connections` reading (needs a one-off task definition).
