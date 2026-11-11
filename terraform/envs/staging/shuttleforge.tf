@@ -152,31 +152,10 @@ resource "aws_iam_role_policy" "sf_exec_no_migration_url" {
 }
 
 ################################################################################
-# Security group pair: ShuttleForge -> Core JWKS on 8000
-#
-# SF's only Core traffic is GET /.well-known/jwks.json. Under D-074 section 3 SF refuses
-# every Core JWT after 1 h without a JWKS refresh, so this path must stay stable.
+# ShuttleForge -> Core: JWKS only, over core-internal (internal TLS amendment 3b).
+# The direct 8000 pair (core_from_sf, sf_to_core) was removed in P3b: SF reaches Core
+# through the internal NLB (core_nlb_from_sf_443 in internal-tls.tf) and its 443 egress.
 ################################################################################
-
-resource "aws_security_group_rule" "core_from_sf" {
-  type                     = "ingress"
-  from_port                = 8000
-  to_port                  = 8000
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_core_id
-  source_security_group_id = module.vpc.sg_shuttleforge_id
-  description              = "ShuttleForge to Core JWKS"
-}
-
-resource "aws_security_group_rule" "sf_to_core" {
-  type                     = "egress"
-  from_port                = 8000
-  to_port                  = 8000
-  protocol                 = "tcp"
-  security_group_id        = module.vpc.sg_shuttleforge_id
-  source_security_group_id = module.vpc.sg_core_id
-  description              = "ShuttleForge to Core JWKS"
-}
 
 ################################################################################
 # DR-15: dataplane egress to proxy providers (owner, 2026-11-09: open egress on staging)
