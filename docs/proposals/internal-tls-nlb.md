@@ -1,6 +1,6 @@
 # Internal TLS for Core and ShuttleForge: two internal NLBs (D-077, DR-10)
 
-Status: **Revision 3, approved (merged `a9979c6`); P1 applied 2026-11-10 (PR #76); P2 applied 2026-11-11 (PR #88).**
+Status: **Revision 3, approved (merged `a9979c6`); P1 applied 2026-11-10 (PR #76); P2 applied 2026-11-11 (PR #88); P3 applied 2026-11-11 (PR #89, path B).**
 - **Amendment 3a (2026-11-10):** cross-zone is **ON for Core's target group**, by owner decision,
   after P1 measured the stale-node window.
 - **Amendment 3b (2026-11-10):** SF's JWKS URL moves to `https://core-internal…` **before SF's
