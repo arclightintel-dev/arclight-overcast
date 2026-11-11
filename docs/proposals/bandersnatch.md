@@ -170,7 +170,7 @@ Normative for the application. They are held here only until the application's o
 
 ### 6.4 Records
 
-- `accounts`: the organisations, domains and people the owner tracks sharing by (A3). Records for tracking, not credentials. The serving task cannot read it.
+- `accounts`: the organisations, domains and people the owner tracks sharing by (A3). Records for tracking, not credentials. The serving task cannot read it. Suspending an account is the operator tool marking each of that account's tokens as suspended, which is the record the task does read.
 - `releases`: each published release, its manifest hash and its accessible flag (A4).
 - `tokens`: what was granted, to which address, for which release, until when; its use count and revocation.
 - `links` / `sessions`: the emailed link and the one session it starts.
