@@ -1,6 +1,6 @@
 # SF.11 Stage B support: fixture upstream listener and the B0 operation record
 
-Status: **Draft, revision 1 (2026-11-11)**. The owner asked for this spec ("spec it"). Nothing is
+Status: **Draft, revision 2 (2026-11-11)**. Revision 2 takes codex-1's review (APPROVE-WITH-CHANGES) and GitHub Codex's finding. The owner asked for this spec ("spec it"). Nothing is
 built until the owner approves it and gives a first-hand go.
 
 ## Why
@@ -42,7 +42,7 @@ The SF facts come from SF's session (2026-11-11), cited against SF `55a2d20`:
 | Name | Cloud Map A record `fixture-upstream.staging.internal.arclight-complex.net` (module default: TTL 10, MULTIVALUE, custom health). This is the `host` SF configures. |
 | Port | TCP 8080. |
 | Image | Overcast's own `arclight/dbbootstrap@sha256:5d05a32b5bde13c47b7eecef4da206dc78324feea732e10606c7ae1e69ba4147` (`v1-9264f1a`, the shared family's current image, postgres:16-alpine). Pinned by digest. Overcast owns the repository's retention, which keeps 10. |
-| Command | `entryPoint = ["sh", "-c"]`, `command = ["while true; do nc -l -p 8080 </dev/null >/dev/null 2>&1; done"]`. This is busybox `nc`: each accepted connection ends when the client closes, and the loop listens again. |
+| Command | `entryPoint = ["sh", "-c"]`, `command = ["exec busybox nc -ll -p 8080 -e /bin/busybox true"]`. This is busybox `nc` in persistent server mode (`-ll`). The parent keeps the listening socket, and each accepted connection runs `true` and closes at once. So there is no gap between connections, and a client that never closes can't block later probes (codex-1). stderr stays visible in the log. Alpine's busybox build enables `nc` server mode and `-e`, but the pinned digest is **Unverified** until acceptance check 1. If the flags aren't supported, the task exits at start, acceptance fails, and the fallback is the loop form `while true; do nc -l -p 8080 </dev/null >/dev/null; done`, with its known gap recorded. |
 | Size | 256 CPU / 512 MiB. |
 | Container health check | None. A probe that can't connect is the signal. |
 | Execution role | A dedicated role. It allows only the ECR pull for `arclight/dbbootstrap` (plus `ecr:GetAuthorizationToken`) and `logs:CreateLogStream`/`PutLogEvents` on its own log group. No task role, no secrets, no ECS Exec. |
@@ -51,7 +51,7 @@ The SF facts come from SF's session (2026-11-11), cited against SF `55a2d20`:
 **Security group `fixture_upstream`** (own group, created in the root):
 - ingress TCP 8080 from SF's group (`sg-075408be3ea36c30e`) only;
 - egress 443 to the VPC-endpoint group and to the S3 gateway prefix list (`module.vpc.s3_prefix_list_id`), for the image pull and logs. This is the same pattern as NF's `nf_to_vpce_443` and `nf_to_s3_443`;
-- the VPC-endpoint group admits 443 from `fixture_upstream`, as it does for NF;
+- no endpoint-side rule: the VPC-endpoint group already admits 443 from the private app subnet CIDRs as an inline rule (`terraform/modules/vpc/main.tf:141-147`). NF relies on the same rule. A standalone rule would also mix ownership with that inline ingress (codex-1);
 - nothing else: no internet, no Core, no RDS.
 
 SF's side needs no new rule. SF's DR-15 egress is all-TCP and open, and its own records note
@@ -71,7 +71,7 @@ that this matters for Stage B. NF's group has no 8080 egress, so NF can't reach 
 
 **Enable PR** (flag → `true`), an untargeted staging plan: only adds. In order:
 1. the module's service, task definition and Cloud Map service;
-2. the security group and its rules (8080 ingress from SF; 443 egress to the endpoints and to S3), plus the VPC-endpoint group's ingress from `fixture_upstream`;
+2. the security group and its three rules (8080 ingress from SF; 443 egress to the VPC-endpoint group and to the S3 prefix list);
 3. the execution role and its inline policy;
 4. the log group.
 
@@ -147,9 +147,17 @@ The repository is public, so the record holds:
   - db-url and db-url-migration;
   - B4's target-URL secret.
 
-## Entry B6: live-material teardown authorization (AC-15.13)
-- Decision, time, affected resources (including the fixture listener flag), recovery points,
-  key-version references, executor.
+## Entry B6: fixture teardown receipt
+- Decision, UTC time, affected resources (including the fixture listener flag), recovery points,
+  key-version references, executor, outcome.
+- If staging holds live operational material at teardown time, this entry instead carries every
+  field of SF's "Live-material teardown authorization" (SF9_RECOVERY_RUNBOOK.md at SF 55a2d20):
+  - record URI/ID, operator identity, approve/refuse decision, UTC time;
+  - exact resources, action, reason, scope and window;
+  - the live-material classification and what is retained;
+  - recovery points, image/schema identities, restore verification and key-version/custodian references;
+  - executor, match confirmation, stop/drain state, outcome and evidence location;
+  - any deletion-protection approval, and its re-enable result.
 ```
 
 Overcast fills in the full secret names and VersionIds from `describe-secret`
@@ -162,3 +170,9 @@ list.
   small PR, after B1 is accepted.
 - B3's deploy path, which is chosen when B3 is scheduled.
 - Any change to SF's egress (DR-15) or to the internal-TLS paths.
+- The other Overcast steps in SF's runbook "Staging evidence order", which SF will ask for separately (B0-B6):
+  - step 3, deployed infrastructure facts;
+  - step 6, the RDS snapshot restore to a separate protected target (so the shared instance that
+    Nerfherder uses is not touched);
+  - step 7, the D-059 attestation.
+  Each gets its own entry in the B0 record.
