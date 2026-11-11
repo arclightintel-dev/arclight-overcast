@@ -33,7 +33,10 @@ staging. It covers SF's runbook "Staging evidence order", step 1 (B0), and later
   - **N−1, currently deployed:**
     `sha256:f57384de90d40a9212fe75fda8eaf553c97f8a4efcf6f786457b667ad232f5f4` (`v1-55a2d20`, r6),
     revision `arclight-shuttleforge-staging:5` (internal-TLS P3, 2026-11-11).
-  - **N:** pending. SF supplies the digest when the B-D4 image is pushed.
+  - **N:** `sha256:793033d8da8b8cafa58ad3ede142e71c1fe8b68e05aa76e78bbf802d1c26baa6` (`v1-5999bc0`, SF r7,
+    source `5999bc0`, push run `42985081506`, a single manifest). Read back from ECR on 2026-11-11.
+    It makes no `alembic/` change, so the schema stays `sf9_5b_pg_baseline`. Staging sets no
+    `SHUTTLEFORGE_ALLOW_PLAINTEXT_JWKS` (DEBT #121).
 - **Expected schema:** `sf9_5b_pg_baseline`.
 - **Recovery point:** pending (B4). That entry records the RDS snapshot ID and time and the PITR window,
   and the restore target is a separate protected instance (SF runbook step 6).
