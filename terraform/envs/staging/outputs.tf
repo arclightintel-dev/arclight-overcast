@@ -74,3 +74,33 @@ output "core_task_definition_family" {
   description = "Core task definition family"
   value       = module.core_service.task_definition_family
 }
+
+output "bandersnatch_table_prefix" {
+  description = "Bandersnatch DynamoDB table name prefix (null until enabled)"
+  value       = local.bsn_enabled ? local.bsn_table_prefix : null
+}
+
+output "bandersnatch_bucket" {
+  description = "Bandersnatch payload bucket name (null until enabled)"
+  value       = one(aws_s3_bucket.bandersnatch[*].bucket)
+}
+
+output "bandersnatch_log_group" {
+  description = "Bandersnatch log group name (null until enabled)"
+  value       = one(aws_cloudwatch_log_group.bandersnatch[*].name)
+}
+
+output "bandersnatch_origin_secret_arn" {
+  description = "Bandersnatch origin-secret shell ARN (null until enabled)"
+  value       = one(aws_secretsmanager_secret.bsn_origin_secret[*].arn)
+}
+
+output "bandersnatch_graph_client_secret_arn" {
+  description = "Bandersnatch Graph client-secret shell ARN (null until enabled)"
+  value       = one(aws_secretsmanager_secret.bsn_graph_client_secret[*].arn)
+}
+
+output "bandersnatch_target_group_arn" {
+  description = "Bandersnatch target group ARN (null until enabled)"
+  value       = one(aws_lb_target_group.bandersnatch[*].arn)
+}
