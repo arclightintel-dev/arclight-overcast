@@ -85,6 +85,18 @@ G4:
   - No SF alarms exist before P2.
   - Stage B's fixture validation must account for DR-15's open egress (SF records it).
   - Receipt: scratchpad `sfnext/`.
+- **A8 (Overcast's inspections, plan §6), all PASS, read-only, sent to SF:**
+  - **AC-13.9:** the serving task binds exactly the five leaves; migrate binds only `db-url-migration`; there is no `core-client-secret` on either.
+  - **AC-13.10:** no `linuxParameters`, capabilities, `systemControls` or `privileged`.
+  - **AC-10.8a:** desired 1, deployment settings 0/100.
+  - **AC-13.4, configuration half:** SF sits only in the ALB target group on 9000. No staging target group uses 9050 or 9100; those go through Cloud Map.
+  - **AC-4.6b:** both serving sessions use TLSv1.3, and the parameter group sets `rds.force_ssl=1` (in sync). The migration session was not observable after A4; its evidence is configuration.
+  - **AC-10.7b:** SF sessions run only as `shuttleforge_app_staging`.
+  - **AC-10.6c baseline:** `max_connections` 81; SF 2 of about 78 non-superuser slots.
+- **Exit-gate facts:** both admission reads hit one task (same `started_at`). There are exactly 8 secrets under SF's prefix, and a name scan of the account found no provider material.
+- **Stage A CLOSED by SF, 2026-11-10** (SF PR #47, `7599a6d`, the A9 bundle, with Overcast's rows recorded as Overcast-reported). SF stays at desired 1.
+- **Next on SF's side:** Stage B entry, after SF re-derives its fixture validation under DR-15 (SF plan item 24).
+- **Owner, by Stage C:** settle the DR-16 policy-setter conflict (SF plan item 25). SF's plan says Overcast sets the value; Overcast's record says the owner writes the shell and Overcast flips the binding.
 
 **R3, OPEN again (2026-10-29):** at `ad2668b` an empty database reports `/ready` `degraded`. SF first answered that r5 would report `ready`, then withdrew it: TESTING_PROTOCOLS §7 Tier 2.5 and SF's locked V1-AC-032 require `degraded` with no providers.
 
@@ -262,7 +274,7 @@ Updated 2026-11-10. Each state change waits on the owner's go, given first-hand.
    - So N-G4 needs P3's template: `https://core-internal…`, `https://shuttleforge-internal…:9000`, and no plaintext flag. The SF URL needs SF's NLB (P2) live.
    - **Never start NF on the current template revision.**
    - After that: the owner's go. N-G4 is useful only once SF serves leases. NF's lease smoke must run under the egress lockdown before the first collection.
-3. **ShuttleForge**: SF.11 A1-A5 are done (2026-11-10; record above). SF runs r6 `:3` on `sha256:f57384de…` at desired 1, fetching JWKS over `core-internal`. Next: SF's A6/A7 reads, then Stage B. Stage C needs internal-TLS P2 and P3 (path B for SF) and C-G7's operational evidence. Pending the owner's go: DEBT #125 (drop `main` from SF's push-role trust).
+3. **ShuttleForge**: SF.11 A1-A5 are done (2026-11-10; record above). SF runs r6 `:3` on `sha256:f57384de…` at desired 1, fetching JWKS over `core-internal`. Stage A CLOSED (SF PR #47, `7599a6d`). Next: Stage B entry, after SF's item 24. Stage C needs internal-TLS P2 and P3 (path B for SF) and C-G7's operational evidence. Pending the owner's go: DEBT #125 (drop `main` from SF's push-role trust).
 4. **Cloudflare Terraform**: spec an isolated root (provider v5) adopting the arclight-complex.net staging records and the Access app, then DR-21 origin client certificates.
 5. **Owner**: confirm the `arclight-prod-alarms` subscription email (DR-19); decide whether to take a live `SHOW max_connections` reading (needs a one-off task definition).
 6. Keep 7G scheduling blocked on Core/Complex's authority decision, and 7F blocked on the custody amendment.
