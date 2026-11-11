@@ -92,6 +92,11 @@ The script:
   - The task log carries only allowlisted lines: Part A's stdout prefixed `A|`, `NOTICE:  guard|…`,
     `guard_probe|…`, and `psql:/tmp/…` script errors raised by the server.
   - Then `OUT_SHA <sha256>`, the exit code, and a count of the lines it withheld.
+  - **Part A's evidence file is exact:** psql runs **without `-q`**, so the `SET` ×4, `BEGIN` and `COMMIT`
+    command tags stay in. SF's comparator rejects a capture without them (SF `d0f4a62`).
+  - The whole stdout file is also logged as one `A64|<base64>` line. Overcast decodes that line into
+    the evidence file, checks it against `OUT_SHA`, and hands it to SF byte for byte. The allowlist
+    applies only to stderr, never to the evidence.
 
 ## Run
 
