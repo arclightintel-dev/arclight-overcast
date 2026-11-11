@@ -99,6 +99,20 @@ run "backstage_declaration" {
   }
 }
 
+run "bandersnatch_mail_declaration" {
+  command = plan
+
+  assert {
+    condition     = azuread_application_registration.bandersnatch_mail.sign_in_audience == "AzureADMyOrg"
+    error_message = "Bandersnatch mail must remain a single-tenant application."
+  }
+
+  assert {
+    condition     = azuread_service_principal.bandersnatch_mail.owners == toset(["4c5c3d64-2425-494f-b3f9-fec7253e842a"])
+    error_message = "The management service principal must be the declared owner of the Bandersnatch mail enterprise application."
+  }
+}
+
 run "reject_other_tenant" {
   command = plan
 
