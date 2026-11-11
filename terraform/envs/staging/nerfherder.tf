@@ -386,10 +386,14 @@ module "nerfherder_service" {
   deployment_maximum_percent         = 100
 
   container_definitions = templatefile("${path.module}/../../../services/nerfherder/task-definition.json.tpl", {
-    environment                   = var.environment
-    image                         = local.nf_image_unset
-    namespace                     = local.sf_namespace
-    region                        = var.aws_region
+    environment = var.environment
+    image       = local.nf_image_unset
+    namespace   = local.sf_namespace
+    region      = var.aws_region
+    # Internal TLS P3: Core and SF through their internal NLBs; no plaintext flag.
+    core_url                      = "https://${local.core_internal_fqdn}"
+    jwks_url                      = "https://${local.core_internal_fqdn}/.well-known/jwks.json"
+    shuttleforge_url              = "https://${local.sf_internal_fqdn}:9000"
     log_group                     = local.nf_log_group
     bucket                        = local.nf_bucket
     core_client_id                = local.nf_core_client_id

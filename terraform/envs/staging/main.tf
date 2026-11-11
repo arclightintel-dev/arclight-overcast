@@ -143,7 +143,10 @@ module "secrets" {
   domain_name           = var.domain_name
   public_domain         = "${var.environment}.${var.domain_name}"
   private_dns_namespace = "${var.environment}.internal.${var.domain_name}"
-  ecr_repository_arns   = module.ecr.repository_arns
+  # Internal TLS P3 (D-077): the SSM internal URLs point at the internal NLBs.
+  core_internal_url         = "https://${local.core_internal_fqdn}"
+  shuttleforge_internal_url = "https://${local.sf_internal_fqdn}:9000"
+  ecr_repository_arns       = module.ecr.repository_arns
 }
 
 module "observability" {

@@ -64,7 +64,9 @@ module "shuttleforge_service" {
     image       = local.sf_image_unset
     namespace   = local.sf_namespace
     # HTTPS-first (internal-TLS amendment 3b; owner, 2026-11-10): Core's internal NLB name.
-    core_jwks_url             = "https://${local.core_internal_fqdn}/.well-known/jwks.json"
+    core_jwks_url = "https://${local.core_internal_fqdn}/.well-known/jwks.json"
+    # Internal TLS P3: the proxy endpoint SF advertises in a lease is its internal NLB.
+    transport_endpoint        = "https://${local.sf_internal_fqdn}:9050"
     region                    = var.aws_region
     log_group                 = "/arclight/${var.environment}/shuttleforge"
     secret_arn_db_url         = module.secrets.shuttleforge_db_url_secret_arn

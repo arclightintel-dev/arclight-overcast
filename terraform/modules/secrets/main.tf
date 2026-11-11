@@ -45,11 +45,11 @@ resource "aws_secretsmanager_secret" "service" {
 locals {
   ssm_parameters = {
     "/arclight/${var.environment}/core/base-url"             = "https://core.${var.public_domain}"
-    "/arclight/${var.environment}/core/internal-url"         = "http://core.${var.private_dns_namespace}:8000"
-    "/arclight/${var.environment}/core/jwks-url"             = "http://core.${var.private_dns_namespace}:8000/.well-known/jwks.json"
-    "/arclight/${var.environment}/core/token-url"            = "http://core.${var.private_dns_namespace}:8000/oauth/token"
+    "/arclight/${var.environment}/core/internal-url"         = var.core_internal_url
+    "/arclight/${var.environment}/core/jwks-url"             = "${var.core_internal_url}/.well-known/jwks.json"
+    "/arclight/${var.environment}/core/token-url"            = "${var.core_internal_url}/oauth/token"
     "/arclight/${var.environment}/shuttleforge/public-url"   = "https://shuttleforge.${var.public_domain}"
-    "/arclight/${var.environment}/shuttleforge/internal-url" = "http://shuttleforge.${var.private_dns_namespace}:9000"
+    "/arclight/${var.environment}/shuttleforge/internal-url" = var.shuttleforge_internal_url
   }
 }
 
