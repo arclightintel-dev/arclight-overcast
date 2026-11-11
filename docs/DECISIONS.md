@@ -307,6 +307,8 @@ The staging VPC's default security group allows all egress but is attached to no
 
 **Authority**: the owner, 2026-11-10 and 2026-11-11, in Overcast's session: "Yes, build it" (accepting the recommendations of [the spec](proposals/bandersnatch.md)), "Yes, apply it" (the image repository and push role), "hit it" (merging #90), and "Yes, do that" (this record's flag and CI arrangement). | **Recorded**: 2026-11-11.
 
+**Platform record:** Complex **D-079** (`7dec384`, owner ruling 2026-11-11) registers Bandersnatch as the platform's external sharing path, a hosted application outside the module set, consistent with this entry.
+
 Bandersnatch is a small application that serves a static page and a data download to one named outside recipient for one hour. Like Backstage (O-012) it is a **hosted application, not a module**: its code lives in its own private repository, and Overcast provides where it runs.
 
 **What Overcast provides, on staging:**
