@@ -33,7 +33,11 @@ These stand unless the owner says otherwise. They were decisions in earlier revi
 - **Scanners and forwarding** [D6]: the click completes only in the browser that asked for the link; any other browser must re-enter the token.
 - **Store** [D7]: DynamoDB, new, so the internet-facing task has no network path to the shared RDS.
 - **Token** [D9]: expires in 7 days; three link emails; link valid 24 h.
-- **Retention** [D10]: accounts, tokens, releases and served material kept; audit 2 years; what a stranger typed (address, name) 90 days; links and sessions 30 days after expiry.
+- **Retention** [D10]. Payloads (served material) are kept and only flagged inaccessible (A4). **A4 does not cover personal data**, which follows these periods:
+  - account records (outside people's names and addresses) and their token records: kept until the owner removes the account; removing one person on request is the owner's call;
+  - the audit log, including source IPs: 2 years in DynamoDB, 1 year in CloudWatch Logs;
+  - a failed attempt not tied to an account: the typed address and name for 90 days (DynamoDB only; never in CloudWatch), its time, outcome and IP as above;
+  - links and sessions: deleted 30 days after they expire.
 - **Uptime** [D11]: desired count 0 except while a token can still be activated or a session is live.
 - **Issuing** [D14]: only to a person recorded on the account; an address outside the account's domains needs an explicit override. Proposed in the earlier spec, not in the brief.
 - Choosing the names and mailboxes [D8] is an owner task in the checklist (9.1), not a decision.
