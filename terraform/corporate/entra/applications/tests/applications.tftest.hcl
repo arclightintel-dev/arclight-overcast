@@ -99,6 +99,25 @@ run "backstage_declaration" {
   }
 }
 
+run "bandersnatch_mail_declaration" {
+  command = plan
+
+  assert {
+    condition     = azuread_application_registration.bandersnatch_mail.sign_in_audience == "AzureADMyOrg"
+    error_message = "Bandersnatch mail must remain a single-tenant application."
+  }
+
+  assert {
+    condition     = azuread_application_api_access.bandersnatch_mail_graph.role_ids == toset(["b633e1c5-b582-4048-a93e-9f11b44c7e96"]) && azuread_application_api_access.bandersnatch_mail_graph.scope_ids == null
+    error_message = "Bandersnatch mail must declare only the Microsoft Graph application permission Mail.Send and no delegated scope."
+  }
+
+  assert {
+    condition     = azuread_service_principal.bandersnatch_mail.owners == toset(["4c5c3d64-2425-494f-b3f9-fec7253e842a"])
+    error_message = "The management service principal must be the declared owner of the Bandersnatch mail enterprise application."
+  }
+}
+
 run "reject_other_tenant" {
   command = plan
 
