@@ -109,9 +109,9 @@ variable "core_image_tag" {
 ################################################################################
 
 variable "bandersnatch_enabled" {
-  description = "Create the Bandersnatch substrate (tables, bucket, roles, ALB rule, service)"
+  description = "Create the Bandersnatch substrate (tables, bucket, roles, ALB rule, service). On since O-019: its tables and bucket are deletion-protected, so a plan with it off fails rather than destroys. The private values below have no usable default: supply them in terraform.tfvars (CI: repository secrets)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "bandersnatch_desired_count" {
