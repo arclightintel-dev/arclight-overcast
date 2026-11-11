@@ -5,6 +5,9 @@ Status: **Revision 3, approved (merged `a9979c6`); P1 applied 2026-11-10 (PR #76
   after P1 measured the stale-node window.
 - **Amendment 3b (2026-11-10):** SF's JWKS URL moves to `https://core-internal…` **before SF's
   first run** (HTTPS-first), ahead of the rest of P3. Owner's ruling.
+- **Amendment 3c (2026-11-11):** P2's decisions. Cross-zone is **ON for SF's three target
+  groups**. SF is now **running**, so P2's apply restarts it. The alarms are applied after SF is
+  healthy. See "Amendment 3c" under P2.
 - Each phase is applied only on the owner's go, given first-hand.
 
 Revision history:
@@ -24,6 +27,8 @@ Revision history:
     0/0" stays.
 - **Amendment 3b** (owner, 2026-11-10, "yes" to HTTPS-first): SF's JWKS URL to `https` before
   SF's first run. See "Amendment 3b" under P3.
+- **Amendment 3c** (owner, 2026-11-11, "yes. hit it" to P2 with cross-zone on): P2's
+  decisions. See "Amendment 3c" under P2.
 
 ## Why
 
@@ -309,6 +314,42 @@ your Network Load Balancer*)
 - While SF has no task, SF's NLB fails open and SF connections fail. That is expected, and Core
   is unaffected.
 - Record the time from stop to first successful lease on the first controlled redeploy.
+
+**Amendment 3c: P2's decisions (owner, 2026-11-11).**
+1. **Cross-zone ON for SF's three target groups** (`stg-int-sf-9000`, `-9050`, `-9100`).
+   - **Why:** this is 3a's reasoning. SF is a singleton (0/100), and any SF deploy can move it to
+     the other AZ. With cross-zone off, P1 measured the empty AZ's node staying in DNS for 4-6
+     minutes and failing after connect.
+   - **The NLB-level attribute stays `false`.**
+   - The three groups front one task on **different ports**, so no target IP:port is shared
+     between groups or NLBs, and the shared-target collision case does not arise.
+   - **Residual:** the singleton collision class, at an unmeasured rate, as for Core. NF's
+     failed connects and requests are the discriminating signal.
+   - `ZonalHealthStatus` summed is expected to read 2, as on Core's NLB since 3a (Inferred until
+     measured).
+2. **SF is running, not 0/0.** SF.11 A5 started it at desired 1 on 2026-11-10.
+   - P2 adds three load balancers to SF's service. That is an in-place update, but ECS starts a
+     new deployment for it.
+   - Under 0/100 that is **stop-before-start: an outage of several minutes** (see "SF deploy gap"
+     above), on the same task definition (`:3`).
+   - **The apply's time is agreed with SF first.** Record the stop-to-`ready` time.
+   - Core is unaffected.
+   - SF is in Stage A on a deny-by-default policy with no providers, so no lease is voided.
+3. **Two targeted applies from one commit.**
+   - **P2a:** everything except the three alarms (22 creates, plus SF's service update).
+   - **P2b:** the three alarms (3 creates), applied only after SF's task is healthy in all three
+     groups, and then confirmed `OK` with `ActionsEnabled = true`.
+   - **Why:** with SF at desired 1, `actions_enabled` is true. Alarms created before SF's
+     targets register would see missing data, which counts as breaching, and page during the
+     planned outage. That is the inverse of the 0/0 case under "Monitoring".
+4. **Acceptance with SF running** replaces the 0/0 items under "Acceptance → P2":
+   - SF's three NLB groups and its public ALB group are healthy;
+   - from NF's group, verified TLS to `shuttleforge-internal` on 9000, 9050 and 9100;
+   - `/ready` 200 on 9000, both by name and through each node IP. The probe gains `--port` for
+     this, and 443 behaves exactly as before;
+   - `core-internal` still answers from NF's group (isolation);
+   - record the AZs of Core and SF;
+   - the proxy path itself is still proven by NF's lease smoke.
 
 **P3: consumers to `https://`, then close the plain paths.**
 - **SF template:** `SHUTTLEFORGE_CORE_JWKS_URL` → `https://core-internal…/.well-known/jwks.json`

@@ -248,3 +248,189 @@ resource "aws_iam_role_policy" "probe_exec" {
     ]
   })
 }
+
+################################################################################
+# Internal TLS for ShuttleForge (D-077, DR-10), phase P2
+#
+# Spec: docs/proposals/internal-tls-nlb.md, P2 and amendment 3c. SF gets its own NLB, never
+# Core's: TLS on 9000, 9050 and 9100 with the *.staging certificate, one TCP target group per
+# port in front of SF's single task, client IP preserved. All three groups health-check /ready on
+# 9000 (SF's manifest, "Internal TLS").
+#
+# Fixed settings, all deliberate:
+#   - cross-zone ON for SF's three target groups (amendment 3c; owner, 2026-11-11). SF is a
+#     singleton like Core (3a). The groups share SF's task on different ports, so no target
+#     IP:port is shared between groups or NLBs;
+#   - client IP preserved and proxy protocol v2 OFF;
+#   - NO target_group_health block (see P1).
+################################################################################
+
+locals {
+  sf_internal_fqdn  = "shuttleforge-internal.${var.environment}.${var.domain_name}"
+  sf_internal_ports = toset(["9000", "9050", "9100"])
+}
+
+resource "aws_security_group" "sf_nlb" {
+  name_prefix = "arclight-${var.environment}-sf-nlb-"
+  description = "Internal NLB in front of ShuttleForge (TLS 9000, 9050, 9100)"
+  vpc_id      = module.vpc.vpc_id
+
+  tags = { Name = "sg-sf-nlb-${var.environment}" }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_security_group_rule" "sf_nlb_from_nf" {
+  for_each = local.sf_internal_ports
+
+  type                     = "ingress"
+  from_port                = tonumber(each.key)
+  to_port                  = tonumber(each.key)
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.sf_nlb.id
+  source_security_group_id = aws_security_group.nerfherder.id
+  description              = "Nerfherder to ShuttleForge internal NLB ${each.key}"
+}
+
+resource "aws_security_group_rule" "sf_nlb_to_sf" {
+  for_each = local.sf_internal_ports
+
+  type                     = "egress"
+  from_port                = tonumber(each.key)
+  to_port                  = tonumber(each.key)
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.sf_nlb.id
+  source_security_group_id = module.vpc.sg_shuttleforge_id
+  description              = "ShuttleForge internal NLB to ShuttleForge ${each.key} (traffic and health checks)"
+}
+
+resource "aws_security_group_rule" "sf_from_sf_nlb" {
+  for_each = local.sf_internal_ports
+
+  type                     = "ingress"
+  from_port                = tonumber(each.key)
+  to_port                  = tonumber(each.key)
+  protocol                 = "tcp"
+  security_group_id        = module.vpc.sg_shuttleforge_id
+  source_security_group_id = aws_security_group.sf_nlb.id
+  description              = "ShuttleForge internal NLB to ShuttleForge ${each.key} (client IP preserved)"
+}
+
+resource "aws_security_group_rule" "nf_to_sf_nlb" {
+  for_each = local.sf_internal_ports
+
+  type                     = "egress"
+  from_port                = tonumber(each.key)
+  to_port                  = tonumber(each.key)
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.nerfherder.id
+  source_security_group_id = aws_security_group.sf_nlb.id
+  description              = "Nerfherder to ShuttleForge internal NLB ${each.key}"
+}
+
+resource "aws_lb" "sf_internal" {
+  name                             = "arclight-${local.internal_tls_env}-int-sf"
+  internal                         = true
+  load_balancer_type               = "network"
+  ip_address_type                  = "ipv4"
+  subnets                          = module.vpc.private_app_subnet_ids
+  security_groups                  = [aws_security_group.sf_nlb.id]
+  enable_cross_zone_load_balancing = false
+  dns_record_client_routing_policy = "any_availability_zone"
+
+  tags = { Name = "arclight-${local.internal_tls_env}-int-sf" }
+}
+
+resource "aws_lb_target_group" "sf_internal" {
+  for_each = local.sf_internal_ports
+
+  name                              = "${local.internal_tls_env}-int-sf-${each.key}"
+  port                              = tonumber(each.key)
+  protocol                          = "TCP"
+  target_type                       = "ip"
+  vpc_id                            = module.vpc.vpc_id
+  preserve_client_ip                = "true"
+  proxy_protocol_v2                 = false
+  deregistration_delay              = 30
+  load_balancing_cross_zone_enabled = "true"
+
+  # All three groups check SF's /ready on 9000: one task, one readiness (SF's manifest).
+  health_check {
+    protocol            = "HTTP"
+    port                = "9000"
+    path                = "/ready"
+    matcher             = "200"
+    interval            = 10
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = { Name = "${local.internal_tls_env}-int-sf-${each.key}" }
+}
+
+resource "aws_lb_listener" "sf_internal" {
+  for_each = local.sf_internal_ports
+
+  load_balancer_arn = aws_lb.sf_internal.arn
+  port              = tonumber(each.key)
+  protocol          = "TLS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = data.aws_acm_certificate.staging.arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.sf_internal[each.key].arn
+  }
+}
+
+resource "aws_route53_zone" "sf_internal" {
+  name    = local.sf_internal_fqdn
+  comment = "ShuttleForge's internal TLS name (D-077); resolves to the internal NLB inside the VPC"
+
+  vpc {
+    vpc_id = module.vpc.vpc_id
+  }
+
+  tags = { Name = local.sf_internal_fqdn }
+}
+
+resource "aws_route53_record" "sf_internal" {
+  zone_id = aws_route53_zone.sf_internal.zone_id
+  name    = local.sf_internal_fqdn
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.sf_internal.dns_name
+    zone_id                = aws_lb.sf_internal.zone_id
+    evaluate_target_health = false
+  }
+}
+
+# One per SF group. Applied in a second targeted step, only after SF's task is healthy in all
+# three groups (amendment 3c): created earlier, missing data is breaching and would page during
+# the planned stop-before-start window.
+resource "aws_cloudwatch_metric_alarm" "sf_internal_healthy" {
+  for_each = local.sf_internal_ports
+
+  alarm_name          = "arclight-${var.environment}-shuttleforge-internal-healthy-hosts-${each.key}"
+  alarm_description   = "ShuttleForge has no healthy target behind its internal NLB on ${each.key} (D-077)"
+  namespace           = "AWS/NetworkELB"
+  metric_name         = "HealthyHostCount"
+  statistic           = "Maximum"
+  comparison_operator = "LessThanThreshold"
+  threshold           = 1
+  period              = 60
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  treat_missing_data  = "breaching"
+  actions_enabled     = var.shuttleforge_desired_count > 0
+  alarm_actions       = [module.observability.alarm_topic_arn]
+  ok_actions          = [module.observability.alarm_topic_arn]
+
+  dimensions = {
+    LoadBalancer = aws_lb.sf_internal.arn_suffix
+    TargetGroup  = aws_lb_target_group.sf_internal[each.key].arn_suffix
+  }
+}
