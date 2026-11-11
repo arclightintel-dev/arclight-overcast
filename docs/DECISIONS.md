@@ -268,7 +268,7 @@ Saving about $72/month. A production deployment after v1 starts from D-056, not 
 
 **Consequences:**
 - New consumer modules start with no internet egress. Their manifest's egress list is the contract, and any change to it is a change request to Overcast.
-- The dbbootstrap group (operations tooling) is outside the rule's scope until the owner extends it.
+- The dbbootstrap group (operations tooling) was outside the rule's scope until the owner extended it on 2026-11-11 (D-078 follow-up; PR #106): it now has no internet egress.
 
 **Addendum (2026-11-11): D-078 makes this the platform's egress record.** D-078 (Complex `main` `f75b3c0`, owner ruling 2026-11-11) puts operational traffic only through ShuttleForge.
 - §2 has each module declare its non-operational egress to Overcast, which records it here.
@@ -284,7 +284,7 @@ Saving about $72/month. A production deployment after v1 starts from D-056, not 
 | Core | 443 to anywhere (O-017 exception), RDS | Declared non-operational (§2: brokered identity providers, AWS APIs). **The network is broader than the declaration**: IdP endpoints can't be pinned by address. Core carries no operational traffic, so §4's pre-traffic check isn't triggered. Owner ruling pending on whether to narrow it |
 | Bandersnatch | 443 to anywhere (O-019), S3 and DynamoDB gateways, interface endpoints | Declared non-operational (§2: Microsoft 365 Graph mail for its own function); it serves downloads inbound. **The network is broader than the declaration** (O-019 records why). Owner ruling pending, as for Core |
 | Fixture listener (SF Stage B) | interface endpoints and S3 gateway only | Conforms |
-| dbbootstrap (operations tooling) | 443 to anywhere, RDS | Outside O-017 by the owner's choice; no operational traffic. **The network is broader than its needs** (endpoints and S3 would do) |
+| dbbootstrap (operations tooling) | interface endpoints and S3 gateway (443), RDS | **Conforms.** Narrowed on the owner's go, 2026-11-11 07:06Z (PR #106). The shared family's `verify` then passed in this group (task `b41ebdb0…`, exit 0, all four databases). |
 | Backstage (prod VPC) | TCP 41620/42017/49964 to three proxy /32s (103.115.16.128, .145, .29); 443 to Entra (20.20.32.0/19, 20.190.128.0/18, 20.231.128.0/19, 40.126.0.0/18), Anthropic (160.79.104.0/23), the S3 prefix list and the interface endpoints | **§5 exception**: operational traffic only through its allowlisted proxies, never direct. This is the baseline allowlist, and every change to it is recorded here (DR-12) |
 
 The staging VPC's default security group allows all egress but is attached to nothing (read 2026-11-11).
