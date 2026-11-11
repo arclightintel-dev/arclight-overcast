@@ -11,6 +11,7 @@ variable "repository_names" {
     "arclight/shuttleforge",
     "arclight/nerfherder",
     "arclight/dbbootstrap",
+    "arclight/bandersnatch",
   ]
 }
 

@@ -308,6 +308,17 @@ locals {
       ecr_repos = ["arclight/nerfherder"]
       refs      = ["main"]
     }
+    # Bandersnatch: needed before the application's first push, so not behind the staging flag.
+    # The repository was created 2026-11-10, after GitHub made immutable OIDC subjects the
+    # default for new repositories: its sub carries the owner and repository ids, so the
+    # name-only form the other entries use can never be assumed. Read it with
+    # `gh api repos/<owner>/<repo>/actions/oidc/customization/sub`.
+    bandersnatch = {
+      repo_name  = "arclight-bandersnatch"
+      sub_prefix = "repo:arclightintel-dev@224845687/arclight-bandersnatch@1453386524"
+      ecr_repos  = ["arclight/bandersnatch"]
+      refs       = ["main"]
+    }
   }
 }
 
@@ -328,7 +339,7 @@ data "aws_iam_policy_document" "ecr_push_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [for ref in each.value.refs : "repo:${var.github_org}/${each.value.repo_name}:ref:refs/heads/${ref}"]
+      values   = [for ref in each.value.refs : "${try(each.value.sub_prefix, "repo:${var.github_org}/${each.value.repo_name}")}:ref:refs/heads/${ref}"]
     }
   }
 }
