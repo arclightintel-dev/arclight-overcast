@@ -18,7 +18,7 @@ History: earlier revisions and their reviews are in pull request #82 and git.
 | D15 | Proving a request came through our own Cloudflare zone while DR-21 is open | A shared-secret header set by a Cloudflare rule and required by the application, removed when DR-21's client certificates land. Alternatives: wait for DR-21; or accept forgeable rate-limit keys and logged IPs for anyone with their own Cloudflare zone | 6.2 |
 
 Already ruled by the owner, not reopened:
-- **A1.** One hour from the click, once per token, fixed. Extending means reissuing.
+- **A1.** 24 hours from the click, once per token, fixed. Extending means reissuing. (Amended by the owner 2026-11-11; it was one hour.)
 - **A2.** A token binds to the exact email address, not a domain.
 - **A3.** Tokens are tracked under accounts; an account can be assigned organisations, domains and people.
 - **A4.** Served material is never deleted, only flagged inaccessible, so a token can be reissued against it.
@@ -51,8 +51,8 @@ A minimal gated path that serves a static page and a data download to a named ou
 | R1 | A nondescript page on the arclight-complex domain: logo and three fields (token, name, email). No product, recipient or codename in title, URL or copy |
 | R2 | If the token is valid for that address, email it a link. The same neutral response either way |
 | R3 | Rate-limit attempts |
-| R4 | The link's page needs a click. A GET must not consume it (scanners). The hour starts at the click |
-| R5 | One hour of page and download, then it ends |
+| R4 | The link's page needs a click. A GET must not consume it (scanners). The 24 hours start at the click |
+| R5 | 24 hours of page and download, then it ends |
 | R6 | Tokens per recipient, bound to the address, with expiry and use count, revocable |
 | R7 | Every asset behind the session; no public object URLs; `no-store`, `noindex` |
 | R8 | No third-party requests |
@@ -80,7 +80,7 @@ A minimal gated path that serves a static page and a data download to a named ou
 |---|---|---|
 | R1 token and name fields | No custom sign-in forms; sign-in runs on Cloudflare's domain | No |
 | R4 GET must not consume | Scanners following the link use the code up; PIN lasts 10 min | No |
-| R5/A1 one hour, once | One-hour session possible; the recipient can always sign in again | No |
+| R5/A1 24 hours, once | 24-hour session possible; the recipient can always sign in again | No |
 | R6 expiry and use count | Exact addresses yes; no expiry or count on a rule | Partly |
 | R9 audit | Auth logs kept 24 h on Free; per-request logs Enterprise | No |
 | R10 stamp | The edge cannot stamp | No |
@@ -132,8 +132,8 @@ recipient ──HTTPS──▶ Cloudflare (proxied; cache bypass; no injection; 
 1. The operator creates the account and person, publishes a release, issues a token, and gives the token to the recipient by a channel other than email.
 2. The recipient opens `<page-host>` and enters token, name and email. The answer is always the same and neutral.
 3. If the token is valid for that exact address, a mail with a link goes to that address.
-4. The link's page shows one button. Loading it changes nothing. Pressing it starts the hour, in the same browser that asked, or in another after re-entering the token.
-5. For one hour the session serves the pinned site and the stamped download. Then it ends.
+4. The link's page shows one button. Loading it changes nothing. Pressing it starts the 24 hours, in the same browser that asked, or in another after re-entering the token.
+5. For 24 hours the session serves the pinned site and the stamped download. Then it ends.
 6. The operator flags the release inaccessible, sets desired count 0 and exports the account report.
 
 ### 6.2 What Overcast provides
@@ -155,8 +155,8 @@ Normative for the application. They are held here only until the application's o
 - **Rate limit (R3).** Per IP, 5 per 15 minutes and 20 per day, 429 whatever was submitted. This is the only limit that refuses, so nobody can lock a recipient out and the limit is no oracle. Client IP is `CF-Connecting-IP`.
 - **Exact binding (A2).** The address is trimmed and lower-cased; nothing else is folded. The name is recorded, never validated, never echoed.
 - **Link (R4).** A GET or HEAD on the link never changes state and returns the same page for any link. The click is a POST. It starts the session only with the binding cookie from the browser that asked, or with the token re-entered. A newer link supersedes an older one. A link is valid 24 h. Why: a scanner that presses buttons, or anyone the mail is forwarded to, has neither factor.
-- **Once, one hour (A1).** One activation per token, with no setting for it. The session ends 3600 s after the click; no refresh, no sliding expiry. Token expiry bounds when a session may start, not when it ends.
-- **A lost response or a double click must not burn the only activation.** The same proof within the hour gets the same session back, never a new hour.
+- **Once, 24 hours (A1).** One activation per token, with no setting for it. The session ends 86400 s after the click; no refresh, no sliding expiry. Token expiry bounds when a session may start, not when it ends.
+- **A lost response or a double click must not burn the only activation.** The same proof within the 24 hours gets the same session back, never a new one.
 - **A failed send must not cost the recipient a link.** Three link emails per token.
 - **Revocation (R6).** Revoking a token, revoking a session, suspending an account or flagging a release inaccessible takes effect at the next request.
 - **Everything behind the session (R7).** Only paths in the pinned manifest are served. Without a valid session every path is the same neutral 404. Public routes are `/`, `/a/*`, `/v/*`, `/d/*` and `/robots.txt`.
@@ -164,7 +164,7 @@ Normative for the application. They are held here only until the application's o
 - **No third-party requests (R8).** `no-transform` stops Cloudflare's email-obfuscation rewrite and analytics beacon (the edge rules are the second layer). The application compresses its own text responses, because `no-transform` stops Cloudflare doing it. Requests marked `Sec-Purpose: prefetch` are refused.
 - **CSRF that works with real browsers.** Every POST and every download requires `Sec-Fetch-Site: same-origin`; a POST also requires `Origin` equal to the page origin; `null` is never accepted. This is why the referrer policy is `same-origin`: under `no-referrer` browsers send `Origin: null` on form posts and every real submission would be refused.
 - **Host and origin.** Only `Host = <page-host>` is served. Mail links are built from configuration, never from the request. The origin secret is required if D15 is approved (neutral 404 without it).
-- **Wording.** Everything the recipient sees is neutral, chosen by the owner, supplied as configuration, and never contains the codename. The click page says the hour is single and cannot be paused or repeated.
+- **Wording.** Everything the recipient sees is neutral, chosen by the owner, supplied as configuration, and never contains the codename. The click page says the 24 hours cannot be paused or repeated.
 - **Tokens.** 130 random bits (26 Crockford base32 characters), generated on the operator's machine, shown once. Only hashes of tokens, links and cookies are stored; none is logged.
 - **Stamping (R10).** The JSON download is the pinned original with a `distribution` object (bound address, token issue time, session start, release id and manifest hash, a distribution id) inserted as the first member, every other byte unchanged. The bytes are the same for every request in a session. HTML pages carry a visible line (address, issue date, short reference). PDF metadata is optional (section 2). Metadata can be stripped; the audit log and the visible line are what attribute a leak.
 - **Pinning (R12).** A release is an immutable directory with a manifest (each file's path, SHA-256, size and type; the source commit; a clean-tree flag). The release id is the first 16 hex characters of the manifest's SHA-256. The tool refuses a dirty tree. The application verifies the manifest and file hashes before serving and refuses a release that does not match. Each token carries its release's manifest hash.
@@ -193,7 +193,7 @@ Amazon SES starts in a sandbox that can only mail verified addresses, and verify
 | 2. Amazon SES on a subdomain of `arclightlabs.io` | Through a VPC endpoint: no egress, no stored credential. The better long-term setup | Six DNS records and production access (about a day) |
 | 3. No automated mail | The application shows the operator the link and he sends it from his own mailbox | A manual step per link; mail to the bound address is not enforced by the application |
 
-In every option the sender is under `arclightlabs.io` (A5): a no-reply address, a neutral display name, and `Reply-To` to a mailbox the owner reads. The message is plain text with a minimal HTML alternative: the link, how long it is valid, and that the hour starts at the button. No images, no tracking.
+In every option the sender is under `arclightlabs.io` (A5): a no-reply address, a neutral display name, and `Reply-To` to a mailbox the owner reads. The message is plain text with a minimal HTML alternative: the link, how long it is valid, and that the 24 hours start at the button. No images, no tracking.
 
 D12 applies whichever option is chosen: zone `arclight-complex.net` gets apex TXT `v=spf1 -all` and `_dmarc` TXT `v=DMARC1; p=reject; sp=reject`.
 
@@ -254,7 +254,7 @@ Ship the compact example: it was built as the sample and says so. If the recipie
 | Using the form to mail-bomb or lock out a recipient | Mail only to the bound address of a valid token, three per token; only the per-IP limit refuses | — |
 | Enumeration by response differences | Identical responses; mail after the response | — |
 | Link forwarding | The link alone is not enough; single use | A recipient who forwards link and token shares access; the audit log shows the second IP |
-| Session theft | `__Host-`, `HttpOnly`, `Secure` cookie; strict CSP; one hour; revocable | Malware on the recipient's machine |
+| Session theft | `__Host-`, `HttpOnly`, `Secure` cookie; strict CSP; 24 hours; revocable | Malware on the recipient's machine |
 | Cache and indexing | `no-store`, cache-bypass rule, `noindex` | — |
 | Third-party requests | Lint, CSP, `no-transform`, edge rules | A PDF viewer following a link inside a PDF |
 | Public object URLs | Private bucket, no presigned URLs; the application streams every byte | — |
@@ -317,7 +317,7 @@ Each claim has one negative that must fail, proving the check can tell the diffe
 |---|---|---|---|---|
 | T1 | Neutral response; exact address (R2, A2) | Valid, wrong-token, wrong-address, expired and revoked submissions return the same status, headers and body; the bound address in another letter case gets a link | Another address at the same domain, or a plus-tagged variant, gets no mail; the comparison harness fails on a build that changes one body byte | App; S |
 | T2 | A GET never consumes; the link alone is not enough (R4) | Ten GETs and a HEAD from a cookieless client leave the link usable; the original browser's click starts the session; another browser is asked for the token and accepts the right one | A POST from the cookieless client with no token starts nothing | App; S |
-| T3 | Once, one hour (R5, A1) | Serves at start + 59 min 50 s; after a simulated lost response the same proof returns the same session and end time | Refuses at + 60 min 1 s; a second link request after activation sends no mail and starts no session; the first link is refused once a second was requested | App (clock); S (real wait, once) |
+| T3 | Once, 24 hours (R5, A1) | Serves at start + 23 h 59 min 50 s; after a simulated lost response the same proof returns the same session and end time | Refuses at + 24 h 1 s; a second link request after activation sends no mail and starts no session; the first link is refused once a second was requested | App (clock); S (real wait, once) |
 | T4 | Revocation is immediate (R6, A4) | A reissued token against a re-flagged release serves the same pinned bytes | After token revoke, session revoke or flag-inaccessible, the live session's next request gets the neutral 404; object versions are unchanged | App; S |
 | T5 | Everything behind the session, pinned (R7, R12) | With a session every unstamped manifest path returns its pinned hash; the stamped ones (HTML, the JSON download) match the pinned original once the stamp is removed (T9) | Every path returns the neutral 404 with no cookie or an expired one; an anonymous S3 request gets 403; a release with one flipped byte is refused; `https://<page-host>/ready` is 404 | App; S |
 | T6 | Nothing cacheable, indexable or third-party, as received through Cloudflare (R7, R8) | A headless browser with a live session loads every page; every request goes to the page host; every response carries `no-store`, `noindex` and `Referrer-Policy: same-origin` | No response carries `NEL` or `Report-To`; a repeated PDF request never shows `cf-cache-status: HIT`; a fixture page with a remote image fails the crawl; lint rejects a tile URL | App; S |
