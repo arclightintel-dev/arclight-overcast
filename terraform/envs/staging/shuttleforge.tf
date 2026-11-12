@@ -132,6 +132,20 @@ resource "aws_secretsmanager_secret" "sf_db_url_migration" {
   tags = { Name = "arclight/${var.environment}/shuttleforge/db-url-migration" }
 }
 
+# SF.11 Stage B4 restore drill (docs/operations/sf-stage-b4-runplan.md, P1/P2): SF's
+# runtime URL with the host swapped to the restored target. Shell only; the owner writes
+# the value at step 6. Read by the one-off verify task through the serving execution role's
+# arclight/<env>/shuttleforge/* grant. Removed by a Terraform PR at B4 teardown.
+resource "aws_secretsmanager_secret" "sf_b4_target_db_url" {
+  name        = "arclight/${var.environment}/shuttleforge/b4-target-db-url"
+  description = "ShuttleForge runtime URL for the SF.11 B4 restored target (drill only; removed at teardown)"
+
+  tags = {
+    Name    = "arclight/${var.environment}/shuttleforge/b4-target-db-url"
+    Purpose = "sf11-b4-restore-drill"
+  }
+}
+
 # The serving execution role reads arclight/<env>/shuttleforge/*, which would include
 # the schema-owner URL. SF: never bind it to the serving task; this makes that structural.
 resource "aws_iam_role_policy" "sf_exec_no_migration_url" {
