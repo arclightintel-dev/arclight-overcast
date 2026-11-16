@@ -287,6 +287,11 @@ Saving about $72/month. A production deployment after v1 starts from D-056, not 
 | dbbootstrap (operations tooling) | interface endpoints and S3 gateway (443), RDS | **Conforms.** Narrowed on the owner's go, 2026-11-11 07:06Z (PR #106). The shared family's `verify` then passed in this group (task `b41ebdb0…`, exit 0, all four databases). |
 | Backstage (prod VPC) | TCP 41620/42017/49964 to three proxy /32s (103.115.16.128, .145, .29); 443 to Entra (20.20.32.0/19, 20.190.128.0/18, 20.231.128.0/19, 40.126.0.0/18), Anthropic (160.79.104.0/23), the S3 prefix list and the interface endpoints | **§5 exception**: operational traffic only through its allowlisted proxies, never direct. This is the baseline allowlist, and every change to it is recorded here (DR-12) |
 
+**Pending changes to this register (Bandersnatch admin interface, O-020 proposed, PR #118; not applied; the table above changes when they are applied and read live).** Recorded per D-078 §5's fourth condition and §4's pinning clause, on Complex's review of 2026-11-16:
+- **Backstage (prod VPC):** adds 443 to the security group of one interface endpoint in its own VPC. That endpoint reaches the Bandersnatch admin interface in staging through PrivateLink. The traffic stays inside AWS and never reaches an external target, so it is not source traffic. Backstage's other egress is unchanged.
+- **Bandersnatch:** the existing 443 rule (O-019) also carries the admin interface's fetches of Microsoft Entra token-signing keys and metadata (`login.microsoftonline.com`; §2, an identity provider). It stays whenever the interface is on, whatever the mail mode. It is recorded under §4's pinning clause on the same grounds as Graph mail: the endpoints cannot be pinned by address, and the service carries no operational traffic.
+- This is the first link from the prod VPC to a staging service. No platform rule forbids it, and Complex records it.
+
 The staging VPC's default security group allows all egress but is attached to nothing (read 2026-11-11). D-078 §7 (`8a5d400`) scopes the rule to deployed environments: staging, and production when one exists. Developer machines are outside it.
 
 ## O-018: No ECS Exec for ShuttleForge
