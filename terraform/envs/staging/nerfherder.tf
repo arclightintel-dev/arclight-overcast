@@ -128,6 +128,14 @@ resource "aws_cloudwatch_log_group" "nerfherder" {
 ################################################################################
 # Artifact and evidence bucket: no expiration or transition (manifest M:205-206; artifact keys
 # share no prefix a rule could exempt). Only incomplete multipart uploads are cleaned up.
+#
+# DR-25 (D-059 §6, owner 2026-11-16): versioned. The task role may PutObject on any key, so an
+# overwrite of a committed artifact or evidence/ is recoverable only through its prior version.
+# Prior versions of committed keys are kept indefinitely; only _uncommitted/, the one prefix NF
+# deletes under, has its prior versions and delete markers expired. Current objects are never
+# expired anywhere: staged bytes wait under _uncommitted/ for promotion. NF confirmed at its main
+# 579e9e81 (2026-11-16) that committed keys are content-addressed or timestamped, never rewritten
+# in place, and that no NF code reads versions.
 ################################################################################
 
 resource "aws_s3_bucket" "nerfherder" {
@@ -160,6 +168,13 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "nerfherder" {
   }
 }
 
+resource "aws_s3_bucket_versioning" "nerfherder" {
+  bucket = aws_s3_bucket.nerfherder.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_bucket_lifecycle_configuration" "nerfherder" {
   bucket = aws_s3_bucket.nerfherder.id
   rule {
@@ -170,6 +185,24 @@ resource "aws_s3_bucket_lifecycle_configuration" "nerfherder" {
       days_after_initiation = 7
     }
   }
+
+  # Staged objects NF deletes (DeleteObject is allowed only here): drop the prior version after
+  # 7 days, then the delete marker left behind.
+  rule {
+    id     = "expire-uncommitted-noncurrent"
+    status = "Enabled"
+    filter {
+      prefix = "_uncommitted/"
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = 7
+    }
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.nerfherder]
 }
 
 resource "aws_s3_bucket_policy" "nerfherder" {
