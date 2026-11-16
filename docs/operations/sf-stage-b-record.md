@@ -242,8 +242,8 @@ judging B4 complete. SF's step 9 PASS met that condition.
   16:01:49Z.
   - The target had inherited 7-day backup retention, so it held five automated snapshots of its own, 11-12 to 11-16.
     They hold drill data only.
-  - It had no retained automated backups.
-  - RDS removes those automated snapshots after the instance is deleted.
+  - No automated backups were retained after deletion.
+  - RDS had removed those automated snapshots by 16:03:58Z.
 - **`b4-target-db-url`:** removed by this PR's Terraform change, a targeted plan with 1 to destroy and nothing else.
   plan_guard passed. It is applied after merge. Secrets Manager keeps a deleted secret unreadable through its 30-day
   recovery window.
