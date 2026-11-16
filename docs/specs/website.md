@@ -423,7 +423,7 @@ The owner does the dashboard steps, because the Cloudflare tokens cannot reach P
 The trigger: any step-4 check still failing 30 minutes after cutover.
 
 **P5:**
-- delete the Pages project, which also removes `arclight-labs.pages.dev`;
+- delete the Pages project, which also removes `arclight-labs.pages.dev`, then verify A13;
 - decide whether to delete the `gh-pages` branch (the tag keeps its history);
 - record the result in the service registry and close DR-5 and DR-6.
 
@@ -436,13 +436,14 @@ The trigger: any step-4 check still failing 30 minutes after cutover.
 | A3 | A deliberately broken content file (a missing alt text, an over-long headline) fails `build` with a message naming the file and the field | P2 |
 | A4 | A pull request touching `src/layouts/` gets the `design-change` label | P2 |
 | A5 | From the editor's account, a direct push to `main` is rejected, and her pull request cannot merge without the owner's approval. This runs before her first real change; she gets no further access until it passes | P2, at her onboarding |
-| A6 | Preview addresses ask for an Access sign-in. No address other than the two domains serves the site publicly (§8) | P2, P4 |
+| A6 | Preview addresses ask for an Access sign-in, and the Worker has no public address before cutover: no custom domain, and the production `workers.dev` address off (§8.4). The older copies stay public until they are retired (A10, A13) | P2 |
 | A7 | The security headers in §8.3 are present, and the browser console shows no policy violations on any page type | P2 |
 | A8 | Loading any page makes no third-party request, except the YouTube frame on entries with a video | P2 |
 | A9 | A test photo with location metadata comes out of the build without it | P2 |
-| A10 | After cutover: both domains serve the new site, the mail records are unchanged against the backup, and the old copies are gone (§10) | P4 |
+| A10 | After cutover: both domains serve the new site, the mail records are unchanged against the backup, and GitHub Pages is off (§10 steps 4-5). The Pages project stays up as the rollback until P5 | P4 |
 | A11 | A new Claude Code on the web session on the repository installs dependencies and passes `npm run check` without help (Node version, network) | P2 |
 | A12 | The owner's dry run: in a cloud session, attach a photo and a PDF and ask for a news post. Both files are committed in the pull request, and the preview shows them. Documentation says only that attachments are saved in the session's environment. If this fails, the fallback is uploading the file to the pull request's branch on GitHub's web page | P2, before the pilot |
+| A13 | After the rollback window: the Pages project is deleted, so `arclight-labs.pages.dev` no longer answers, and no address other than the two domains serves the site (§8.4, §10) | P5 |
 
 ## 12. Questions settled at approval
 
