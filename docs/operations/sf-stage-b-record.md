@@ -145,7 +145,7 @@ step 6 secret. Step 6 and step 9 ran on 2026-11-16.
 | 7. Part A, **target** | 13:38:58-13:39:22 | `e38dfac29ce54cac965c8ca55b8bbf96` | **Byte-identical to step 2**: same sha256 `6e030563…ae436`, with no sequence advance. SF's `sf11_b4_compare.py` exited 0: PASS |
 | 8. Part B, **target** | 13:39:57-13:40:20 | `a13d69fddc8b44739b2613ccea0bda8e` | Shown below. SF: PASS |
 | 6. Target URL (owner) | 2026-11-16 14:27:13 | `b4-target-db-url` VersionId **`14da08f9-d6c7-4572-9f37-82a40bb2f2ea`** | Owner's local check, which prints no value: user `shuttleforge_app_staging`; everything through `@` byte-identical to `db-url`; only the host changed (length delta 15, as expected) |
-| 9. Verification task | 2026-11-16 15:44:47-15:46:25 | `8ff2d067573e4c25a44588e65aa0ba76` on `arclight-sf11-b4-verify-staging:1` | Verifier exit 0, all four reads `200`. SF: pending |
+| 9. Verification task | 2026-11-16 15:44:47-15:46:25 | `8ff2d067573e4c25a44588e65aa0ba76` on `arclight-sf11-b4-verify-staging:1` | Verifier exit 0, all four reads `200`. SF: PASS |
 
 **Part B**: stdout is 42 bytes, sha256 `01d7d26b70a3d8a1b63c34307953da51c7b7f92e34b5fe504f512aa768037a48`:
 
@@ -191,15 +191,62 @@ No `NOT REJECTED` and no `INCONCLUSIVE` line.
   - `/api/proxies`: `sf11-fixture-config`.
 - **Expected warning:** "Health check staleness: max age 354185.7s". That is the restored `last_health_check` from
   the snapshot time. The checker then probed once, writing only to the drill target.
-- **Logs:** group `/arclight/staging/shuttleforge`:
-  - stream `sf11-b4-verify/verifier/8ff2d067…`, 5 events, local copy sha256 `b2bda2eb…`;
-  - stream `sf11-b4-verify/shuttleforge/8ff2d067…`, 18 events, local copy sha256 `27a2485c…`.
+- **Logs:** group `/arclight/staging/shuttleforge`. Each line is an ISO timestamp, a TAB and the message, with LF endings
+  and a final LF.
+  - stream `sf11-b4-verify/verifier/8ff2d067573e4c25a44588e65aa0ba76`: 5 events, 4332 bytes, sha256
+    `b2bda2ebbadeba25c3fede9f2acd1b95c1755d362645f0d7c03bc7018a0a4cae`;
+  - stream `sf11-b4-verify/shuttleforge/8ff2d067573e4c25a44588e65aa0ba76`: 18 events, 1570 bytes, sha256
+    `27a2485c006d07a3437f642bc5db767a44e7565ba47238fafbc0d6008b7f1c35`.
 
-  Both were sent to SF verbatim on 2026-11-16.
+  Both were sent to SF verbatim on 2026-11-16. SF rebuilt them from the message and matched both hashes, and
+  commits them to its Stage B evidence folder. Both records bind these bytes.
+- **Exit codes:** the verifier exited 0. `shuttleforge` exited 143: SIGTERM from Overcast's `stop-task`, after a
+  graceful shutdown ("Application shutdown complete"). This is expected, not a failure.
+- **Which database answered.** This is SF's analysis, rated inferred with HIGH confidence.
+  - r6 writes `last_health_check` on every probe (`health_checker.py:328` at SF `55a2d20`). The primary probes about
+    every 60 s, so the source's oldest health-check age stays near 60 s.
+  - The database that answered had last been written at about 2026-11-12T13:22:11Z. That is 67 s before SF stopped
+    (13:23:18Z) and before the snapshot (13:24:36Z).
+  - So the verify task read the restored copy, not the source.
+- **Ordering, a deviation from SF's plan text.** SF's plan B4 runs the verify task "while the serving task is
+  stopped". This run plan restarted the primary at step 4, before the restore, so step 9 ran beside the live primary.
+  AC-10.8a's bound held:
+  - the task was in no ALB or NLB target group and no Cloud Map service;
+  - it used a separate database;
+  - isolation was checked before the run, while the task was pending and after it stopped.
+
+  SF corrects its plan text in its records PR.
+- **The primary afterwards:** SF read it at 15:52:47Z and it passed. It was the same process as at step 4
+  (started 2026-11-12T13:28:20Z), so step 9 never restarted it. Status `ready`, all 13 checks `ok`,
+  `active_leases=0`, `probes_total=5903`.
+- **Credentials:** none appear in either log (INV-03). The preflight URL is redacted.
+- **AC-15.12** (SF): the drill passes for Stage B's exit gate. AC-15.12 itself closes at Stage C's first live write,
+  which completes its "dated later" predicate.
 - **Evidence retention:** both log groups keep 30 days, so the check-task streams expire about 2026-12-12 and the
   verification streams about 2026-12-16. SF holds the verbatim copies.
 
-**Recovery point (fills B0):** snapshot `arclight-staging-sf11-b4-202611121324`, kept through Stage C.
+**Recovery point (fills B0):** snapshot `arclight-staging-sf11-b4-202611121324`, kept through Stage C. Deleting
+it later needs the owner's go.
+
+**Teardown (2026-11-16).** The owner's go was given first-hand in Overcast's session, conditional on Overcast
+judging B4 complete. SF's step 9 PASS met that condition.
+- **Pre-checks:**
+  - the drill snapshot is `available`;
+  - the target matched its drill tags (`Purpose=sf11-b4-restore-drill`, `ManagedBy=cli-drill`), with no replicas;
+  - `arclight-staging` was untouched (`available`, deletion protection on);
+  - no drill task was running.
+- **15:54:04Z:** deregistered `arclight-sf11-b4-check-staging:1` and `:2` and `arclight-sf11-b4-verify-staging:1`
+  (all now INACTIVE).
+- **15:54:07Z:** turned deletion protection off on `arclight-staging-sf11-b4-target`.
+- **15:54:15Z:** `delete-db-instance --skip-final-snapshot --delete-automated-backups`; the instance was deleted by
+  16:01:49Z.
+  - The target had inherited 7-day backup retention, so it held five automated snapshots of its own, 11-12 to 11-16.
+    They hold drill data only.
+  - It had no retained automated backups.
+  - RDS removes those automated snapshots after the instance is deleted.
+- **`b4-target-db-url`:** removed by this PR's Terraform change, a targeted plan with 1 to destroy and nothing else.
+  plan_guard passed. It is applied after merge. Secrets Manager keeps a deleted secret unreadable through its 30-day
+  recovery window.
 
 ---
 
