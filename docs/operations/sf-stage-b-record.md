@@ -285,6 +285,11 @@ provider accounts.
 
 The six AWSCURRENT VersionIds re-read at the same time all equal B0's table of 2026-11-11.
 
+**DR-25 ruling (owner, 2026-11-16, given first-hand in Overcast's session):** the unversioned Nerfherder artifact
+bucket does **not** block SF's first live provider credential. A live read the same day found
+`arclight-staging-nerfherder-artifacts` empty (0 objects) and never versioned. SF owns no bucket, and SF's credential path
+does not touch this one. Overcast is versioning the bucket anyway; `docs/PROJECT_STATE.md` DR-25 tracks the change.
+
 ---
 
 ## Fixture teardown receipt (not scheduled)
