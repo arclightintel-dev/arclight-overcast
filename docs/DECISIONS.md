@@ -326,6 +326,30 @@ Bandersnatch is a small application that serves a static page and a data downloa
 
 **Not committed anywhere, by the owner's rule:** the recipient, the hostname, the mailbox, recipient-facing wording, release hashes.
 
+## O-020: The public website moves to its own private repository, edited through Claude pull requests
+
+**Authority**: the owner, 2026-11-16, in Overcast's session: "Accept, start spec", accepting decisions W1-W6 of [the website proposal](proposals/website-cms.md). | **Recorded**: 2026-11-16. Spec: [website.md](specs/website.md).
+
+**The decisions:**
+- **W1.** `arclightlabs.io` moves to a new private repository for the site alone (working name `arclightlabs-site`). The `gh-pages` branch here is frozen and tagged after cutover.
+- **W2.** A co-owner (the editor) changes the site by asking Claude Code on the web; each change is a pull request with a preview. A form editor is added only if the pilot shows a need.
+- **W3.** At launch, every change waits for the owner's approval. After 30 days or 10 merged changes, the owner decides whether content-only changes merge without review; structure stays owner-reviewed through `CODEOWNERS`.
+- **W4.** Gated material for approved visitors goes through Bandersnatch (O-019, D-079), never the website.
+- **W5.** Request Access becomes a Microsoft Forms form the editor owns, in place of the `mailto:` link.
+- **W6.** Long video is embedded from YouTube in privacy-enhanced mode; only the hero loop stays in the repository.
+
+**Ownership (D-058).** The site repository owns what runs: content, templates, styles and its own checks. Overcast owns where it runs: the Cloudflare project, preview access, the domains, cutover and rollback.
+
+**Why.** The owner wants the site off their plate, with a review gate before anything goes live. The site today is one hand-written page in this public infrastructure repository (DR-6, DR-14), served at three public addresses (DR-5).
+
+**Spec approved.** The owner approved [the spec](specs/website.md) on 2026-11-16 ("Approve with defaults"), taking its defaults for Q1-Q4:
+- Q1: the hero keeps its current fonts, and reading pages use Jost.
+- Q2: home-page navigation goes in the HUD's bottom bar, once there is something to link to.
+- Q3: `www` and the apex both serve the site.
+- Q4: a privacy notice is a standard page if wanted.
+
+**Not yet done.** Nothing is built. Each later phase (build, pilot, cutover) waits for the owner's go; the repository, accounts, Cloudflare project and DNS changes are each the owner's to approve.
+
 ## Core coordination disposition — not a new mechanism decision
 
 **Review date**: 2026-10-01 | **Recorded here**: 2026-10-03.
