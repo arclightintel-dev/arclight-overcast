@@ -319,3 +319,41 @@ When it happens, the fields follow the spec:
 - decision, UTC time, affected resources (including the fixture listener flag), recovery points, key-version
   references, executor and outcome;
 - if live material exists at teardown, every field of SF's "Live-material teardown authorization".
+
+---
+
+## Entry C-G3: SF rolled to `:6` (r7) before Stage C (owner's go in Overcast's session, 2026-11-16)
+
+SF's Stage C entry gate C-G3: the DEBT #121 release (r7) serves on staging. The owner's go was given first-hand ("hit it"). SF's
+go followed its own read at 21:02:30Z (`active_leases=0`), before the roll started at 21:02:36Z. The deploy was made by hand,
+the same way as B3: `update-service --force-new-deployment` onto the existing revision, stop before start (0/100), wait for
+stable, then verify the running digest.
+
+**Before the roll** (read-only):
+- `:6` against `:5`: only the image differs. Ignoring the order of the AWS-computed compatibilities list, `:6` and `:4` also
+  differ only in the image.
+- `:6` does not set `SHUTTLEFORGE_ALLOW_PLAINTEXT_JWKS`. Its JWKS URL is
+  `https://core-internal.staging.arclight-complex.net/.well-known/jwks.json`, and its transport endpoint is
+  `https://shuttleforge-internal.staging.arclight-complex.net:9050`.
+- `SHUTTLEFORGE_POLICY_YAML_B64` is not bound. The policy comes in a separate later roll (C-G5).
+- Overcast's read of r6 at 21:02:20Z: `ready`, 13/13 `ok`, `lease_store` `active_leases=0`.
+
+| Revision and image | Old task stopped | New task started | Targets registered | Interruption | New task |
+|---|---|---|---|---|---|
+| `:6`, r7 `v1-5999bc0`, `sha256:793033d8da8b8cafa58ad3ede142e71c1fe8b68e05aa76e78bbf802d1c26baa6` | `3a80171f…` (`:5`): stopping 21:02:52.5Z, deregistered from all four groups 21:03:03Z, stopped 21:05:22.5Z | 21:05:25.2Z | 21:05:46.254-21:05:46.901Z (all four groups) | about 2m54s | `75874aa3f3c9427a8b9d7bb8f100e90c`, us-east-1a, stable 21:08:03Z |
+
+- **After the roll:**
+  - Overcast's read at 21:08:12Z returned `ready`, with all 13 checks `ok`.
+  - The commit is `5999bc07d511e08a6360c7dd239ca27ca3fc541b` and the schema is `sf9_5b_pg_baseline`.
+  - `jwks` reads `state=ready, keys=1` with no plaintext marker.
+  - `lease_store` reads `active_leases=0`, the snapshot reads "version=1, configs=1, endpoints=1", and `policy_engine` reads
+    `profiles=0, principal_policies=0`.
+- **Startup lines,** copied verbatim from the serving task (stream `shuttleforge/shuttleforge/75874aa3f3c9427a8b9d7bb8f100e90c`):
+  - 21:05:47.061Z `INFO shuttleforge.db_config: Database identity: backend=postgresql database=shuttleforge_staging schema_revision=sf9_5b_pg_baseline server_version=16.13`
+  - 21:05:47.158Z `INFO shuttleforge.auth.jwks: JWKS client started (url=https://core-internal.staging.arclight-complex.net/.well-known/jwks.json)`
+- **SF now runs r7 on `:6`.** `:5` (r6) stays ACTIVE as the rollback revision.
+- **SF closed C-G3** (SF, 2026-11-16). SF's admission read at 21:08:36Z passed every rule (item 17), and its listings
+  at 21:08:40Z show exactly the fixture rows: provider 1, endpoint `sf11-fixture-discrete-1`, proxy config 1.
+  That closes DEBT #121 and completes C-G2's evidence with the serving task's `JWKS client started` line.
+- **The fixture upstream** stayed up (1/1) through the roll. Its removal stays unscheduled.
+
