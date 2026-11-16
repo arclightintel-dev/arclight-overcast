@@ -6,6 +6,9 @@
     "portMappings": [
       { "containerPort": 8080, "protocol": "tcp" },
       { "containerPort": 8081, "protocol": "tcp" }
+%{ if admin_audience != "" ~}
+      ,{ "containerPort": 8082, "protocol": "tcp" }
+%{ endif ~}
     ],
     "stopTimeout": 90,
     "readonlyRootFilesystem": true,
@@ -33,6 +36,12 @@
       { "name": "BSN_GRAPH_TENANT_ID", "value": ${jsonencode(graph_tenant_id)} },
       { "name": "BSN_GRAPH_CLIENT_ID", "value": ${jsonencode(graph_client_id)} },
       { "name": "BSN_PAGE_TITLE", "value": ${jsonencode(page_title)} }
+%{ if admin_audience != "" ~}
+      ,{ "name": "BSN_ADMIN_TENANT_ID", "value": ${jsonencode(admin_tenant_id)} },
+      { "name": "BSN_ADMIN_AUDIENCE", "value": ${jsonencode(admin_audience)} },
+      { "name": "BSN_ADMIN_CALLER", "value": ${jsonencode(admin_caller)} },
+      { "name": "BSN_ADMIN_DEFAULT_TITLE", "value": ${jsonencode(admin_default_title)} }
+%{ endif ~}
     ],
     "secrets": [
       { "name": "BSN_ORIGIN_SECRET", "valueFrom": "${secret_arn_origin_secret}" },

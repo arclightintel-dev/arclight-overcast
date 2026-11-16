@@ -113,6 +113,30 @@ run "bandersnatch_mail_declaration" {
   }
 }
 
+run "bandersnatch_admin_declaration" {
+  command = plan
+
+  assert {
+    condition     = azuread_application_registration.bandersnatch_admin.sign_in_audience == "AzureADMyOrg" && azuread_application_registration.bandersnatch_admin.requested_access_token_version == 2
+    error_message = "The admin interface must stay single-tenant and issue v2 access tokens (the interface checks the v2 issuer)."
+  }
+
+  assert {
+    condition     = azuread_application_app_role.bandersnatch_admin.value == "bandersnatch.admin" && azuread_application_app_role.bandersnatch_admin.allowed_member_types == toset(["Application"])
+    error_message = "bandersnatch.admin is assignable to applications only: no person signs in to the interface."
+  }
+
+  assert {
+    condition     = azuread_service_principal.bandersnatch_admin.app_role_assignment_required && azuread_service_principal.bandersnatch_admin.owners == toset(["4c5c3d64-2425-494f-b3f9-fec7253e842a"])
+    error_message = "Only assigned clients may get a token, and the management service principal must be the declared owner."
+  }
+
+  assert {
+    condition     = azuread_application_api_access.backstage_bandersnatch_admin.role_ids == toset([azuread_application_app_role.bandersnatch_admin.role_id])
+    error_message = "Backstage requests exactly the bandersnatch.admin role on the admin interface."
+  }
+}
+
 run "reject_other_tenant" {
   command = plan
 

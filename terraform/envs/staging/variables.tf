@@ -193,6 +193,41 @@ variable "bandersnatch_page_title" {
   sensitive   = true
 }
 
+variable "bandersnatch_admin_audience" {
+  description = "Entra application (client) id of the Bandersnatch admin interface (applications root output bandersnatch_admin_client_id); empty leaves the interface, its NLB and its endpoint service off (O-020)"
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.bandersnatch_admin_audience == "" || can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.bandersnatch_admin_audience))
+    error_message = "bandersnatch_admin_audience must be a lower-case GUID."
+  }
+}
+
+variable "bandersnatch_admin_caller" {
+  description = "Entra application (client) id of the one caller the admin interface accepts: Backstage (applications root output backstage_client_id)"
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.bandersnatch_admin_caller == "" || can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.bandersnatch_admin_caller))
+    error_message = "bandersnatch_admin_caller must be a lower-case GUID (required with bandersnatch_admin_audience: checked on the admin NLB)."
+  }
+}
+
+variable "bandersnatch_admin_attach" {
+  description = "Attach the service to the admin NLB (port 8082). Set only after a deploy has the service running a revision that serves 8082; see docs/proposals/bandersnatch.md section 13"
+  type        = bool
+  default     = false
+}
+
+variable "bandersnatch_admin_default_title" {
+  description = "Share title the admin interface offers for a new code's invitation (recipient-facing wording)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "sf_fixture_upstream_enabled" {
   description = "SF.11 Stage B fixture upstream listener (spec sf-stage-b-fixture-upstream.md): on from B1 through B4, off before Stage C"
   type        = bool

@@ -2,7 +2,8 @@
 # Bandersnatch: a gated delivery page (spec docs/proposals/bandersnatch.md, sections 6.2 and 9).
 #
 # One Fargate task behind the staging ALB, DynamoDB tables, a read-only payload bucket and two
-# secret shells. Everything here is behind var.bandersnatch_enabled; only the ECR repository
+# secret shells; with the admin interface (O-020), an internal NLB and a PrivateLink endpoint
+# service for Backstage. Everything here is behind var.bandersnatch_enabled; only the ECR repository
 # and the push role (modules ecr and iam-github-oidc) exist without it. The public hostname,
 # mail addresses and wording are sensitive variables and appear in no address, name or tag.
 # Service at desired count 0 by default: applying this starts nothing.
@@ -22,16 +23,23 @@ locals {
   bsn_image_unset = "${module.ecr.repository_urls["arclight/bandersnatch"]}@sha256:${format("%064d", 0)}"
   bsn_image       = var.bandersnatch_image != "" ? var.bandersnatch_image : local.bsn_image_unset
 
+  # The admin interface Backstage calls (O-020): port 8082 behind an internal NLB, reached from
+  # the prod VPC only through PrivateLink. On when its Entra audience is set. It lets the task
+  # list and write accounts and create and list tokens.
+  bsn_admin = local.bsn_enabled && var.bandersnatch_admin_audience != ""
+
   # String keys throughout. task_actions is everything the task role may do on the table; the
-  # operator tool (administrator credentials) is the only writer of the rest.
+  # operator tool (administrator credentials) writes the rest. No index access, no deletes.
   bsn_tables = {
-    accounts = { hash_key = "account_id", range_key = "item", gsi_key = null, ttl = false, task_actions = [] }
+    accounts = { hash_key = "account_id", range_key = "item", gsi_key = null, ttl = false, task_actions = local.bsn_admin ? ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:Scan"] : [] }
     releases = { hash_key = "release_id", range_key = null, gsi_key = null, ttl = false, task_actions = ["dynamodb:GetItem", "dynamodb:Scan"] }
-    tokens   = { hash_key = "token_hash", range_key = null, gsi_key = "account_id", ttl = false, task_actions = ["dynamodb:GetItem", "dynamodb:UpdateItem"] }
+    tokens   = { hash_key = "token_hash", range_key = null, gsi_key = "account_id", ttl = false, task_actions = concat(["dynamodb:GetItem", "dynamodb:UpdateItem"], local.bsn_admin ? ["dynamodb:PutItem", "dynamodb:Scan"] : []) }
     links    = { hash_key = "nonce_hash", range_key = null, gsi_key = null, ttl = true, task_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"] }
     sessions = { hash_key = "session_hash", range_key = null, gsi_key = null, ttl = true, task_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"] }
     limits   = { hash_key = "key", range_key = null, gsi_key = null, ttl = true, task_actions = ["dynamodb:UpdateItem"] }
     audit    = { hash_key = "event_id", range_key = null, gsi_key = "account_id", ttl = true, task_actions = ["dynamodb:PutItem"] }
+    # The admin interface's idempotency keys (hashes only). Exists either way, like the others.
+    admin = { hash_key = "key", range_key = null, gsi_key = null, ttl = true, task_actions = local.bsn_admin ? ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"] : [] }
   }
 }
 
@@ -260,7 +268,9 @@ resource "aws_iam_role_policy" "bsn_exec" {
 }
 
 # Per table, exactly the interface's list: the task reads tokens and releases and writes its own
-# links, sessions, counters and audit events. Nothing on accounts, no index access, no deletes.
+# links, sessions, counters and audit events; with the admin interface (O-020) it also lists and
+# writes accounts, creates and lists tokens, and keeps its idempotency keys. No index access, no
+# deletes.
 resource "aws_iam_role_policy" "bsn_task_tables" {
   count = local.bsn_count
 
@@ -395,11 +405,13 @@ resource "aws_security_group_rule" "bsn_to_dynamodb_443" {
   description       = "Bandersnatch to DynamoDB through the gateway endpoint"
 }
 
-# EXCEPTION to O-017 (no internet egress for consumer services), graph mail mode only: mail is
-# sent over HTTPS to login.microsoftonline.com and graph.microsoft.com, which have no stable
-# address range to name. The rule disappears when the mail mode is ses or log.
+# EXCEPTION to O-017 (no internet egress for consumer services), graph mail mode or the admin
+# interface: mail is sent over HTTPS to login.microsoftonline.com and graph.microsoft.com, and the
+# admin interface reads the tenant's token-signing keys at login.microsoftonline.com; neither has
+# a stable address range to name. The rule disappears only when neither is in use. Its
+# description stays as applied: changing it would replace the rule.
 resource "aws_security_group_rule" "bsn_to_internet_443_graph" {
-  count = local.bsn_enabled && var.bandersnatch_mail_mode == "graph" ? 1 : 0
+  count = local.bsn_enabled && (var.bandersnatch_mail_mode == "graph" || local.bsn_admin) ? 1 : 0
 
   type              = "egress"
   from_port         = 443
@@ -480,6 +492,138 @@ resource "aws_lb_listener_rule" "bandersnatch" {
 }
 
 ################################################################################
+# Admin interface (O-020; the application's docs/admin-api.md): Backstage, in the prod VPC,
+# reaches the task's port 8082 through an interface endpoint (Backstage root), PrivateLink and
+# this internal NLB. Its own NLB, as the internal-TLS rule asks (an NLB's zonal DNS health spans
+# every attached group). TLS ends at the NLB with the *.staging certificate, as for Core. Nothing
+# here is reachable from the internet, Cloudflare or the staging ALB.
+################################################################################
+
+resource "aws_security_group" "bsn_admin_nlb" {
+  count = local.bsn_admin ? 1 : 0
+
+  name_prefix = "arclight-${var.environment}-bsn-admin-nlb-"
+  description = "Internal NLB in front of the Bandersnatch admin interface (PrivateLink only)"
+  vpc_id      = module.vpc.vpc_id
+
+  tags = { Name = "sg-bsn-admin-nlb-${var.environment}" }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# 8082 carries the interface and answers the (TCP) health check.
+resource "aws_security_group_rule" "bsn_admin_nlb_to_task" {
+  count = local.bsn_admin ? 1 : 0
+
+  type                     = "egress"
+  from_port                = 8082
+  to_port                  = 8082
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.bsn_admin_nlb[0].id
+  source_security_group_id = aws_security_group.bandersnatch[0].id
+  description              = "Admin NLB to Bandersnatch 8082"
+}
+
+resource "aws_security_group_rule" "bsn_from_admin_nlb" {
+  count = local.bsn_admin ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 8082
+  to_port                  = 8082
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.bandersnatch[0].id
+  source_security_group_id = aws_security_group.bsn_admin_nlb[0].id
+  description              = "Admin NLB to Bandersnatch 8082"
+}
+
+# The group has no inbound rule, so nothing inside the staging VPC can reach the NLB. PrivateLink
+# traffic is not filtered by it ("off"): the consumer side's security group (Backstage root)
+# admits the Backstage host only, and the endpoint service admits this account only.
+resource "aws_lb" "bsn_admin" {
+  count = local.bsn_admin ? 1 : 0
+
+  name                                                         = "arclight-${local.internal_tls_env}-int-bsn-admin"
+  internal                                                     = true
+  load_balancer_type                                           = "network"
+  ip_address_type                                              = "ipv4"
+  subnets                                                      = module.vpc.private_app_subnet_ids
+  security_groups                                              = [aws_security_group.bsn_admin_nlb[0].id]
+  enforce_security_group_inbound_rules_on_private_link_traffic = "off"
+  enable_cross_zone_load_balancing                             = false
+  dns_record_client_routing_policy                             = "any_availability_zone"
+
+  tags = { Name = "arclight-${local.internal_tls_env}-int-bsn-admin" }
+
+  lifecycle {
+    precondition {
+      # The task refuses to start on anything else, which would loop the public page's deploy.
+      condition = alltrue([
+        for id in [var.bandersnatch_graph_tenant_id, var.bandersnatch_admin_caller] :
+        can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", id))
+      ])
+      error_message = "With bandersnatch_admin_audience set, bandersnatch_graph_tenant_id (the tenant) and bandersnatch_admin_caller (Backstage's client id) must be lower-case GUIDs."
+    }
+  }
+}
+
+# One task, so cross-zone on for the group (as for Core): either node forwards to it. Through
+# PrivateLink the task sees the NLB's address, never the caller's; the interface only uses it to
+# key its rate limit. The health check is TCP on 8082 itself, so a task whose interface is not
+# listening shows unhealthy (a check on 8081 would not see it).
+resource "aws_lb_target_group" "bsn_admin" {
+  count = local.bsn_admin ? 1 : 0
+
+  name                              = "${local.internal_tls_env}-int-bsn-admin-8082"
+  port                              = 8082
+  protocol                          = "TCP"
+  target_type                       = "ip"
+  vpc_id                            = module.vpc.vpc_id
+  preserve_client_ip                = "false"
+  proxy_protocol_v2                 = false
+  deregistration_delay              = 30
+  load_balancing_cross_zone_enabled = "true"
+
+  health_check {
+    protocol            = "TCP"
+    port                = "traffic-port"
+    interval            = 10
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = { Name = "${local.internal_tls_env}-int-bsn-admin-8082" }
+}
+
+resource "aws_lb_listener" "bsn_admin_443" {
+  count = local.bsn_admin ? 1 : 0
+
+  load_balancer_arn = aws_lb.bsn_admin[0].arn
+  port              = 443
+  protocol          = "TLS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = data.aws_acm_certificate.staging.arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.bsn_admin[0].arn
+  }
+}
+
+# This account only, accepted without a manual step: the Backstage root creates the endpoint.
+resource "aws_vpc_endpoint_service" "bsn_admin" {
+  count = local.bsn_admin ? 1 : 0
+
+  acceptance_required        = false
+  network_load_balancer_arns = [aws_lb.bsn_admin[0].arn]
+  allowed_principals         = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+  supported_ip_address_types = ["ipv4"]
+
+  tags = { Name = "arclight-${var.environment}-bandersnatch-admin" }
+}
+
+################################################################################
 # Service: no internet egress from the module (the graph exception is its own rule above), no
 # database path, no ECS Exec (O-018 posture: the module never enables it).
 ################################################################################
@@ -507,10 +651,20 @@ module "bandersnatch_service" {
   # The root's own target group, passed through the listener rule so the service attaches only
   # once the group has a load balancer. Not target_group_arn: the module decides a count from
   # it, which needs a value known at plan time, and would add its own 8080 ingress rule.
-  additional_load_balancers = [{
-    target_group_arn = aws_lb_listener_rule.bandersnatch[0].action[0].target_group_arn
-    container_port   = 8080
-  }]
+  # The admin interface's group comes the same way, through its listener, but only once
+  # bandersnatch_admin_attach is set. The service ignores task-definition changes (the module),
+  # so it runs the old revision until a deploy moves it; attaching 8082 before a revision with
+  # that port is running would fail. Apply with the interface on, deploy, then attach.
+  additional_load_balancers = concat(
+    [{
+      target_group_arn = aws_lb_listener_rule.bandersnatch[0].action[0].target_group_arn
+      container_port   = 8080
+    }],
+    [for l in aws_lb_listener.bsn_admin_443 : {
+      target_group_arn = l.default_action[0].target_group_arn
+      container_port   = 8082
+    } if var.bandersnatch_admin_attach],
+  )
 
   # Read-only root file system: /tmp is a Fargate ephemeral volume (Fargate has no tmpfs).
   ephemeral_volumes = ["tmp"]
@@ -533,5 +687,10 @@ module "bandersnatch_service" {
     page_title                     = var.bandersnatch_page_title
     secret_arn_origin_secret       = aws_secretsmanager_secret.bsn_origin_secret[0].arn
     secret_arn_graph_client_secret = aws_secretsmanager_secret.bsn_graph_client_secret[0].arn
+    # The admin interface (O-020): empty leaves it off and port 8082 closed. Same tenant as mail.
+    admin_tenant_id     = local.bsn_admin ? var.bandersnatch_graph_tenant_id : ""
+    admin_audience      = local.bsn_admin ? var.bandersnatch_admin_audience : ""
+    admin_caller        = local.bsn_admin ? var.bandersnatch_admin_caller : ""
+    admin_default_title = local.bsn_admin ? var.bandersnatch_admin_default_title : ""
   })
 }
