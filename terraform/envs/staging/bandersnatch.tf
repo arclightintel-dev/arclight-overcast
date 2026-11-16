@@ -25,14 +25,14 @@ locals {
 
   # The admin interface Backstage calls (O-020): port 8082 behind an internal NLB, reached from
   # the prod VPC only through PrivateLink. On when its Entra audience is set. It lets the task
-  # list and write accounts and create and list tokens.
+  # list and write accounts, create and list tokens, and switch releases on and off.
   bsn_admin = local.bsn_enabled && var.bandersnatch_admin_audience != ""
 
   # String keys throughout. task_actions is everything the task role may do on the table; the
   # operator tool (administrator credentials) writes the rest. No index access, no deletes.
   bsn_tables = {
     accounts = { hash_key = "account_id", range_key = "item", gsi_key = null, ttl = false, task_actions = local.bsn_admin ? ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:Scan"] : [] }
-    releases = { hash_key = "release_id", range_key = null, gsi_key = null, ttl = false, task_actions = ["dynamodb:GetItem", "dynamodb:Scan"] }
+    releases = { hash_key = "release_id", range_key = null, gsi_key = null, ttl = false, task_actions = concat(["dynamodb:GetItem", "dynamodb:Scan"], local.bsn_admin ? ["dynamodb:UpdateItem"] : []) }
     tokens   = { hash_key = "token_hash", range_key = null, gsi_key = "account_id", ttl = false, task_actions = concat(["dynamodb:GetItem", "dynamodb:UpdateItem"], local.bsn_admin ? ["dynamodb:PutItem", "dynamodb:Scan"] : []) }
     links    = { hash_key = "nonce_hash", range_key = null, gsi_key = null, ttl = true, task_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"] }
     sessions = { hash_key = "session_hash", range_key = null, gsi_key = null, ttl = true, task_actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"] }
@@ -269,8 +269,8 @@ resource "aws_iam_role_policy" "bsn_exec" {
 
 # Per table, exactly the interface's list: the task reads tokens and releases and writes its own
 # links, sessions, counters and audit events; with the admin interface (O-020) it also lists and
-# writes accounts, creates and lists tokens, and keeps its idempotency keys. No index access, no
-# deletes.
+# writes accounts, creates and lists tokens, switches releases on and off, and keeps its
+# idempotency keys. No index access, no deletes.
 resource "aws_iam_role_policy" "bsn_task_tables" {
   count = local.bsn_count
 
