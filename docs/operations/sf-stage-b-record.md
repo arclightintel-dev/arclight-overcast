@@ -289,9 +289,15 @@ The six AWSCURRENT VersionIds re-read at the same time all equal B0's table of 2
 
 ## Fixture teardown receipt (not scheduled)
 
-Earlier drafts of this record, and the spec, called this entry **B6**. In SF's plan (§4.3), B6 is SF's AC-15.13
-teardown authorization: SF binds its runbook's teardown procedure to this record in SF's evidence bundle. That is
-SF writing a record; nothing in AWS is torn down.
+Earlier drafts of this record, and the spec, called this entry **B6**. That label was wrong. In SF's plan, B6 is SF's
+AC-15.13 teardown authorization: SF binds its runbook's teardown procedure to this record in SF's evidence bundle.
+That is SF writing a record; nothing in AWS is torn down.
+- **Source:** arclight-shuttleforge `docs/PHASE_PLANS/phase_SF11_execution_plan.md` §4.3, row B6 (l.620), at
+  `appliance/main` `db50862a1c3467b21ce29c92fcf422e6ec570141`. Overcast read it read-only.
+- **History:** the row has read this way since the plan's revision 1 (`6cb03ab`, 2026-10-29), before this record's
+  spec (PR #93, 2026-11-11).
+- **The procedure it binds:** `docs/OPERATIONS/SF9_RECOVERY_RUNBOOK.md:60-73` ("Live-material teardown
+  authorization"), at the same commit.
 
 Removing the fixture is **not scheduled**. Whether and when to remove it is open for SF and the owner. The spec
 (PR #93) said it would be removed "before Stage C's first live write"; that wording now waits on their decision.
