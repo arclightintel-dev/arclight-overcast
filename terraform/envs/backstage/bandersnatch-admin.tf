@@ -1,4 +1,4 @@
-# Bandersnatch admin interface (O-020; the application's docs/admin-api.md). Backstage's
+# Bandersnatch admin interface (O-021; the application's docs/admin-api.md). Backstage's
 # Settings section calls it. The path stays inside AWS: this interface endpoint, PrivateLink, an
 # internal NLB in staging, the Bandersnatch task's port 8082. The host's egress gains exactly
 # one rule, 443 to this endpoint's group; nothing reaches the internet or Cloudflare (D-078 §5:
@@ -66,7 +66,7 @@ resource "aws_route53_zone" "bsn_admin" {
   count = local.bsn_admin ? 1 : 0
 
   name    = local.bsn_admin_fqdn
-  comment = "Bandersnatch admin interface (O-020); resolves to the PrivateLink endpoint inside the prod VPC only"
+  comment = "Bandersnatch admin interface (O-021); resolves to the PrivateLink endpoint inside the prod VPC only"
 
   vpc {
     vpc_id = data.aws_vpc.prod.id

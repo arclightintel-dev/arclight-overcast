@@ -1,4 +1,4 @@
-# Bandersnatch (staging): the admin interface Backstage calls (O-020). An API
+# Bandersnatch (staging): the admin interface Backstage calls (O-021). An API
 # only: no sign-in, no redirect, no secret. One app role, bandersnatch.admin,
 # assignable to applications only. arclight-backstage requests it; the
 # administrator grants admin consent once, which assigns the role to Backstage's

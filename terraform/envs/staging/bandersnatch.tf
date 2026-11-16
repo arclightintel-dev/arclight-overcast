@@ -2,7 +2,7 @@
 # Bandersnatch: a gated delivery page (spec docs/proposals/bandersnatch.md, sections 6.2 and 9).
 #
 # One Fargate task behind the staging ALB, DynamoDB tables, a read-only payload bucket and two
-# secret shells; with the admin interface (O-020), an internal NLB and a PrivateLink endpoint
+# secret shells; with the admin interface (O-021), an internal NLB and a PrivateLink endpoint
 # service for Backstage. Everything here is behind var.bandersnatch_enabled; only the ECR repository
 # and the push role (modules ecr and iam-github-oidc) exist without it. The public hostname,
 # mail addresses and wording are sensitive variables and appear in no address, name or tag.
@@ -23,7 +23,7 @@ locals {
   bsn_image_unset = "${module.ecr.repository_urls["arclight/bandersnatch"]}@sha256:${format("%064d", 0)}"
   bsn_image       = var.bandersnatch_image != "" ? var.bandersnatch_image : local.bsn_image_unset
 
-  # The admin interface Backstage calls (O-020): port 8082 behind an internal NLB, reached from
+  # The admin interface Backstage calls (O-021): port 8082 behind an internal NLB, reached from
   # the prod VPC only through PrivateLink. On when its Entra audience is set. It lets the task
   # list and write accounts, create and list tokens, and switch releases on and off.
   bsn_admin = local.bsn_enabled && var.bandersnatch_admin_audience != ""
@@ -268,7 +268,7 @@ resource "aws_iam_role_policy" "bsn_exec" {
 }
 
 # Per table, exactly the interface's list: the task reads tokens and releases and writes its own
-# links, sessions, counters and audit events; with the admin interface (O-020) it also lists and
+# links, sessions, counters and audit events; with the admin interface (O-021) it also lists and
 # writes accounts, creates and lists tokens, switches releases on and off, and keeps its
 # idempotency keys. No index access, no deletes.
 resource "aws_iam_role_policy" "bsn_task_tables" {
@@ -492,7 +492,7 @@ resource "aws_lb_listener_rule" "bandersnatch" {
 }
 
 ################################################################################
-# Admin interface (O-020; the application's docs/admin-api.md): Backstage, in the prod VPC,
+# Admin interface (O-021; the application's docs/admin-api.md): Backstage, in the prod VPC,
 # reaches the task's port 8082 through an interface endpoint (Backstage root), PrivateLink and
 # this internal NLB. Its own NLB, as the internal-TLS rule asks (an NLB's zonal DNS health spans
 # every attached group). TLS ends at the NLB with the *.staging certificate, as for Core. Nothing
@@ -687,7 +687,7 @@ module "bandersnatch_service" {
     page_title                     = var.bandersnatch_page_title
     secret_arn_origin_secret       = aws_secretsmanager_secret.bsn_origin_secret[0].arn
     secret_arn_graph_client_secret = aws_secretsmanager_secret.bsn_graph_client_secret[0].arn
-    # The admin interface (O-020): empty leaves it off and port 8082 closed. Same tenant as mail.
+    # The admin interface (O-021): empty leaves it off and port 8082 closed. Same tenant as mail.
     admin_tenant_id     = local.bsn_admin ? var.bandersnatch_graph_tenant_id : ""
     admin_audience      = local.bsn_admin ? var.bandersnatch_admin_audience : ""
     admin_caller        = local.bsn_admin ? var.bandersnatch_admin_caller : ""

@@ -348,7 +348,7 @@ Not testable: the recipient's real mail gateway is first met in P6. That is why 
 
 **Observations in passing** (not in scope; DR-24 in `docs/PROJECT_STATE.md` points here). `podbay.staging.arclight-complex.net` is still a proxied CNAME (Podbay removed, O-011) and resolves to the ALB's 404. The `*.staging` Access application allows a "Cloudflare Login" method; what it admits is unverified. Zone `arclight-complex.net` has minimum TLS 1.0, Always Use HTTPS off, NEL on and Email Address Obfuscation on. `arclightlabs.io` DMARC is `p=none`. `ansanalytics.com` SPF does not list Microsoft 365 and has no DKIM at the default selector (inferred from DNS). The staging VPC endpoints carry no endpoint policies.
 
-## 13. Amendment: admin interface for Backstage (proposed; O-020 when ruled)
+## 13. Amendment: admin interface for Backstage (proposed; O-021 when ruled)
 
 **Request** (the owner, 2026-11-16): a settings page, only for platform owners and administrators, where the owner and a second administrator register people, see codes and sessions, and issue and reissue codes. Until now only the operator tool, run with administrator AWS credentials, could do this.
 
