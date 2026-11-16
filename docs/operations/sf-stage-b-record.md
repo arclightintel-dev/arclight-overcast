@@ -244,14 +244,63 @@ judging B4 complete. SF's step 9 PASS met that condition.
     They hold drill data only.
   - No automated backups were retained after deletion.
   - RDS had removed those automated snapshots by 16:03:58Z.
-- **`b4-target-db-url`:** removed by this PR's Terraform change, a targeted plan with 1 to destroy and nothing else.
-  plan_guard passed. It is applied after merge. Secrets Manager keeps a deleted secret unreadable through its 30-day
-  recovery window.
+- **`b4-target-db-url`:** removed by PR #114's Terraform change (merged `1dd0cb7`): a targeted plan with 1 to destroy
+  and nothing else, plan_guard passed.
+  - Applied after merge at 16:05:19Z, from a fresh saved plan on `main`.
+  - `describe-secret` shows `DeletedDate` 16:05:19Z. Secrets Manager keeps the secret unreadable through its 30-day
+    recovery window, to about 2026-12-16.
 
 ---
 
-## Entry B6: fixture teardown receipt
+## Entry B5: D-059 §6 posture attestation (live read, 2026-11-16)
 
-Not yet written. Fields are per the spec: decision, UTC time, affected resources (including the
-fixture listener flag), recovery points, key-version references, executor and outcome. If live material
-exists at teardown, it carries every field of SF's "Live-material teardown authorization".
+Overcast attests the six postures of D-059 position 6 for staging from a live read on 2026-11-16, 16:07:26Z to
+16:08:41Z. The postures are as worded at arclight-complex `48c1715`, with "CloudTrail log protection" as clarified
+by D-075. Every call was read-only, and no secret value was read. SF adds the operator listing of the `sf11-fixture-*`
+provider accounts.
+
+| D-059 §6 posture | Live evidence | Status |
+|---|---|---|
+| RDS deletion protection | `arclight-staging`: `DeletionProtection` true, storage encrypted, not publicly accessible | Met |
+| S3 versioning and lifecycle | <ul><li>Trail bucket `arclight-staging-trail-20260624130504376400000006`: versioning on; lifecycle `archive-logs`, with no expiration.</li><li>`arclight-staging-bandersnatch-payload`: versioning on; no lifecycle, by design (`bandersnatch.tf:84`: "never deleted from, no lifecycle rule").</li><li>`arclight-staging-nerfherder-artifacts`: **versioning off**. Its lifecycle only aborts incomplete uploads after 7 days, with no expiry, by design (NF manifest M:205-206).</li><li>`arclight-terraform-state`, outside Terraform: versioning on, no lifecycle.</li><li>SF owns no bucket.</li></ul> | **Partly met**: the Nerfherder artifact bucket is unversioned (DR-25) |
+| CloudTrail log protection (D-075) | <ul><li>Trail `arclight-staging` is logging: last delivery 16:06:08Z, no delivery error.</li><li>Multi-region, with log file validation.</li><li>Its bucket has Object Lock `GOVERNANCE` 365 days and versioning on, and its lifecycle has no expiration.</li><li>The bucket policy's `DenyLogDeletion` denies `s3:DeleteObject` and `s3:DeleteObjectVersion`.</li></ul> | Met |
+| ALB restricted to Cloudflare ranges | <ul><li>The only internet-facing staging load balancer is `arclight-staging`, security group `sg-00535f859fa624065`.</li><li>Ingress is on 80 and 443 only. Each port's sources exactly equal Cloudflare's published list, read the same minute: `api.cloudflare.com/client/v4/ips`, etag `38f79d05…`, 15 IPv4 and 7 IPv6 ranges.</li><li>No `0.0.0.0/0`, and no security-group or prefix-list sources.</li><li>The NLBs `arclight-stg-int-core` and `arclight-stg-int-sf` are internal.</li></ul> | Met as worded. DR-21 (other Cloudflare accounts share these ranges) stays open |
+| Automated backups with a tested restore | <ul><li>`BackupRetentionPeriod` 7; latest restorable time 16:03:44Z.</li><li>Restore tested twice: V-1 on 2026-10-24 (`docs/runbooks/restore-rds.md`), and B4 from 2026-11-12 to 11-16 (Entry B4).</li></ul> | Met |
+| CloudWatch log retention set deliberately | <ul><li>Every staging group has an explicit retention:<ul><li>`core`, `dbbootstrap`, `shuttleforge`, `nerfherder` and `probe`: 30 days;</li><li>`fixture-upstream`: 7 days;</li><li>`bandersnatch`: 365 days;</li><li>ECS Container Insights performance: 1 day.</li></ul></li><li>No group is set to never expire.</li><li>SF's group `/arclight/staging/shuttleforge`, added since the 2026-10-24 read, is 30 days.</li></ul> | Met |
+
+**Secrets Manager leaves under `arclight/staging/shuttleforge/`** (names only, `list-secrets
+--include-planned-deletion`, 16:08:41Z):
+
+| Leaf | State |
+|---|---|
+| `b4-target-db-url` | Pending deletion since 2026-11-16 16:05:19Z (Entry B4) |
+| `core-client-secret` | Shell, no version |
+| `db-url` | One version |
+| `db-url-migration` | One version |
+| `kek-ring-b64` | One version |
+| `lease-hmac-key` | One version |
+| `listener-auth-hmac-key` | One version |
+| `operator-token` | One version |
+| `policy-yaml-b64` | Shell, no version (DR-16) |
+
+The six AWSCURRENT VersionIds re-read at the same time all equal B0's table of 2026-11-11.
+
+---
+
+## Fixture teardown receipt (not scheduled)
+
+Earlier drafts of this record, and the spec, called this entry **B6**. In SF's plan (§4.3), B6 is SF's AC-15.13
+teardown authorization: SF binds its runbook's teardown procedure to this record in SF's evidence bundle. That is
+SF writing a record; nothing in AWS is torn down.
+
+Removing the fixture is **not scheduled**. Whether and when to remove it is open for SF and the owner. The spec
+(PR #93) said it would be removed "before Stage C's first live write"; that wording now waits on their decision.
+- **The fixture upstream stays running until then.** C-G3's roll of SF to `:6` (r7) comes before Stage C, and
+  `deploy-service.yml` passes only on `ready`.
+- Without the upstream, the fixture endpoint turns `degraded` after its third failed probe, about 3 minutes later
+  (SF `health_checker.py:46-47` at `55a2d20`).
+
+When it happens, the fields follow the spec:
+- decision, UTC time, affected resources (including the fixture listener flag), recovery points, key-version
+  references, executor and outcome;
+- if live material exists at teardown, every field of SF's "Live-material teardown authorization".
