@@ -350,6 +350,27 @@ Bandersnatch is a small application that serves a static page and a data downloa
 
 **Not yet done.** Nothing is built. Each later phase (build, pilot, cutover) waits for the owner's go; the repository, accounts, Cloudflare project and DNS changes are each the owner's to approve.
 
+## O-021: Bandersnatch gets an admin interface that Backstage's Settings calls
+
+**Authority**: the owner, 2026-11-16, in Overcast's Bandersnatch session. | **Recorded**: 2026-11-16, with the change (#118). Spec: [section 13 of the Bandersnatch proposal](proposals/bandersnatch.md). The interface's contract (schema 1.2) is in the application's repository.
+
+**Request**, verbatim: "create a new setting page only available to platform owners/admins where we can register new people, see existing sessions, issue tokens, reissue tokens." Until now only the operator tool, run with administrator AWS credentials, could do this.
+
+**The decisions:**
+- **Placement.** The page lives inside Backstage, under Settings, behind Backstage's `admin` role ("in the actual backstage app, in settings - not as a separate thing hosted separately"). Both administrators are full Backstage administrators; there is no narrower role ("full role").
+- **Shape.** Backstage calls an interface on Bandersnatch. Bandersnatch keeps its records, the code format and the invitation mail; Backstage never writes its tables ("Yes, option 1").
+- **Releases.** The page also switches a release on and off ("yes, switch releases as well. Don't have an atomic unit for "releases" but we will get there eventually."). Off is an availability lever: nothing is deleted (A4 of the proposal).
+- **Not a module.** Bandersnatch stays a hosted application (Complex D-079 §7, option b: "Yes, option b"). The running Backstage (O-012, the prototype) is not yet the architecture's Backstage module, so Complex records this interface as an exception in D-079. D-073 (Core JWT) and D-070 (no second admission gate) do not apply.
+- **Path and identity** (Overcast's design, reviewed by Backstage and Complex). The path never leaves AWS: Backstage host → interface endpoint → PrivateLink → an internal NLB in staging → the task's port 8082, which serves only the interface. A first draft that went through Cloudflare was dropped, because it would have opened the Backstage host's egress to all of Cloudflare (D-078 §5). The caller authenticates with an Entra app-only token of `arclight-backstage` (one caller id, role `bandersnatch.admin`). Backstage names the acting administrator, and every change is audited under that name.
+
+**Correction to O-019 / proposal §6.2.** The serving task could always create a token record (`UpdateItem` creates a missing item), so "cannot create a token" was never IAM-enforced. What this decision adds is reading the records, writing accounts and switching releases.
+
+**Consequences.** About $24 a month while on (the NLB, one endpoint, a private zone). It is the platform's first link from the prod VPC to a staging service. The egress register (O-017) carries the pending changes. Nothing is live until the administrator steps in §13: the applications root, admin consent, two staging applies around one deploy, then the Backstage root. Each is applied on the owner's go and sequenced with Overcast's main session.
+
+**Open, with Complex** (not decided here):
+- Whether the owner accepts the app-only trade: whoever controls Backstage's server or its client secret can act as either administrator.
+- Whether this contract is registered in Complex.
+
 ## Core coordination disposition — not a new mechanism decision
 
 **Review date**: 2026-10-01 | **Recorded here**: 2026-10-03.
