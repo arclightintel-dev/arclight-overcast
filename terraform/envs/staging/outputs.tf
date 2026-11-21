@@ -104,3 +104,8 @@ output "bandersnatch_target_group_arn" {
   description = "Bandersnatch target group ARN (null until enabled)"
   value       = one(aws_lb_target_group.bandersnatch[*].arn)
 }
+
+output "bandersnatch_admin_endpoint_service_name" {
+  description = "PrivateLink service name of the Bandersnatch admin interface (Backstage root variable bandersnatch_admin_service_name); null while the interface is off"
+  value       = one(aws_vpc_endpoint_service.bsn_admin[*].service_name)
+}

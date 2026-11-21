@@ -179,3 +179,14 @@ variable "backup_retention_days" {
   type        = number
   default     = 30
 }
+
+variable "bandersnatch_admin_service_name" {
+  description = "PrivateLink service name of the Bandersnatch admin interface (staging output bandersnatch_admin_endpoint_service_name); empty creates nothing (O-020)"
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.bandersnatch_admin_service_name == "" || can(regex("^com\\.amazonaws\\.vpce\\.[a-z0-9-]+\\.vpce-svc-[0-9a-f]+$", var.bandersnatch_admin_service_name))
+    error_message = "bandersnatch_admin_service_name must be a PrivateLink service name (com.amazonaws.vpce.<region>.vpce-svc-...)."
+  }
+}
