@@ -38,6 +38,9 @@ jobs:
       # Bandersnatch (O-019). Secrets, not variables: a repository variable is printed in
       # this public repository's job log. The image digest identifies nothing.
       TF_VAR_bandersnatch_image: ${{ vars.BANDERSNATCH_IMAGE }}
+      # The live task count. A count identifies nothing, so a variable is fine. Without it CI plans the
+      # default 0 against a running share and shows a scale-down that no local apply makes.
+      TF_VAR_bandersnatch_desired_count: ${{ vars.BANDERSNATCH_DESIRED_COUNT || '0' }}
       TF_VAR_bandersnatch_public_host: ${{ secrets.BANDERSNATCH_PUBLIC_HOST }}
       TF_VAR_bandersnatch_graph_tenant_id: ${{ secrets.BANDERSNATCH_GRAPH_TENANT_ID }}
       TF_VAR_bandersnatch_graph_client_id: ${{ secrets.BANDERSNATCH_GRAPH_CLIENT_ID }}
