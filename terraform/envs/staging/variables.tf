@@ -194,7 +194,7 @@ variable "bandersnatch_page_title" {
 }
 
 variable "bandersnatch_admin_audience" {
-  description = "Entra application (client) id of the Bandersnatch admin interface (applications root output bandersnatch_admin_client_id); empty leaves the interface, its NLB and its endpoint service off (O-020)"
+  description = "Entra application (client) id of the Bandersnatch admin interface (applications root output bandersnatch_admin_client_id); empty leaves the interface, its NLB and its endpoint service off (O-021)"
   type        = string
   default     = ""
 
