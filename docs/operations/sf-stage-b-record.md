@@ -308,10 +308,14 @@ That is SF writing a record; nothing in AWS is torn down.
 - **The procedure it binds:** `docs/OPERATIONS/SF9_RECOVERY_RUNBOOK.md:60-73` ("Live-material teardown
   authorization"), at the same commit.
 
-Removing the fixture is **not scheduled**. Whether and when to remove it is open for SF and the owner. The spec
-(PR #93) said it would be removed "before Stage C's first live write"; that wording now waits on their decision.
-- **The fixture upstream stays running until then.** C-G3's roll of SF to `:6` (r7) comes before Stage C, and
-  `deploy-service.yml` passes only on `ready`.
+Removing the fixture is **not scheduled**. **Owner ruling, 2026-11-16, given in SF's session and relayed by SF on
+2026-11-21:** the fixture rows (provider 1, endpoint 1, proxy config 1) stay in SF until Stage C's live inventory
+read, which comes after the first live provider credential. SF's question was: "Fixture rows: keep them until the
+live inventory read in Stage C?" The owner answered: "makes sense". This supersedes the spec's "before Stage C's
+first live write" (PR #93) and the same words in B0's flag line, which stays as recorded. SF's Stage C plan revision
+names the read and the order of removal.
+- **The fixture upstream keeps running while the rows exist.** `deploy-service.yml` passes only on `ready`, and the
+  rows need their upstream.
 - Without the upstream, the fixture endpoint turns `degraded` after its third failed probe, about 3 minutes later
   (SF `health_checker.py:46-47` at `55a2d20`).
 
