@@ -141,6 +141,9 @@ layers, log events, KMS decrypt and secret values. Its only write is the backend
 - CI cannot read the gitignored `terraform.tfvars`. It gets its inputs from repository settings:
   - **variable `CORE_IMAGE_TAG`**: set it to the running Core tag after every Core deploy
     (`gh variable set CORE_IMAGE_TAG --body <tag>`), or CI plans show task-definition churn;
+  - **variable `BANDERSNATCH_DESIRED_COUNT`**: keep it equal to `bandersnatch_desired_count` in the local
+    tfvars whenever the share goes up or down (`gh variable set BANDERSNATCH_DESIRED_COUNT --body <n>`), or CI
+    plans show a Bandersnatch service update that no local apply makes;
   - **secret `ALARM_EMAIL`**.
 - `domain_name` and `github_org` now have committed defaults.
 
