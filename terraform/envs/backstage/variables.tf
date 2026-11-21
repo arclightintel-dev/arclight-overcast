@@ -181,9 +181,11 @@ variable "backup_retention_days" {
 }
 
 variable "bandersnatch_admin_service_name" {
-  description = "PrivateLink service name of the Bandersnatch admin interface (staging output bandersnatch_admin_endpoint_service_name); empty creates nothing (O-020)"
+  description = "PrivateLink service name of the Bandersnatch admin interface (staging output bandersnatch_admin_endpoint_service_name); empty creates nothing (O-021)"
   type        = string
-  default     = ""
+  # Staging applied the endpoint service on 2026-11-21 (section 13, step 2). The root keeps every value as a
+  # committed default (README), so the service name lives here, not in a local tfvars.
+  default = "com.amazonaws.vpce.us-east-1.vpce-svc-05926d3f82ea6127f"
 
   validation {
     condition     = var.bandersnatch_admin_service_name == "" || can(regex("^com\\.amazonaws\\.vpce\\.[a-z0-9-]+\\.vpce-svc-[0-9a-f]+$", var.bandersnatch_admin_service_name))
