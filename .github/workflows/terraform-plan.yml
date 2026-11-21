@@ -7,7 +7,8 @@ name: Terraform Plan
 # lines on failure; run the detailed plan locally. Never set TF_LOG and never upload the plan.
 # scripts/plan_guard.py fails the job if the plan would weaken CloudTrail protection (D-075).
 # Inputs CI cannot read from the gitignored terraform.tfvars come from repository settings:
-# variable CORE_IMAGE_TAG (update after each Core deploy) and secret ALARM_EMAIL.
+# variables CORE_IMAGE_TAG (update after each Core deploy) and BANDERSNATCH_DESIRED_COUNT (keep
+# equal to the tfvars), and secret ALARM_EMAIL.
 
 on:
   pull_request:
@@ -16,6 +17,8 @@ on:
       - '!terraform/corporate/**'
       - '!terraform/envs/backstage/**'
       - 'services/**/*.tpl'
+      # A change to this workflow is tested by its own plan.
+      - '.github/workflows/terraform-plan.yml'
 
 permissions:
   id-token: write
