@@ -304,7 +304,7 @@ Updated 2026-11-10. Each state change waits on the owner's go, given first-hand.
   - The snapshot stays through Stage C. Deleting it later needs the owner's go.
 
 - **B5:** D-059 §6 attestation from a live read on 2026-11-16. Five postures are met. S3 versioning is only partly met: the Nerfherder artifact bucket is unversioned (DR-25). Owner ruling 2026-11-16: DR-25 does not block SF's first live provider credential (relayed to SF). DR-25 was closed the same day (applied 19:53:59Z, PR #116), so all six postures are now met.
-- **B6** is SF's AC-15.13 teardown authorization, a record SF writes. It is **not** a fixture teardown. Removing the fixture is not scheduled, and the fixture upstream stays running through C-G3's roll to `:6`.
+- **B6** is SF's AC-15.13 teardown authorization, a record SF writes. It is **not** a fixture teardown. Owner ruling 2026-11-16 (relayed by SF): the fixture rows stay until Stage C's live inventory read, after the first live credential, so the fixture upstream keeps running until then. SF's Stage C plan revision names the removal order. **At Stage C entry SF will ask Overcast for:** a fresh re-read of C-G3 on the serving task (digest, no flag), and a one-line confirmation that staging has no auto-deploy (D-059 §8).
 
 **C-G3 roll DONE 2026-11-16** (owner's go "hit it"; SF's go read at 21:02:30Z): SF is on `:6` (r7), task `75874aa3…`. SF was out of service for about 2m54s. Overcast's read: `ready`, 13/13, commit `5999bc0`. Recorded as entry C-G3 in the record. SF closed C-G3 and DEBT #121 with its admission read at 21:08:36Z and its listings, which show only the fixture rows.
 
