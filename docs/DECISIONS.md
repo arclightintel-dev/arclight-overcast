@@ -367,9 +367,9 @@ Bandersnatch is a small application that serves a static page and a data downloa
 
 **Consequences.** About $24 a month while on (the NLB, one endpoint, a private zone). It is the platform's first link from the prod VPC to a staging service. The egress register (O-017) carries the pending changes. Nothing is live until the administrator steps in §13: the applications root, admin consent, two staging applies around one deploy, then the Backstage root. Each is applied on the owner's go and sequenced with Overcast's main session.
 
-**Open, with Complex** (not decided here):
-- Whether the owner accepts the app-only trade: whoever controls Backstage's server or its client secret can act as either administrator.
-- Whether this contract is registered in Complex.
+**Settled with Complex, 2026-11-21:**
+- The contract is held by Bandersnatch and Overcast, not registered in Complex; the owner confirmed this to Complex directly. The register-with-Complex rule stands for other contracts. Complex records the rulings (not a module, the contract held outside Complex, the network posture, the first prod→staging link) in a pointer under D-079 §7.
+- The app-only trade is a design decision of the interface, owned by Overcast and Bandersnatch: whoever controls Backstage's server or its client secret can act as either administrator. Complex said it needs no owner sign-off. Bounds: the private path, one caller id, no delete anywhere, every change audited.
 
 ## Core coordination disposition — not a new mechanism decision
 
