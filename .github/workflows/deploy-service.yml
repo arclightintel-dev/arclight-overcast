@@ -1,5 +1,7 @@
 name: Deploy Service
-# Supports workflow_dispatch (manual) and repository_dispatch (cross-repo, type: deploy-service)
+# Manual only (workflow_dispatch). The deploy job runs in the `staging` GitHub environment, which
+# requires the owner's approval (O-022, D-059 §8). Sessions never approve a deployment.
+# The cross-repo repository_dispatch trigger (O-009) was removed by O-022.
 
 on:
   workflow_dispatch:
@@ -21,11 +23,9 @@ on:
         description: 'ECR image tag to deploy (e.g., v1-abc1234)'
         required: true
         type: string
-  repository_dispatch:
-    types: [deploy-service]
 
 concurrency:
-  group: deploy-${{ github.event.inputs.module || github.event.client_payload.module }}-${{ github.event.inputs.environment || github.event.client_payload.environment }}
+  group: deploy-${{ github.event.inputs.module }}-${{ github.event.inputs.environment }}
   cancel-in-progress: false
 
 permissions:
@@ -35,9 +35,9 @@ permissions:
 env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: '650880817826'
-  DEPLOY_MODULE: ${{ github.event.inputs.module || github.event.client_payload.module }}
-  DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment || github.event.client_payload.environment }}
-  DEPLOY_IMAGE_TAG: ${{ github.event.inputs.image_tag || github.event.client_payload.image_tag }}
+  DEPLOY_MODULE: ${{ github.event.inputs.module }}
+  DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+  DEPLOY_IMAGE_TAG: ${{ github.event.inputs.image_tag }}
 
 jobs:
   verify-image:
@@ -60,10 +60,11 @@ jobs:
           echo "Image arclight/${{ env.DEPLOY_MODULE }}:${{ env.DEPLOY_IMAGE_TAG }} verified."
 
   deploy:
-    name: Deploy ${{ github.event.inputs.module || github.event.client_payload.module }} to ${{ github.event.inputs.environment || github.event.client_payload.environment }}
+    name: Deploy ${{ github.event.inputs.module }} to ${{ github.event.inputs.environment }}
     needs: verify-image
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || github.event.client_payload.environment }}
+    # Waits here for the owner's approval (required reviewer on `staging`, O-022).
+    environment: ${{ github.event.inputs.environment }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

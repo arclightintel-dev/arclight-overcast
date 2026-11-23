@@ -50,7 +50,7 @@ INFRASTRUCTURE_SPEC originally said Podbay controller runs on EC2 capacity provi
 - `deploy-service.yml` (workflow_dispatch) — manual service deploy
 - `build-and-push-image.yml` (workflow_dispatch) — Overcast-owned images only (dbbootstrap)
 
-Module repos own build/test. Overcast owns deploy. The original restriction on cross-repo workflow triggers was extended by O-009's `repository_dispatch` deployment path.
+Module repos own build/test. Overcast owns deploy. The original restriction on cross-repo workflow triggers was extended by O-009's `repository_dispatch` deployment path. O-022 (2026-11-23) removed that path again.
 
 ---
 
@@ -97,6 +97,8 @@ Image recorded on 2026-07-02: `arclight/dbbootstrap:v5` (parameterized for multi
 ## O-009: Self-serve deploy pipeline via repository_dispatch
 
 **Date**: 2026-07-10 | **Commits**: `8a6b777` (pipeline), `5ebb25c` (env-context fix), `d1c9b7f` (ignore_changes)
+
+**Superseded in part by O-022 (2026-11-23):** the `repository_dispatch` path is removed. `deploy-service.yml` is manual only, and its `deploy` job waits for the owner's approval. The digest pinning, the Terraform coexistence and the health check below still hold.
 
 `deploy-service.yml` supports both `workflow_dispatch` (manual) and `repository_dispatch` (cross-repo, type `deploy-service`). Module repos self-serve deploys: push image to their ECR repo, then fire one dispatch call. The workflow verifies the image, registers a new task def revision, updates the ECS service, waits for stability, and health-checks through the Cloudflare Access gate.
 
@@ -370,6 +372,30 @@ Bandersnatch is a small application that serves a static page and a data downloa
 **Settled with Complex, 2026-11-21:**
 - The contract is held by Bandersnatch and Overcast, not registered in Complex; the owner confirmed this to Complex directly. The register-with-Complex rule stands for other contracts. Complex records the rulings (not a module, the contract held outside Complex, the network posture, the first prod→staging link) in a pointer under D-079 §7.
 - The app-only trade is a design decision of the interface, owned by Overcast and Bandersnatch: whoever controls Backstage's server or its client secret can act as either administrator. Complex said it needs no owner sign-off. Bounds: the private path, one caller id, no delete anywhere, every change audited.
+
+## O-022: Staging deploys are manual and wait for the owner's approval
+
+**Authority**: the owner, 2026-11-23, in Overcast's main session ("Go", to removing the dispatch trigger and adding the reviewer). | **Recorded**: 2026-11-23, with the change. Supersedes O-009's `repository_dispatch` path.
+
+**Why.** D-059 §8 forbids auto-deploy to staging while it carries operational material. Overcast found two gaps on 2026-11-21, while answering SF's Stage C question on no-auto-deploy:
+- `deploy-service.yml` also accepted `repository_dispatch`. Any token with write access to this repository could deploy Core or ShuttleForge, with any existing tag. The last dispatch run was on 2026-07-10, and SF confirmed that its repository sends none.
+- The `staging` GitHub environment had no protection rules.
+
+SF's Stage C plan lists this fix as a precondition of its first live provider credential.
+
+**The decisions:**
+- `deploy-service.yml` is `workflow_dispatch` only.
+- The `staging` environment requires the owner (`arclightintel-dev`) as reviewer. The `deploy` job waits for that approval, and so would `terraform-apply.yml` (disabled, DR-1).
+  - Set 2026-11-23 15:55Z (rule `73684058`), read back.
+  - "Prevent self-review" is off. Every session uses the owner's GitHub account, so with it on nobody could approve.
+- **Sessions never approve a deployment**, through the UI or the API. Only the owner does.
+
+**Limits.**
+- The gate stops automation and makes each deploy an explicit, recorded approval. It cannot tell the owner from a session on the same account; the rule above covers that.
+- `verify-image` has no environment. It assumes the deploy role through its `ref:refs/heads/main` trust before any approval, and only reads ECR.
+- The environment has no branch policy, so a run from any branch reaches the approval step.
+- Narrowing the trust and adding a branch policy are deferred to DR-1's deployment-model work (DR-26).
+- ECS replacing a stopped task on the same digest-pinned revision is not a deploy, but it voids SF's leases (owner ruling 2026-11-23, relayed by SF).
 
 ## Core coordination disposition — not a new mechanism decision
 

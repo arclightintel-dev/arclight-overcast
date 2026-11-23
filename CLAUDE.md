@@ -65,7 +65,7 @@ Use `v1-<git-sha-short>` format. The `v` prefix is required — ECR lifecycle po
 
 ### Deploy model
 - `terraform-plan.yml` plans staging on pull requests (read-only role, summary-only output). `terraform-apply.yml` is broken (DR-1): staging applies are run locally by an administrator, after `scripts/plan_guard.py`
-- Service deploys are manual `workflow_dispatch` via `deploy-service.yml`
+- Service deploys are manual `workflow_dispatch` via `deploy-service.yml`. Its `deploy` job waits for the owner's approval on the `staging` environment (O-022). Sessions never approve a deployment, through the UI or the API
 - No auto-deploy to staging while it carries operational material (D-059 §8)
 - The prod root (Backstage's substrate only) is applied by an administrator; no prod Terraform role exists (removed by O-016)
 

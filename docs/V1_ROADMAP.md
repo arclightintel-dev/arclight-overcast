@@ -61,8 +61,8 @@ first external developer joins.
 
 | Deliverable | Status | Blocked on |
 |-------------|--------|------------|
-| deploy-service.yml (workflow_dispatch + repository_dispatch) | Done and operational | — |
-| Self-serve deploy pipeline (cross-repo repository_dispatch, module-triggered) | Done | — |
+| deploy-service.yml (workflow_dispatch; the owner approves each staging deploy, O-022) | Done and operational | — |
+| ~~Self-serve deploy pipeline (cross-repo repository_dispatch, module-triggered)~~ | Retired 2026-11-23 (O-022): D-059 §8 forbids auto-deploy to staging | — |
 | terraform-plan.yml (PR comment) | Done 2026-10-23 (DR-1b plan side): read-only plan role, Terraform 1.15.6, summary-only output | — |
 | terraform-apply.yml (auto-apply staging) | BROKEN — non-functional (DR-1) | Deployment model rework |
 | Test CI/CD workflows end-to-end | Partial — deploy-service.yml verified end-to-end; plan works; apply broken | Deployment model rework |
@@ -70,10 +70,10 @@ first external developer joins.
 | IAM Identity Center setup | Pending | Entra federation (Entra superseded Google Workspace; see `service_registry.md`) |
 | ~~Google Workspace as identity source~~ | Superseded by Entra | — |
 | Developer permission sets (staging read/debug) | Pending | Identity Center |
-| GitHub environment protection rules (staging) | Pending | — |
+| GitHub environment protection rules (staging) | Done 2026-11-23: the owner is the required reviewer (O-022). No branch policy yet (DR-26) | — |
 | Deployment model definition (GitHub / AWS / Terraform) | Open (DR-1) | Definitive model before more ad-hoc CI fixes |
 
-> **CI auto-apply is broken** — `terraform-apply.yml` does not run (DR-1 in PROJECT_STATE "Known debt"). Staging applies are run locally by an administrator after `scripts/plan_guard.py` until the deployment-model rework. The plan side works on pull requests since 2026-10-23. The self-serve deploy pipeline (`deploy-service.yml`, `repository_dispatch`) is unaffected — Done and operational.
+> **CI auto-apply is broken** — `terraform-apply.yml` does not run (DR-1 in PROJECT_STATE "Known debt"). Staging applies are run locally by an administrator after `scripts/plan_guard.py` until the deployment-model rework. The plan side works on pull requests since 2026-10-23. Service deploys (`deploy-service.yml`, manual, with the owner's approval on staging since O-022) are unaffected.
 
 **Governing decision**: D-059 positions 2 (manual deploy trigger), 3 (hybrid CI/CD),
 4 (SSO + GitHub OIDC)

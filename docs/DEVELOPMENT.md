@@ -117,12 +117,11 @@ Service image deploys are separate from infrastructure applies. `ecs-service-far
 running service to the tfvars-pinned image — deploys advance the service out-of-band via
 `deploy-service.yml`, which registers a new task-definition revision and updates the service.
 
-`deploy-service.yml` has two triggers:
-
-- **`workflow_dispatch`** — manual run from the Actions tab (inputs: `module`, `environment`, `image_tag`).
-- **`repository_dispatch`** (type `deploy-service`) — cross-repo self-serve. Module repos fire a
-  `repository_dispatch` at Overcast to deploy their own image after a successful build (O-009). A
-  Cloudflare Access service token is provisioned for automation.
+`deploy-service.yml` runs only by hand (`workflow_dispatch` from the Actions tab or
+`gh workflow run`; inputs `module`, `environment`, `image_tag`). Its `deploy` job runs in the
+`staging` GitHub environment and waits for the owner's approval (O-022, D-059 §8). Sessions never
+approve a deployment. The cross-repo `repository_dispatch` trigger (O-009) was removed on
+2026-11-23. The health check passes Cloudflare Access through a service token.
 
 Because the service ignores `task_definition`, keep the tfvars image tag pinned to a real, existing
 tag (never `latest` — ECR tags are immutable and lifecycle policies only rotate `v`-prefixed tags).

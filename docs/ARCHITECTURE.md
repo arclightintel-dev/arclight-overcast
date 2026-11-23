@@ -76,7 +76,7 @@ Each service has templates in `services/{name}/`:
 |----------|---------|-------------|
 | `terraform-plan.yml` | PR touching `terraform/**` | Validate + plan staging with the read-only plan role; summary-only PR comment (the repository is public). Works since 2026-10-23 (DR-1b plan side) |
 | `terraform-apply.yml` | Push to main touching `terraform/**` | Auto-apply staging — **broken** (DR-1; see below) |
-| `deploy-service.yml` | `workflow_dispatch` (manual) + `repository_dispatch` (type `deploy-service`, cross-repo self-serve — O-009) | Register a task-definition revision pinned by digest (O-3), update the ECS service, verify `/ready` and the running digest |
+| `deploy-service.yml` | `workflow_dispatch` (manual). The `deploy` job waits for the owner's approval on the `staging` environment (O-022, which removed O-009's `repository_dispatch`) | Register a task-definition revision pinned by digest (O-3), update the ECS service, verify `/ready` and the running digest |
 | `build-and-push-image.yml` | Manual (`workflow_dispatch`) | Fallback build of Overcast-owned images (dbbootstrap). Cannot push today (DR-17a); module repos own their own build/test/push |
 | `deploy-backstage.yml` | Manual (`workflow_dispatch`) | Backstage release deploy over SSM (O-012) |
 | `terraform-backstage-validate.yml`, `terraform-corporate-validate.yml` | PR | Validation only for the Backstage and corporate roots |
