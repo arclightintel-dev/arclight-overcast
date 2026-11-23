@@ -164,7 +164,7 @@ data "aws_iam_policy_document" "downloads_upload_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_org}/${var.backstage_repository}:environment:${var.desktop_release_environment}"]
+      values   = [for p in var.backstage_oidc_subject_prefixes : "${p}:environment:${var.desktop_release_environment}"]
     }
   }
 }

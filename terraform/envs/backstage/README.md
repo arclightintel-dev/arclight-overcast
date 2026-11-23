@@ -69,12 +69,14 @@ a running job, an open Portal, an operator session or a fresh deploy (owner deci
 access blocked, readable only by the CloudFront distribution through OAC), the distribution at
 `backstage-downloads.arclight-complex.net` (the existing `*.arclight-complex.net` ACM certificate,
 HTTPS only, GET/HEAD, caching from the objects' own `Cache-Control`), and the upload role
-`arclight-backstage-prod-downloads-upload`. The role trusts exactly
-`repo:arclightintel-dev/podbay:environment:desktop-release` and may only `s3:PutObject` on
+`arclight-backstage-prod-downloads-upload`. The role trusts exactly the `desktop-release`
+environment of each repository in `backstage_oidc_subject_prefixes` (podbay and
+arclight-backstage while Backstage moves; podbay is removed once an image built in
+arclight-backstage is live) and may only `s3:PutObject` on
 `Backstage-Setup-*`; the workflow writes with `If-None-Match: *`, so a published version is never
 replaced. Manual: a **DNS-only** Cloudflare CNAME `backstage-downloads` to
 `downloads_distribution_domain` (CloudFront terminates TLS; a second CDN adds nothing), and the
 owner sets `DESKTOP_DOWNLOADS_ROLE_ARN` and `DESKTOP_DOWNLOADS_BUCKET` (outputs) as variables on
-the podbay `desktop-release` environment. The host has no egress to it. The login page's
+each Backstage repository's `desktop-release` environment. The host has no egress to it. The login page's
 download link (WP6 O7) should travel in the Backstage release bundle, not the host's `.env`
 renderer: that renderer is in user data, so changing it replaces the instance.
