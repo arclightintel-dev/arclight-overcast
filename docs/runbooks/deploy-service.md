@@ -27,7 +27,7 @@ Prereqs: the module repo's own CI has already built and pushed the image to ECR
 as `v1-<git-sha-short>` (Overcast does not build service images — see the
 `build-and-push-image.yml` fallback, which only covers `dbbootstrap`).
 
-### Trigger A — manual (workflow_dispatch)
+### Trigger — manual (workflow_dispatch)
 
 From the GitHub Actions UI (or `gh`), run **Deploy Service** with inputs
 `module` (core | shuttleforge), `environment` (staging), and
@@ -38,18 +38,19 @@ gh workflow run deploy-service.yml \
   -f module=core -f environment=staging -f image_tag=v1-abc1234
 ```
 
-### Trigger B — cross-repo self-serve (repository_dispatch)
+This is the only trigger. The cross-repo `repository_dispatch` trigger (O-009)
+was removed on 2026-11-23 (O-022): D-059 §8 forbids auto-deploy to staging.
 
-A module repo can trigger its own deploy without opening the Overcast UI. The
-workflow listens for `repository_dispatch` of type `deploy-service`:
+### Approval
 
-```bash
-echo '{"event_type":"deploy-service","client_payload":{"module":"core","environment":"staging","image_tag":"v1-abc1234"}}' \
-  | gh api repos/arclightintel-dev/arclight-overcast/dispatches --input -
-```
+The run goes `verify-image` → `deploy`. `verify-image` runs at once; it only reads
+ECR. The `deploy` job runs in the `staging` GitHub environment, which requires
+the owner's approval (O-022). The run waits there until the owner approves it in
+the Actions tab (**Review deployments**).
 
-`client_payload` must carry `module`, `environment`, and `image_tag`. Both
-triggers feed the same jobs (`verify-image` → `deploy`).
+**Sessions never approve a deployment**, through the UI or the API. Every session
+uses the owner's GitHub account, so GitHub cannot tell them apart; this rule is
+what keeps the approval the owner's.
 
 ### Migrations
 
