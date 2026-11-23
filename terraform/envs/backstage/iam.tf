@@ -119,7 +119,7 @@ resource "aws_iam_instance_profile" "host" {
 }
 
 ################################################################################
-# GitHub Actions: Backstage image push (Backstage repository, main only; B3)
+# GitHub Actions: Backstage image push (Backstage repositories, main only; B3)
 ################################################################################
 
 data "aws_iam_policy_document" "push_trust" {
@@ -137,7 +137,7 @@ data "aws_iam_policy_document" "push_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_org}/${var.backstage_repository}:ref:refs/heads/main"]
+      values   = [for p in var.backstage_oidc_subject_prefixes : "${p}:ref:refs/heads/main"]
     }
   }
 }

@@ -33,7 +33,7 @@ variable "downloads_hostname" {
 }
 
 variable "desktop_release_environment" {
-  description = "GitHub environment of Backstage's desktop-release workflow; the upload role trusts exactly this subject"
+  description = "GitHub environment of Backstage's desktop-release workflow; the upload role trusts exactly this environment in each Backstage repository"
   type        = string
   default     = "desktop-release"
 }
@@ -44,10 +44,23 @@ variable "github_org" {
   default     = "arclightintel-dev"
 }
 
-variable "backstage_repository" {
-  description = "Backstage repository name (legacy name podbay); its main branch may push images"
-  type        = string
-  default     = "podbay"
+# Backstage moves from podbay to arclight-backstage. Both are trusted until an image built in
+# arclight-backstage is live and its rollback is recorded; then podbay is removed. The subject
+# formats differ: podbay predates GitHub's immutable subjects (name only), while arclight-backstage
+# (created 2026-11-11) carries the owner and repository ids. Read a repository's prefix with
+# `gh api repos/<owner>/<repo>/actions/oidc/customization/sub` before adding it.
+variable "backstage_oidc_subject_prefixes" {
+  description = "OIDC subject prefixes of the Backstage repositories: each one's main branch may push images, and its desktop-release environment may upload installers"
+  type        = list(string)
+  default = [
+    "repo:arclightintel-dev/podbay",
+    "repo:arclightintel-dev@224845687/arclight-backstage@1453364135",
+  ]
+
+  validation {
+    condition     = length(var.backstage_oidc_subject_prefixes) > 0 && alltrue([for p in var.backstage_oidc_subject_prefixes : can(regex("^repo:[^:]+$", p))])
+    error_message = "Each prefix is repo:<owner>/<repo> (or the immutable owner@id/repo@id form) with no context suffix."
+  }
 }
 
 variable "backstage_oidc_client_id" {
